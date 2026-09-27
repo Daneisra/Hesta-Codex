@@ -1,11 +1,180 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider            = "prisma-client"
+  output              = "../generated/prisma"
+  importFileExtension = "ts"
 }
 
 datasource db {
   provider = "postgresql"
 }
 
-// Domain models and the first migration will be added in the next milestone.
+enum EditorialStatus {
+  DRAFT
+  PROPOSED
+  PUBLISHED
+  ARCHIVED
+}
 
+enum Visibility {
+  PUBLIC
+  PLAYERS
+  GM
+  SECRET
+}
+
+enum EntityKind {
+  PERSON
+  PLACE
+  ORGANIZATION
+  FAMILY
+  RELIGION
+  DEITY
+  SPECIES
+  CREATURE
+  ARTIFACT
+  EVENT
+  QUEST
+  SESSION
+  CONCEPT
+  OTHER
+}
+
+enum PlaceKind {
+  CITY
+  CONTINENT
+  REGION
+  SEA
+  OCEAN
+  OTHER
+}
+
+enum SourceKind {
+  MANUAL
+  OBSIDIAN
+  DISCORD
+  HESTA_MAP
+  YOUTUBE
+  AI_DERIVED
+  OTHER
+}
+
+model Entity {
+  id                String          @id @default(uuid()) @db.Uuid
+  slug              String          @unique @db.VarChar(200)
+  kind              EntityKind
+  placeKind         PlaceKind?
+  title             String          @db.VarChar(200)
+  summary           String?         @db.VarChar(500)
+  bodyMarkdown      String          @default("") @db.Text
+  status            EditorialStatus @default(DRAFT)
+  visibility        Visibility      @default(GM)
+  aliases           String[]        @default([])
+  tags              String[]        @default([])
+  metadata          Json?
+  createdAt         DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime        @updatedAt @db.Timestamptz(3)
+  publishedAt       DateTime?       @db.Timestamptz(3)
+
+  outgoingRelations Relation[] @relation("RelationFrom")
+  incomingRelations Relation[] @relation("RelationTo")
+  evidence          Evidence[]
+  revisions         Revision[]
+
+  @@index([kind, placeKind])
+  @@index([status, visibility])
+}
+
+model RelationType {
+  id           String    @id @default(uuid()) @db.Uuid
+  code         String    @unique @db.VarChar(64)
+  label        String    @db.VarChar(200)
+  inverseCode  String?   @unique @db.VarChar(64)
+  inverseLabel String?   @db.VarChar(200)
+  symmetric    Boolean   @default(false)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
+
+  relations Relation[]
+}
+
+model Relation {
+  id             String          @id @default(uuid()) @db.Uuid
+  fromEntityId   String          @db.Uuid
+  toEntityId     String          @db.Uuid
+  relationTypeId String          @db.Uuid
+  description    String?         @db.Text
+  status         EditorialStatus @default(DRAFT)
+  visibility     Visibility      @default(GM)
+  createdAt      DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime        @updatedAt @db.Timestamptz(3)
+
+  fromEntity   Entity       @relation("RelationFrom", fields: [fromEntityId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  toEntity     Entity       @relation("RelationTo", fields: [toEntityId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  relationType RelationType @relation(fields: [relationTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  evidence     Evidence[]
+
+  @@unique([fromEntityId, toEntityId, relationTypeId])
+  @@index([fromEntityId])
+  @@index([toEntityId])
+  @@index([relationTypeId])
+  @@index([status, visibility])
+}
+
+model Source {
+  id                  String      @id @default(uuid()) @db.Uuid
+  kind                SourceKind
+  label               String      @db.VarChar(250)
+  externalId          String?     @db.VarChar(250)
+  url                 String?     @db.Text
+  authorLabel         String?     @db.VarChar(200)
+  publishedAt         DateTime?   @db.Timestamptz(3)
+  metadata            Json?
+  derivedFromSourceId String?     @db.Uuid
+  visibility          Visibility  @default(GM)
+  createdAt           DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime    @updatedAt @db.Timestamptz(3)
+
+  derivedFromSource Source?    @relation("SourceDerivation", fields: [derivedFromSourceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  derivedSources    Source[]   @relation("SourceDerivation")
+  evidence          Evidence[]
+
+  @@unique([kind, externalId])
+  @@index([derivedFromSourceId])
+}
+
+model Evidence {
+  id               String      @id @default(uuid()) @db.Uuid
+  sourceId         String      @db.Uuid
+  entityId         String?     @db.Uuid
+  relationId       String?     @db.Uuid
+  claimText        String      @db.Text
+  sourceExcerpt    String?     @db.Text
+  locator          String?     @db.VarChar(250)
+  timeStartSeconds Int?
+  timeEndSeconds   Int?
+  confidence       Decimal?    @db.Decimal(4, 3)
+  visibility       Visibility  @default(GM)
+  createdAt        DateTime    @default(now()) @db.Timestamptz(3)
+
+  source   Source    @relation(fields: [sourceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  entity   Entity?   @relation(fields: [entityId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  relation Relation? @relation(fields: [relationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([sourceId])
+  @@index([entityId])
+  @@index([relationId])
+}
+
+model Revision {
+  id          String   @id @default(uuid()) @db.Uuid
+  entityId    String   @db.Uuid
+  number      Int
+  snapshot    Json
+  message     String?  @db.Text
+  editorLabel String?  @db.VarChar(200)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  entity Entity @relation(fields: [entityId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([entityId, number])
+}

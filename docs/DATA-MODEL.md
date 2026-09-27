@@ -1,29 +1,85 @@
-# Modèle de données à définir
+# Modèle de données initial
 
-Ce document garde les décisions de domaine pour le prochain jalon. Le schéma Prisma v0.1
-ne crée aucune table et `prisma/migrations/` ne contient aucune migration métier.
+Le schéma est dans [`prisma/schema.prisma`](../prisma/schema.prisma). La première migration
+PostgreSQL est dans `prisma/migrations/20260928000000_initial_lore_model/`. Le Codex garde
+le lore durable ; les coordonnées et le rendu restent dans Carte Hesta, et les règles
+d'armure restent dans Système PA.
 
 ## Principes
 
-- Les fiches et leurs relations auront des identifiants UUID stables. Le nom ne sera jamais un identifiant.
-- Le texte narratif sera en Markdown ; les faits et relations interrogeables seront structurés.
-- Une information importée ou produite par IA arrivera comme proposition, sans devenir canon automatiquement.
-- Les informations externes garderont leur provenance. Les accès aux contenus non publics seront filtrés dans l’API.
-- Le Codex gardera le lore durable. Les coordonnées et le rendu restent dans Carte Hesta ; les règles d’armure restent dans Système PA.
+- Chaque fiche et chaque relation possède un UUID stable. Le slug unique sert aux URL ;
+  changer un titre ne change ni l'UUID ni les liens relationnels.
+- Le texte narratif est en Markdown. Les types, relations, sources et preuves sont des
+  colonnes et tables relationnelles ; `metadata` JSONB sert uniquement aux variantes
+  encore non stabilisées. Les snapshots JSONB de `Revision` servent à l'historique.
+- `DRAFT`, `PROPOSED`, `PUBLISHED` et `ARCHIVED` sont les statuts éditoriaux. Un import ou
+  une extraction IA reste `PROPOSED` jusqu'à validation humaine ; `PUBLISHED` désigne le canon.
+- `PUBLIC`, `PLAYERS`, `GM` et `SECRET` sont des niveaux de visibilité, avec `GM` par défaut.
+  Aucun contrôle d'accès ni endpoint de lecture métier n'est encore implémenté. Le futur
+  filtrage devra se faire dans l'API, y compris pour les relations, sources et preuves.
+- Les suppressions physiques de fiches, sources, arêtes ou types référencés sont interdites
+  par des clés étrangères `ON DELETE RESTRICT`. Les UUID référencés ne peuvent pas changer
+  (`ON UPDATE RESTRICT`). Archiver une fiche conserve son historique.
 
-## Modèles prévus
+## Tables
 
-| Modèle | Rôle prévu | Points à préciser avant migration |
+| Table | Rôle | Champs et relations essentiels |
 | --- | --- | --- |
-| `Entity` | Fiche de connaissance avec UUID, slug, type, statut, visibilité et contenu Markdown | Types, sous-types, unicité du slug, alias, tags, métadonnées, dates Hesta |
-| `Relation` | Lien explicite entre deux entités | Catalogue des types, orientation, symétrie, dates, statut et visibilité |
-| `Source` | Origine manuelle ou externe d’une information | Types de sources, identifiants externes, URL et métadonnées |
-| `Evidence` | Justification d’une entité ou relation par une source | Cardinalités, citation, horodatage et niveau de confiance |
-| `Revision` | Historique éditorial, en particulier pour le canon | Snapshot, numérotation, auteur et restauration |
-| `User` | Identité et permissions futures | Rôles, lien éventuel avec Discord et politique de visibilité |
+| `Entity` | Fiche canonique générique | `kind`, `placeKind?`, `slug`, titre, résumé, Markdown, alias, tags, metadata, statut, visibilité, dates ; relations entrantes/sortantes, preuves et révisions. |
+| `RelationType` | Catalogue contrôlé | `code` unique, libellé, `inverseCode?` unique, libellé inverse, `symmetric` ; aucune fiche lore. |
+| `Relation` | Arête orientée | `fromEntityId` → `toEntityId`, `relationTypeId`, description, statut, visibilité, dates ; preuves. |
+| `Source` | Document ou origine | Type (`MANUAL`, `OBSIDIAN`, `DISCORD`, `HESTA_MAP`, `YOUTUBE`, `AI_DERIVED`, `OTHER`), identifiant externe et URL facultatifs, auteur, metadata ; une source dérivée peut référencer sa source d'origine. Aucune clé étrangère vers une autre application. |
+| `Evidence` | Fait précis soutenu par une source | Une source, exactement une fiche ou une relation, énoncé, extrait, repère et timestamps facultatifs, confiance facultative. |
+| `Revision` | Historique d'une fiche | Numéro par `Entity`, snapshot, message et attribution textuelle facultative. Aucun modèle `User` pour le moment. |
 
-La structure détaillée de ces modèles sera arrêtée avant la première migration. Aucun accès
-aux données métier, aucune authentification et aucun import ne sont présents en v0.1.
+`Entity.kind = PLACE` exige `placeKind` ; pour toute autre valeur de `kind`, `placeKind`
+est null. Les valeurs initiales de `PlaceKind` sont `CITY`, `CONTINENT`, `REGION`, `SEA`,
+`OCEAN` et `OTHER`. `SESSION` est une fiche décrivant une partie JDR ; son enregistrement
+YouTube est une `Source`, éventuellement citée par une `Evidence` horodatée.
+
+Une arête est stockée une seule fois dans son sens canonique. `parent_of` peut exposer
+`child_of` et son libellé pour la lecture inverse sans créer une deuxième arête.
+`allied_with` est symétrique et réutilise le même code dans les deux sens. Le seed
+idempotent crée ces quatre types, sans contenu lore.
+
+## Contraintes et index
+
+Prisma définit les clés étrangères, index et contraintes d'unicité suivants :
+
+- `Entity.slug`, `RelationType.code` et `RelationType.inverseCode` sont uniques ;
+- `(Source.kind, Source.externalId)` est unique lorsque l'identifiant externe existe ;
+- `(Relation.fromEntityId, Relation.toEntityId, Relation.relationTypeId)` évite les
+  doublons exacts d'arêtes ;
+- `(Revision.entityId, Revision.number)` ordonne les révisions sans doublon ;
+- les deux extrémités de `Relation`, son type, les trois références d'`Evidence`,
+  `Source.derivedFromSourceId`, ainsi que les filtres `kind/placeKind` et
+  `status/visibility` disposent d'index utiles à la navigation et aux backlinks.
+
+Les contraintes SQL suivantes sont ajoutées à la migration, car le schéma Prisma ne les
+exprime pas directement :
+
+- `Entity_placeKind_matches_kind_check` : `placeKind` présent si et seulement si
+  `kind = PLACE` ;
+- `Entity_publishedAt_required_check` : une fiche `PUBLISHED` a un `publishedAt` non null.
+  Le service métier devra fixer cet instant lors de la publication et le conserver en cas
+  d'archivage ;
+- `Evidence_exactly_one_target_check` : `entityId` ou `relationId`, exclusivement ;
+- `Evidence_time_start_nonnegative_check`, `Evidence_time_end_nonnegative_check` et
+  `Evidence_time_order_check` : bornes positives et fin non antérieure au début ;
+- `Evidence_confidence_range_check` : confiance entre 0 et 1 si renseignée ;
+- `RelationType_symmetric_inverse_check` et `RelationType_distinct_codes_check` : un type
+  symétrique n'a pas de code/libellé inverse, et un code inverse diffère du code direct ;
+- `Revision_positive_number_check` : numérotation à partir de 1.
+
+La base ne peut pas garantir qu'une fiche publiée possède au moins une `Evidence` sans
+déclencheur supplémentaire. Le futur service devra écrire fiche, preuves et révision dans
+une transaction et ne publier qu'après validation de la provenance. Il devra également
+prévenir les collisions entre un `code` et l'`inverseCode` d'un autre type.
+
+## Reporté
+
+Authentification, `User`, permissions, imports, révisions des relations, dates structurées
+du calendrier d'Hesta, recherche plein texte, extraction des `[[wikilinks]]` et calcul du
+graphe affiché. Les UUID, index, alias, Markdown et relations orientées en préparent la base.
 
 Référence : `Hesta-Hub/docs/HESTA-CODEX-ARCHITECTURE.md` dans le dépôt voisin.
-

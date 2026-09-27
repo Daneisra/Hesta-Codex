@@ -13,12 +13,23 @@
   "scripts": {
     "dev": "npm run build -w @hesta-codex/shared && concurrently -k -n web,api \"npm run dev -w @hesta-codex/web\" \"npm run dev -w @hesta-codex/api\"",
     "lint": "eslint .",
-    "typecheck": "npm run build -w @hesta-codex/shared && npm run typecheck -w @hesta-codex/shared && npm run typecheck -w @hesta-codex/api && npm run typecheck -w @hesta-codex/web",
+    "typecheck": "npm run prisma:generate && npm run typecheck:prisma && npm run build -w @hesta-codex/shared && npm run typecheck -w @hesta-codex/shared && npm run typecheck -w @hesta-codex/api && npm run typecheck -w @hesta-codex/web",
+    "typecheck:prisma": "tsc --noEmit -p tsconfig.prisma.json",
     "test": "npm run test -w @hesta-codex/api",
     "build": "npm run build -w @hesta-codex/shared && npm run build -w @hesta-codex/api && npm run build -w @hesta-codex/web",
-    "prisma:validate": "prisma validate"
+    "prisma:validate": "prisma validate",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:seed": "npm run prisma:generate && prisma db seed"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "7.10.0",
+    "@prisma/client": "7.10.0",
+    "pg": "^8.0.0"
   },
   "devDependencies": {
+    "@types/pg": "^8.0.0",
     "@eslint/js": "^10.0.0",
     "@types/node": "^22.0.0",
     "concurrently": "^9.0.0",
