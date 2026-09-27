@@ -6,4 +6,5 @@ coverage/
 .env.*
 !.env.example
 generated/
+apps/api/src/prisma-client/
 *.tsbuildinfo

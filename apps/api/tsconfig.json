@@ -3,6 +3,8 @@
   "compilerOptions": {
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
     "rootDir": "src",
     "outDir": "dist",
     "declaration": true,
@@ -11,4 +13,3 @@
   "include": ["src/**/*.ts"],
   "exclude": ["src/**/*.test.ts"]
 }
-

@@ -3,7 +3,7 @@ import globals from 'globals'
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/generated/**', '**/node_modules/**', '.npm-cache/**'] },
+  { ignores: ['**/dist/**', '**/generated/**', '**/prisma-client/**', '**/node_modules/**', '.npm-cache/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

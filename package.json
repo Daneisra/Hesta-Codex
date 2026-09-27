@@ -11,12 +11,12 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run build -w @hesta-codex/shared && concurrently -k -n web,api \"npm run dev -w @hesta-codex/web\" \"npm run dev -w @hesta-codex/api\"",
+    "dev": "npm run prisma:generate && npm run build -w @hesta-codex/shared && concurrently -k -n web,api \"npm run dev -w @hesta-codex/web\" \"npm run dev -w @hesta-codex/api\"",
     "lint": "eslint .",
     "typecheck": "npm run prisma:generate && npm run typecheck:prisma && npm run build -w @hesta-codex/shared && npm run typecheck -w @hesta-codex/shared && npm run typecheck -w @hesta-codex/api && npm run typecheck -w @hesta-codex/web",
     "typecheck:prisma": "tsc --noEmit -p tsconfig.prisma.json",
-    "test": "npm run test -w @hesta-codex/api",
-    "build": "npm run build -w @hesta-codex/shared && npm run build -w @hesta-codex/api && npm run build -w @hesta-codex/web",
+    "test": "npm run prisma:generate && npm run build -w @hesta-codex/shared && npm run test -w @hesta-codex/api",
+    "build": "npm run prisma:generate && npm run build -w @hesta-codex/shared && npm run build -w @hesta-codex/api && npm run build -w @hesta-codex/web",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",

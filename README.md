@@ -30,9 +30,9 @@ npm run dev
 
 Le site est accessible sur `http://localhost:5173` et l’API sur
 `http://localhost:3000/api/v1/health`. En développement, Vite relaie `/api` vers Express.
-Le endpoint de santé ne dépend pas de PostgreSQL.
+L’API utilise `DATABASE_URL` pour lire PostgreSQL ; sa route de santé vérifie aussi la base.
 
-Pour utiliser les migrations ou le seed, copier `.env.example` en `.env` et remplacer les
+Pour lancer l’API, utiliser les migrations ou le seed, copier `.env.example` en `.env` et remplacer les
 valeurs fictives de `DATABASE_URL` par celles d'une base PostgreSQL. Le fichier `.env` est
 ignoré par Git. `PORT` vaut 3000 par défaut ; garder cette valeur avec la configuration
 Vite actuelle.
@@ -51,6 +51,7 @@ npm run prisma:generate
 La validation et la génération Prisma ne demandent pas de base locale. Une URL non joignable
 sert seulement à la validation hors ligne quand `DATABASE_URL` est absente. Le workflow
 GitHub Actions contrôle le code ; il ne déploie rien et n'applique aucune migration.
+Les tests API utilisent une source de données simulée et n’accèdent pas au VPS.
 
 Sur une base PostgreSQL configurée, appliquer la migration puis créer ou actualiser les
 quatre types de relations initiaux :
@@ -69,7 +70,7 @@ ne crée aucune `Entity`. Ces commandes ne sont pas exécutées par la CI actuel
 
 ```text
 apps/web/         Page publique minimale
-apps/api/         API Express et test du endpoint de santé
+apps/api/         API Express, client Prisma et tests de lecture
 packages/shared/  Contrats TypeScript communs
 prisma/           Schéma PostgreSQL, migration initiale et seed RelationType
 docs/             Décisions et contraintes du modèle de données
@@ -79,6 +80,7 @@ scripts/          Emplacement pour les futurs scripts nécessaires
 Les modèles `Entity`, `RelationType`, `Relation`, `Source`, `Evidence` et `Revision`, leurs
 contraintes SQL et les fonctionnalités reportées sont décrits dans
 [docs/DATA-MODEL.md](docs/DATA-MODEL.md). Aucun `User` n'est créé à ce stade.
+Les routes de lecture et leurs limites sont décrites dans [docs/API.md](docs/API.md).
 
 ## Écosystème Hesta
 

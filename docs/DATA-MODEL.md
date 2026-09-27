@@ -15,8 +15,9 @@ d'armure restent dans Système PA.
 - `DRAFT`, `PROPOSED`, `PUBLISHED` et `ARCHIVED` sont les statuts éditoriaux. Un import ou
   une extraction IA reste `PROPOSED` jusqu'à validation humaine ; `PUBLISHED` désigne le canon.
 - `PUBLIC`, `PLAYERS`, `GM` et `SECRET` sont des niveaux de visibilité, avec `GM` par défaut.
-  Aucun contrôle d'accès ni endpoint de lecture métier n'est encore implémenté. Le futur
-  filtrage devra se faire dans l'API, y compris pour les relations, sources et preuves.
+  Sans authentification, l’API de lecture expose seulement les fiches et relations à la fois
+  `PUBLISHED` et `PUBLIC`. Les fiches voisines doivent respecter la même règle. Sources,
+  preuves et révisions ne sont pas encore exposées par l’API.
 - Les suppressions physiques de fiches, sources, arêtes ou types référencés sont interdites
   par des clés étrangères `ON DELETE RESTRICT`. Les UUID référencés ne peuvent pas changer
   (`ON UPDATE RESTRICT`). Archiver une fiche conserve son historique.

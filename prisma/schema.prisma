@@ -1,6 +1,6 @@
 generator client {
   provider            = "prisma-client"
-  output              = "../generated/prisma"
+  output              = "../apps/api/src/prisma-client"
   importFileExtension = "ts"
 }
 
