@@ -1,0 +1,33 @@
+{
+  "name": "hesta-codex",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run build -w @hesta-codex/shared && concurrently -k -n web,api \"npm run dev -w @hesta-codex/web\" \"npm run dev -w @hesta-codex/api\"",
+    "lint": "eslint .",
+    "typecheck": "npm run build -w @hesta-codex/shared && npm run typecheck -w @hesta-codex/shared && npm run typecheck -w @hesta-codex/api && npm run typecheck -w @hesta-codex/web",
+    "test": "npm run test -w @hesta-codex/api",
+    "build": "npm run build -w @hesta-codex/shared && npm run build -w @hesta-codex/api && npm run build -w @hesta-codex/web",
+    "prisma:validate": "prisma validate"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "@types/node": "^22.0.0",
+    "concurrently": "^9.0.0",
+    "dotenv": "^17.0.0",
+    "eslint": "^10.0.0",
+    "globals": "^17.0.0",
+    "prisma": "^7.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^6.0.0",
+    "typescript-eslint": "^8.0.0"
+  }
+}

@@ -1,0 +1,11 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Domain models and the first migration will be added in the next milestone.
+
