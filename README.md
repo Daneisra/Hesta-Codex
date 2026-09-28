@@ -108,16 +108,22 @@ et les garanties du pipeline sont détaillés dans [docs/IMPORT.md](docs/IMPORT.
 `/admin` est réservé aux Discord IDs inscrits dans `DISCORD_ADMIN_IDS`. Un administrateur y voit
 les fiches de tout statut et toute visibilité, leurs sources, preuves, relations et révisions.
 Il peut modifier les champs éditoriaux d'une fiche non archivée, publier une proposition ou
-retirer une publication. Chaque changement réel crée une Revision ; un `expectedUpdatedAt`
+retirer une publication. Chaque changement réel d'Entity crée une Revision ; un `expectedUpdatedAt`
 empêche l'écrasement silencieux des modifications d'un autre administrateur. Les actions de
 publication sont distinctes de l'enregistrement et demandent confirmation. Seules les fiches
 `PUBLISHED + PUBLIC` apparaissent dans l'API et la bibliothèque publiques ; les relations
 importées restent privées tant qu'elles ne sont pas publiées séparément.
 
+v0.4c permet aussi de corriger la description et la visibilité d'une relation, puis de la
+publier ou la retirer ; ses deux fiches doivent être publiées et publiques pour qu'elle
+apparaisse dans le Codex public. Les champs éditoriaux des sources et preuves peuvent être
+corrigés. Leur identité et leurs cibles restent fixes. Ces corrections utilisent
+`expectedUpdatedAt` et ne produisent pas encore de `Revision` dédiée.
+
 Le premier lot `PROPOSED + GM` reste invisible publiquement jusqu'aux validations humaines.
 Le workflow est détaillé dans [docs/EDITORIAL-WORKFLOW.md](docs/EDITORIAL-WORKFLOW.md), et la
-configuration Discord dans [docs/AUTH.md](docs/AUTH.md). Aucune édition de Relation, Source ou
-Evidence n'est exposée.
+configuration Discord dans [docs/AUTH.md](docs/AUTH.md). La correction des relations, sources
+et preuves est détaillée dans [docs/PROVENANCE-WORKFLOW.md](docs/PROVENANCE-WORKFLOW.md).
 
 ## Structure
 

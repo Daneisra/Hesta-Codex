@@ -202,3 +202,69 @@ test('public detail excludes relations to private neighbors and returns no prove
   assert.equal(Object.hasOwn(detail ?? {}, 'revisions'), false)
   assert.equal(Object.hasOwn(detail ?? {}, 'source'), false)
 })
+
+test('public backlinks require a published public relation and published public endpoints', async () => {
+  const now = new Date('2026-09-28T12:00:00.000Z')
+  const base = { kind: 'PERSON', placeKind: null, summary: null, tags: [], aliases: [],
+    bodyMarkdown: 'Texte public', createdAt: now, updatedAt: now, publishedAt: now }
+  const current = { ...base, id: 'barolt', slug: 'barolt', title: 'Barolt',
+    status: 'PUBLISHED', visibility: 'PUBLIC' }
+  const relationType = { id: 'located-in', code: 'located_in', label: 'situé dans',
+    inverseCode: 'contains', inverseLabel: 'contient', symmetric: false }
+  const cases = [
+    ['PUBLISHED', 'PUBLIC', 'PUBLISHED', 'PUBLIC', true],
+    ['PROPOSED', 'PUBLIC', 'PUBLISHED', 'PUBLIC', false],
+    ['PUBLISHED', 'GM', 'PUBLISHED', 'PUBLIC', false],
+    ['PUBLISHED', 'PLAYERS', 'PUBLISHED', 'PUBLIC', false],
+    ['PUBLISHED', 'SECRET', 'PUBLISHED', 'PUBLIC', false],
+    ['PUBLISHED', 'PUBLIC', 'PROPOSED', 'GM', false],
+    ['PUBLISHED', 'PUBLIC', 'PROPOSED', 'PUBLIC', false],
+    ['PUBLISHED', 'PUBLIC', 'PUBLISHED', 'GM', false],
+    ['PUBLISHED', 'PUBLIC', 'PUBLISHED', 'PLAYERS', false],
+    ['PUBLISHED', 'PUBLIC', 'PUBLISHED', 'SECRET', false],
+  ] as const
+
+  for (const [relationStatus, relationVisibility, neighborStatus, neighborVisibility, visible] of cases) {
+    for (const direction of ['outgoing', 'incoming'] as const) {
+      const neighbor = { ...base, id: 'archipel', slug: 'archipel', title: 'Archipel Trekrerith',
+        status: neighborStatus, visibility: neighborVisibility }
+      const edge = { id: 'edge-1', description: 'Description privée ou publique',
+        status: relationStatus, visibility: relationVisibility,
+        fromEntity: direction === 'outgoing' ? current : neighbor,
+        toEntity: direction === 'outgoing' ? neighbor : current, relationType,
+        evidence: [{ claimText: 'Preuve secrète' }], source: { label: 'Notes MJ' },
+        metadata: { internalNote: 'Ne jamais montrer' } }
+      const prisma = {
+        entity: { async findFirst(query: { where: { slug: string; status: string; visibility: string } }) {
+          return query.where.slug === current.slug && query.where.status === current.status &&
+            query.where.visibility === current.visibility ? current : null
+        } },
+        relation: { async findMany(query: { where: {
+          fromEntityId?: string; toEntityId?: string; status: string; visibility: string;
+          fromEntity?: { is: { status: string; visibility: string } };
+          toEntity?: { is: { status: string; visibility: string } };
+        } }) {
+          const { where } = query
+          const endpoint = where.fromEntityId ? edge.toEntity : edge.fromEntity
+          const endpointFilter = where.fromEntityId ? where.toEntity?.is : where.fromEntity?.is
+          const matchesDirection = (where.fromEntityId === edge.fromEntity.id && where.toEntityId === undefined) ||
+            (where.toEntityId === edge.toEntity.id && where.fromEntityId === undefined)
+          return matchesDirection && where.status === edge.status && where.visibility === edge.visibility &&
+            endpointFilter?.status === endpoint.status && endpointFilter.visibility === endpoint.visibility
+            ? [{ id: edge.id, description: edge.description, relationType: edge.relationType,
+                ...(where.fromEntityId ? { toEntity: edge.toEntity } : { fromEntity: edge.fromEntity }) }] : []
+        } },
+      } as unknown as PrismaClient
+      const detail = await createPrismaStore(prisma).getEntityBySlug('barolt')
+      assert.ok(detail)
+      assert.equal(detail.outgoingRelations.length, direction === 'outgoing' && visible ? 1 : 0,
+        `${direction} ${relationStatus}/${relationVisibility}, neighbor ${neighborStatus}/${neighborVisibility}`)
+      assert.equal(detail.incomingRelations.length, direction === 'incoming' && visible ? 1 : 0)
+      const payload = JSON.stringify(detail)
+      for (const secret of ['Preuve secrète', 'Notes MJ', 'Ne jamais montrer']) {
+        assert.equal(payload.includes(secret), false)
+      }
+      if (!visible) assert.equal(payload.includes(edge.description), false)
+    }
+  }
+})

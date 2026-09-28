@@ -54,5 +54,7 @@ Les trois mutations demandent une session admin valide et un `Origin` exactement
 l'origine configurée par `DISCORD_REDIRECT_URI`. Une Origin absente est refusée. Aucun CORS
 permissif n'est ouvert. Les réponses admin portent `Cache-Control: no-store`.
 
-Les modifications de slug, les éditions de relations/sources/preuves, les brouillons séparés
-des fiches publiées, l'archivage, les diffs et la restauration de révisions sont reportés.
+Les modifications de slug, les brouillons séparés des fiches publiées, l'archivage, les diffs
+et la restauration de révisions sont reportés. L'édition contrôlée des relations, sources et
+preuves est décrite dans [PROVENANCE-WORKFLOW.md](PROVENANCE-WORKFLOW.md) ; elle ne crée pas de
+`Revision` Entity.

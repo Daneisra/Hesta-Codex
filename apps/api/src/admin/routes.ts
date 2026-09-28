@@ -1,8 +1,10 @@
-import { Router } from 'express'
+import { Router, type Request, type Response } from 'express'
 import { z } from 'zod'
 import { EditorialStatus, EntityKind, Visibility } from '../prisma-client/enums.ts'
 import { adminSession } from '../auth/routes.js'
 import type { EditorialService } from './editorial.js'
+import type { ProvenanceService } from './provenance.js'
+import { evidencePatchSchema, relationPatchSchema, relationWorkflowSchema, sourcePatchSchema } from './provenance-validation.js'
 import type { AdminStore } from './store.js'
 import { patchSchema, validationMessage, workflowSchema } from './validation.js'
 
@@ -24,7 +26,7 @@ function editorLabel(response: { locals: Record<string, unknown> }): string {
   return (actor.displayName?.trim() || actor.username).replace(/[\r\n]/g, ' ')
 }
 
-export function createAdminRouter(store: AdminStore, editorial: EditorialService) {
+export function createAdminRouter(store: AdminStore, editorial: EditorialService, provenance?: ProvenanceService) {
   const router = Router()
 
   router.get('/stats', async (_request, response) => {
@@ -92,6 +94,31 @@ export function createAdminRouter(store: AdminStore, editorial: EditorialService
     }
     response.json(await editorial.unpublish(request.params.slug, parsed.data, editorLabel(response)))
   })
+
+  if (provenance) {
+    const uuid = z.uuid()
+    const mutation = <T>(schema: z.ZodType<T>, action: (id: string, input: T) => Promise<unknown>) =>
+      async (request: Request, response: Response) => {
+        const id = request.params.id
+        if (typeof id !== 'string' || !uuid.safeParse(id).success) {
+          response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'Identifiant invalide' } })
+          return
+        }
+        const parsed = schema.safeParse(request.body)
+        if (!parsed.success) {
+          response.status(400).json({ error: { code: 'INVALID_REQUEST', message: validationMessage(parsed.error) } })
+          return
+        }
+        response.json(await action(id, parsed.data))
+      }
+    router.patch('/relations/:id', mutation(relationPatchSchema, (id, input) => provenance.patchRelation(id, input)))
+    router.post('/relations/:id/publish', mutation(relationWorkflowSchema,
+      (id, input) => provenance.publishRelation(id, input)))
+    router.post('/relations/:id/unpublish', mutation(relationWorkflowSchema,
+      (id, input) => provenance.unpublishRelation(id, input)))
+    router.patch('/sources/:id', mutation(sourcePatchSchema, (id, input) => provenance.patchSource(id, input)))
+    router.patch('/evidence/:id', mutation(evidencePatchSchema, (id, input) => provenance.patchEvidence(id, input)))
+  }
 
   return router
 }

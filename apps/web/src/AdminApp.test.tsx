@@ -20,11 +20,14 @@ const detail: AdminEntityDetail = {
   evidence: [{
     id: 'evidence-1', claimText: 'Fait sourcé', sourceExcerpt: 'Extrait privé', locator: 'p. 2',
     timeStartSeconds: null, timeEndSeconds: null, confidence: '0.800', visibility: 'GM',
+    updatedAt: '2026-09-28T00:00:00.000Z',
     source: { id: 'source-1', kind: 'MANUAL', label: 'Notes de partie', externalId: 'notes-001',
-      url: null, authorLabel: 'MJ', visibility: 'GM' },
+      url: null, authorLabel: 'MJ', visibility: 'GM', publishedAt: null,
+      updatedAt: '2026-09-28T00:00:00.000Z' },
   }],
   outgoingRelations: [{
     id: 'relation-1', description: null, status: 'PROPOSED', visibility: 'GM',
+    updatedAt: '2026-09-28T00:00:00.000Z',
     relationType: { id: 'type-1', code: 'member_of', label: 'membre de', inverseCode: 'has_member',
       inverseLabel: 'compte parmi ses membres', symmetric: false },
     entity: { id: 'entity-2', slug: 'organisation', title: 'Organisation', kind: 'ORGANIZATION',
@@ -53,14 +56,22 @@ function mockApi(options: {
   listStatus?: number
   list?: AdminEntityListResponse
   detailStatus?: number
+  sourceMutationStatus?: number
 } = {}) {
   const requests: string[] = []
-  vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+  vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
     requests.push(url)
     if (url === '/api/auth/session') return response(options.session ?? administrator, options.sessionStatus)
     if (url === '/api/admin/stats') return response(stats)
     if (url.startsWith('/api/admin/entities?')) return response(options.list ?? list, options.listStatus)
+    if (url === '/api/admin/sources/source-1' && init?.method === 'PATCH') {
+      const status = options.sourceMutationStatus ?? 200
+      return response(status === 409 ? { error: { code: 'SOURCE_CONFLICT',
+        message: 'Une source de ce type utilise déjà cet identifiant externe.' } }
+        : status === 401 ? { error: { code: 'UNAUTHORIZED', message: 'Session expirée.' } }
+          : { id: 'source-1', updatedAt: detail.updatedAt }, status)
+    }
     if (url === '/api/admin/entities/barolt') return response(detail, options.detailStatus)
     if (url === '/api/auth/logout') return response({}, 204)
     return response({}, 404)
@@ -113,8 +124,8 @@ describe('administration en lecture seule', () => {
     expect(await screen.findByRole('heading', { name: 'Barolt', level: 1 })).toBeTruthy()
     expect(screen.getByText('Résumé privé')).toBeTruthy()
     expect(screen.getByText('Autre nom', { exact: false })).toBeTruthy()
-    expect(screen.getByText('Notes de partie', { exact: false })).toBeTruthy()
-    expect(screen.getByText('Auteur : MJ', { exact: false })).toBeTruthy()
+    expect(screen.getAllByText('Notes de partie', { exact: false }).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Auteur : MJ', { exact: false }).length).toBeGreaterThan(0)
     expect(screen.getByText('Fait sourcé')).toBeTruthy()
     expect(screen.getByRole('heading', { name: /Relations sortantes/ })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Organisation' })).toBeTruthy()
@@ -182,5 +193,33 @@ describe('administration en lecture seule', () => {
     window.history.back()
     await waitFor(() => expect(window.location.pathname).toBe('/admin'))
     expect(await screen.findByRole('heading', { name: 'Tableau de bord', level: 1 })).toBeTruthy()
+  })
+
+  it('affiche un conflit Source sans perdre le formulaire ni proposer un faux rechargement', async () => {
+    window.history.replaceState(null, '', '/admin/fiches/barolt')
+    mockApi({ sourceMutationStatus: 409 })
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(await screen.findByRole('button', { name: 'Modifier la source' }))
+    await user.clear(screen.getByRole('textbox', { name: 'Label' }))
+    await user.type(screen.getByRole('textbox', { name: 'Label' }), 'Notes corrigées')
+    await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent',
+      'Une source de ce type utilise déjà cet identifiant externe.')
+    expect((screen.getByRole('textbox', { name: 'Label' }) as HTMLInputElement).value).toBe('Notes corrigées')
+    expect(screen.queryByRole('button', { name: 'Recharger la version récente' })).toBeNull()
+  })
+
+  it('conserve la saisie Source et bloque Enregistrer après expiration de session', async () => {
+    window.history.replaceState(null, '', '/admin/fiches/barolt')
+    mockApi({ sourceMutationStatus: 401 })
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(await screen.findByRole('button', { name: 'Modifier la source' }))
+    await user.type(screen.getByRole('textbox', { name: 'Label' }), ' corrigées')
+    await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
+    expect(await screen.findByRole('link', { name: 'Se reconnecter avec Discord' })).toBeTruthy()
+    expect((screen.getByRole('textbox', { name: 'Label' }) as HTMLInputElement).value).toContain('corrigées')
+    expect(screen.getByRole('button', { name: 'Enregistrer' }).hasAttribute('disabled')).toBe(true)
   })
 })

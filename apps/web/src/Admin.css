@@ -8,7 +8,8 @@
 .admin-header .header-actions { flex-wrap: wrap; }
 .admin-user { color: #dcc18e; font-size: .9rem; }
 .admin-logout, .admin-pagination button, .admin-state button, .admin-message button,
-.admin-edit-button, .admin-publication button, .admin-editor button, .admin-form-error button {
+.admin-edit-button, .admin-publication button, .admin-editor button, .admin-form-error button,
+.admin-evidence-list button, .admin-relation-list button, .admin-provenance-editor button {
   border: 1px solid #5b6780;
   border-radius: .45rem;
   padding: .55rem .8rem;
@@ -102,6 +103,11 @@
 .admin-editor-preview { min-width: 0; margin-top: 1.2rem; padding: 1rem; border: 1px solid #394760; border-radius: .5rem; }
 .admin-editor-preview h3 { margin: 0 0 .8rem; }
 .admin-editor-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: .7rem; margin-top: 1.2rem; }
+.admin-provenance-editor { margin-top: 1rem; padding: 1rem; border: 1px solid #596781; border-radius: .5rem; }
+.admin-source-card { margin-top: 1rem; padding: .8rem; border-left: 2px solid #9e88ba; background: #101a2d; }
+.admin-source-card p { margin: .35rem 0; }
+.admin-evidence-list button, .admin-relation-list button { margin-top: .5rem; }
+.admin-relation-list .admin-publication { margin: .6rem 0; }
 
 @media (max-width: 900px) {
   .admin-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }

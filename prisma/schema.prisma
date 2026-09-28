@@ -155,6 +155,7 @@ model Evidence {
   confidence       Decimal?    @db.Decimal(4, 3)
   visibility       Visibility  @default(GM)
   createdAt        DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime    @updatedAt @db.Timestamptz(3)
 
   source   Source    @relation(fields: [sourceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   entity   Entity?   @relation(fields: [entityId], references: [id], onDelete: Restrict, onUpdate: Restrict)

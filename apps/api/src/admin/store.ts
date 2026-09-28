@@ -25,18 +25,18 @@ const listSelect = {
 } satisfies Prisma.EntitySelect
 const sourceSelect = {
   id: true, kind: true, label: true, externalId: true, url: true,
-  authorLabel: true, visibility: true,
+  authorLabel: true, publishedAt: true, visibility: true, updatedAt: true,
 } satisfies Prisma.SourceSelect
 const evidenceSelect = {
   id: true, claimText: true, sourceExcerpt: true, locator: true,
   timeStartSeconds: true, timeEndSeconds: true, confidence: true,
-  visibility: true, source: { select: sourceSelect },
+  visibility: true, updatedAt: true, source: { select: sourceSelect },
 } satisfies Prisma.EvidenceSelect
 const relationTypeSelect = {
   id: true, code: true, label: true, inverseCode: true, inverseLabel: true, symmetric: true,
 } satisfies Prisma.RelationTypeSelect
 const relationSelect = {
-  id: true, description: true, status: true, visibility: true,
+  id: true, description: true, status: true, visibility: true, updatedAt: true,
   relationType: { select: relationTypeSelect },
   evidence: { select: evidenceSelect, orderBy: { id: 'asc' as const } },
 } satisfies Prisma.RelationSelect
@@ -73,7 +73,8 @@ function listItem(row: ListRow): AdminEntityListItem {
 function sourceItem(row: EvidenceRow['source']): AdminSource {
   return {
     id: row.id, kind: row.kind, label: row.label, externalId: row.externalId,
-    url: row.url, authorLabel: row.authorLabel, visibility: row.visibility,
+    url: row.url, authorLabel: row.authorLabel, publishedAt: row.publishedAt?.toISOString() ?? null,
+    visibility: row.visibility, updatedAt: row.updatedAt.toISOString(),
   }
 }
 
@@ -86,7 +87,7 @@ function evidenceItem(row: EvidenceRow): AdminEvidence {
     timeStartSeconds: row.timeStartSeconds,
     timeEndSeconds: row.timeEndSeconds,
     confidence: row.confidence?.toString() ?? null,
-    visibility: row.visibility,
+    visibility: row.visibility, updatedAt: row.updatedAt.toISOString(),
     source: sourceItem(row.source),
   }
 }
@@ -100,6 +101,7 @@ function detailItem(row: DetailRow): AdminEntityDetail {
     description: relation.description,
     status: relation.status,
     visibility: relation.visibility,
+    updatedAt: relation.updatedAt.toISOString(),
     relationType: {
       id: relation.relationType.id, code: relation.relationType.code,
       label: relation.relationType.label, inverseCode: relation.relationType.inverseCode,

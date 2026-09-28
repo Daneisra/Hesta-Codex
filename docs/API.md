@@ -1,7 +1,8 @@
 # API publique et administration éditoriale
 
 L’API Express utilise un seul client Prisma par processus. Les routes publiques restent en
-lecture seule ; l'administration peut modifier et publier des `Entity` après authentification.
+lecture seule ; l'administration peut modifier et publier des `Entity` et `Relation`, ainsi que
+corriger des `Source` et `Evidence`, après authentification.
 `DATABASE_URL` est requis au démarrage ; copier `.env.example` en `.env` pour le
 développement local. Le client est fermé lors de l’arrêt du serveur. Les tests utilisent des
 doubles en mémoire et ne contactent pas PostgreSQL.
@@ -45,6 +46,11 @@ portent `Cache-Control: no-store`.
 | `PATCH /api/admin/entities/:slug` | Remplace les champs éditables de la fiche ; retourne la fiche et ses révisions à jour. |
 | `POST /api/admin/entities/:slug/publish` | Publie une fiche `PROPOSED` sourcée ; retourne la fiche à jour. |
 | `POST /api/admin/entities/:slug/unpublish` | Retire une fiche `PUBLISHED` de la publication ; retourne la fiche à jour. |
+| `PATCH /api/admin/relations/:id` | Modifie `description` et `visibility` ; retourne `{ id, updatedAt, status }`. |
+| `POST /api/admin/relations/:id/publish` | Publie une relation `PROPOSED` avec une Evidence directement liée ; retourne `{ id, updatedAt, status }`. |
+| `POST /api/admin/relations/:id/unpublish` | Retire une relation `PUBLISHED` de la publication ; retourne `{ id, updatedAt, status }`. |
+| `PATCH /api/admin/sources/:id` | Modifie les champs éditoriaux de la Source ; retourne `{ id, updatedAt }`. |
+| `PATCH /api/admin/evidence/:id` | Corrige le contenu et les repères de l'Evidence ; retourne `{ id, updatedAt }`. |
 
 Les filtres inconnus, répétés ou invalides donnent `400`. Les champs `metadata` restent exclus
 pour éviter d'exposer un JSON dont le contenu n'a pas encore été classé.
@@ -56,7 +62,11 @@ Le `PATCH` exige un JSON complet contenant `title`, `summary`, `bodyMarkdown`, `
 le slug, le statut, les dates, `metadata`, les relations et les preuves ne peuvent pas être
 modifiés via le formulaire. Une fiche absente donne `404`, une version obsolète
 `409 ENTITY_MODIFIED`, un statut inadapté `409 INVALID_STATUS` et une publication sans preuve
-`422 EVIDENCE_REQUIRED`. Aucune écriture sur Relation, Source ou Evidence n'est exposée.
+`422 EVIDENCE_REQUIRED`. Les nouvelles routes de provenance exigent des UUID et des JSON
+complets et stricts avec `expectedUpdatedAt`. Une version périmée donne respectivement
+`409 RELATION_MODIFIED`, `SOURCE_MODIFIED` ou `EVIDENCE_MODIFIED`. Une collision de
+`(Source.kind, Source.externalId)` donne `409 SOURCE_CONFLICT`. Les champs d'identité et de cible
+ne sont pas éditables. Aucun endpoint de création ou suppression n'est exposé.
 
 Toutes les mutations admin exigent une session et une Origin identique à l'origine configurée,
 y compris si le cookie est présent. Une Origin absente ou différente donne `403 INVALID_ORIGIN`.

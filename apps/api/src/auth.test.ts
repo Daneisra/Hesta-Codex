@@ -37,8 +37,10 @@ const detail: AdminEntityDetail = {
   evidence: [{
     id: 'evidence-1', claimText: 'Information vérifiée', sourceExcerpt: null, locator: 'p. 2',
     timeStartSeconds: null, timeEndSeconds: null, confidence: null, visibility: 'GM',
+    updatedAt: '2026-09-28T00:00:00.000Z',
     source: { id: 'source-1', kind: 'MANUAL', label: 'Document privé', externalId: null,
-      url: null, authorLabel: null, visibility: 'GM' },
+      url: null, authorLabel: null, visibility: 'GM', publishedAt: null,
+      updatedAt: '2026-09-28T00:00:00.000Z' },
   }],
   outgoingRelations: [], incomingRelations: [],
   revisions: [{ id: 'revision-1', number: 1, snapshot: { title: 'Barolt' },

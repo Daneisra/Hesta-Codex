@@ -219,8 +219,10 @@ function memoryDatabase() {
             async findUnique() { return { ...pending, evidence: Array.from({ length: evidenceCount }, (_, index) => ({
               id: `evidence-${index}`, claimText: 'Source', sourceExcerpt: null, locator: null,
               timeStartSeconds: null, timeEndSeconds: null, confidence: null, visibility: 'GM',
+              updatedAt: new Date(updatedAt),
               source: { id: 'source-1', kind: 'MANUAL', label: 'Notes', externalId: null,
-                url: null, authorLabel: null, visibility: 'GM' },
+                url: null, authorLabel: null, visibility: 'GM', publishedAt: null,
+                updatedAt: new Date(updatedAt) },
             })), outgoingRelations: [], incomingRelations: [], revisions: [...pendingRevisions].reverse() } },
             async updateMany(query: { where: { id: string; updatedAt: Date; status: string }; data: Partial<MemoryEntity> }) {
               if (failUpdate) throw new Error('update failed')

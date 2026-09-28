@@ -89,7 +89,9 @@ export interface AdminSource {
   externalId: string | null
   url: string | null
   authorLabel: string | null
+  publishedAt: string | null
   visibility: Visibility
+  updatedAt: string
 }
 
 export interface AdminEvidence {
@@ -101,6 +103,7 @@ export interface AdminEvidence {
   timeEndSeconds: number | null
   confidence: string | null
   visibility: Visibility
+  updatedAt: string
   source: AdminSource
 }
 
@@ -109,6 +112,7 @@ export interface AdminRelation {
   description: string | null
   status: EditorialStatus
   visibility: Visibility
+  updatedAt: string
   relationType: RelationTypeItem
   entity: AdminEntityListItem
   evidence: AdminEvidence[]
@@ -150,6 +154,34 @@ export interface AdminEntityPatch {
 export interface AdminWorkflowRequest {
   expectedUpdatedAt: string
   revisionMessage?: string | null
+}
+
+export interface AdminRelationPatch {
+  description: string | null
+  visibility: Visibility
+  expectedUpdatedAt: string
+}
+
+export interface AdminSourcePatch {
+  kind: SourceKind
+  label: string
+  externalId: string | null
+  url: string | null
+  authorLabel: string | null
+  publishedAt: string | null
+  visibility: Visibility
+  expectedUpdatedAt: string
+}
+
+export interface AdminEvidencePatch {
+  claimText: string
+  sourceExcerpt: string | null
+  locator: string | null
+  timeStartSeconds: number | null
+  timeEndSeconds: number | null
+  confidence: number | null
+  visibility: Visibility
+  expectedUpdatedAt: string
 }
 
 export interface AdminStats {

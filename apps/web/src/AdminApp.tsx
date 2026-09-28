@@ -2,10 +2,11 @@ import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type {
-  AdminEntityDetail, AdminEntityListResponse, AdminEntityPatch, AdminEvidence, AdminRelation, AdminStats,
+  AdminEntityDetail, AdminEntityListResponse, AdminEntityPatch, AdminStats,
   AuthSessionResponse, EditorialStatus, EntityKind, Visibility,
 } from '@hesta-codex/shared'
 import { AdminEditor } from './AdminEditor'
+import { AdminProvenance } from './AdminProvenance'
 import './Admin.css'
 
 type AdminRoute = { view: 'dashboard' } | { view: 'entity'; slug: string } | { view: 'not-found' }
@@ -31,7 +32,7 @@ function readRoute(): AdminRoute {
 }
 
 class HttpError extends Error {
-  constructor(readonly status: number, message = `HTTP ${status}`) { super(message) }
+  constructor(readonly status: number, message = `HTTP ${status}`, readonly code?: string) { super(message) }
 }
 
 async function getJson<T>(url: string, signal: AbortSignal): Promise<T> {
@@ -49,22 +50,17 @@ async function mutateJson<T>(url: string, method: 'PATCH' | 'POST', body: unknow
     body: JSON.stringify(body),
   })
   if (!response.ok) {
-    const payload = await response.json().catch(() => null) as { error?: { message?: unknown } } | null
+    const payload = await response.json().catch(() => null) as { error?: { message?: unknown; code?: unknown } } | null
     const message = payload?.error?.message
-    throw new HttpError(response.status, typeof message === 'string' ? message : `HTTP ${response.status}`)
+    const code = payload?.error?.code
+    throw new HttpError(response.status, typeof message === 'string' ? message : `HTTP ${response.status}`,
+      typeof code === 'string' ? code : undefined)
   }
   return response.json() as Promise<T>
 }
 
 function errorStatus(error: unknown): number | null {
   return error instanceof HttpError ? error.status : null
-}
-
-function safeUrl(value: string): string | null {
-  try {
-    const url = new URL(value)
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null
-  } catch { return null }
 }
 
 function dateLabel(value: string): string {
@@ -75,74 +71,23 @@ function StateMessage({ children }: { children: string }) {
   return <p className="admin-message" role="status">{children}</p>
 }
 
-function EvidenceList({ evidence }: { evidence: AdminEvidence[] }) {
-  if (evidence.length === 0) return <p className="admin-muted">Aucune preuve liée.</p>
-  return <ul className="admin-evidence-list">{evidence.map((item) => (
-    <li key={item.id}>
-      <p className="admin-claim">{item.claimText}</p>
-      <p className="admin-muted">
-        Source : {item.source.label} · {item.source.kind}
-        {item.source.authorLabel && <> · Auteur : {item.source.authorLabel}</>}
-        {item.source.externalId && <> · ID externe : {item.source.externalId}</>}
-      </p>
-      {item.source.url && safeUrl(item.source.url) && (
-        <a href={safeUrl(item.source.url)!} target="_blank" rel="noopener noreferrer">Ouvrir la source ↗</a>
-      )}
-      {item.sourceExcerpt && <blockquote>{item.sourceExcerpt}</blockquote>}
-      {(item.locator || item.timeStartSeconds !== null || item.timeEndSeconds !== null) && (
-        <p className="admin-muted">
-          {item.locator && <>Repère : {item.locator}</>}
-          {item.timeStartSeconds !== null && <> · Début : {item.timeStartSeconds} s</>}
-          {item.timeEndSeconds !== null && <> · Fin : {item.timeEndSeconds} s</>}
-        </p>
-      )}
-      {item.confidence !== null && <p className="admin-muted">Confiance : {item.confidence}</p>}
-    </li>
-  ))}</ul>
-}
-
-function RelationSection({ title, relations, direction, onNavigate }: {
-  title: string
-  relations: AdminRelation[]
-  direction: 'outgoing' | 'incoming'
-  onNavigate: (event: MouseEvent<HTMLAnchorElement>, path: string) => void
-}) {
-  return <section className="admin-section">
-    <h3>{title} <span className="admin-count">{relations.length}</span></h3>
-    {relations.length === 0 ? <p className="admin-muted">Aucune relation.</p> : (
-      <ul className="admin-relation-list">{relations.map((relation) => (
-        <li key={relation.id}>
-          <div className="admin-relation-line">
-            <span>{direction === 'incoming' && !relation.relationType.symmetric
-              ? relation.relationType.inverseLabel ?? relation.relationType.inverseCode ?? relation.relationType.label
-              : relation.relationType.label}</span>
-            <a href={`/admin/fiches/${relation.entity.slug}`} onClick={(event) => onNavigate(event, `/admin/fiches/${relation.entity.slug}`)}>
-              {relation.entity.title}
-            </a>
-            <span className="admin-badge">{statusLabels[relation.status]} · {visibilityLabels[relation.visibility]}</span>
-          </div>
-          {relation.description && <p>{relation.description}</p>}
-          <EvidenceList evidence={relation.evidence} />
-        </li>
-      ))}</ul>
-    )}
-  </section>
-}
-
-function Detail({ entity, onNavigate, editing, busy, authExpired, error, onEdit, onCancel, onSave,
-  onDirtyChange, onWorkflow, onReload }: {
+function Detail({ entity, onNavigate, editing, provenanceEditing, busy, authExpired, error, onEdit, onCancel, onSave,
+  onDirtyChange, onWorkflow, onReload, onProvenanceMutation, onProvenanceEditingChange }: {
   entity: AdminEntityDetail
   onNavigate: (event: MouseEvent<HTMLAnchorElement>, path: string) => void
   editing: boolean
+  provenanceEditing: boolean
   busy: boolean
   authExpired: boolean
-  error: { status: number | null; message: string } | null
+  error: { status: number | null; message: string; code?: string } | null
   onEdit: () => void
   onCancel: () => void
   onSave: (input: AdminEntityPatch) => void
   onDirtyChange: (dirty: boolean) => void
   onWorkflow: (action: 'publish' | 'unpublish') => void
   onReload: () => void
+  onProvenanceMutation: (path: string, method: 'PATCH' | 'POST', body: unknown) => Promise<boolean>
+  onProvenanceEditingChange: (editing: boolean) => void
 }) {
   return <article className="admin-detail">
     <a className="admin-back" href="/admin" onClick={(event) => onNavigate(event, '/admin')}>← Tableau de bord</a>
@@ -155,11 +100,12 @@ function Detail({ entity, onNavigate, editing, busy, authExpired, error, onEdit,
         <span className="admin-badge">{statusLabels[entity.status]}</span>
         <span className="admin-badge">{visibilityLabels[entity.visibility]}</span>
       </div>
-      {!editing && entity.status !== 'ARCHIVED' &&
+      {!editing && !provenanceEditing && entity.status !== 'ARCHIVED' &&
         <button className="admin-edit-button" type="button" onClick={onEdit}>Modifier</button>}
     </div>
     {error && <div className="admin-form-error" role="alert">{error.message}
-      {error.status === 409 && <button type="button" onClick={onReload}>Recharger la version récente</button>}
+      {error.status === 409 && error.code?.endsWith('_MODIFIED') &&
+        <button type="button" onClick={onReload}>Recharger la version récente</button>}
       {error.status === 401 && <a href="/api/auth/discord/login">Se reconnecter avec Discord</a>}
     </div>}
     {editing ? <AdminEditor entity={entity} busy={busy} saveDisabled={authExpired} error={null} onSave={onSave}
@@ -173,7 +119,7 @@ function Detail({ entity, onNavigate, editing, busy, authExpired, error, onEdit,
           : <p className="admin-muted">Aucun contenu détaillé.</p>}
       </div>
     </section>}
-    {!editing && (entity.status === 'PROPOSED' || entity.status === 'PUBLISHED') &&
+    {!editing && !provenanceEditing && (entity.status === 'PROPOSED' || entity.status === 'PUBLISHED') &&
       <section className="admin-section admin-publication">
         <h2>Publication</h2>
         <p>Visibilité actuelle : <strong>{visibilityLabels[entity.visibility]}</strong>.</p>
@@ -190,11 +136,8 @@ function Detail({ entity, onNavigate, editing, busy, authExpired, error, onEdit,
           <button type="button" disabled={busy} onClick={() => onWorkflow('unpublish')}>Retirer de la publication</button>
         </>}
       </section>}
-    <section className="admin-section"><h2>Provenance</h2><EvidenceList evidence={entity.evidence} /></section>
-    <div className="admin-relations">
-      <RelationSection title="Relations sortantes" direction="outgoing" relations={entity.outgoingRelations} onNavigate={onNavigate} />
-      <RelationSection title="Relations entrantes" direction="incoming" relations={entity.incomingRelations} onNavigate={onNavigate} />
-    </div>
+    <AdminProvenance entity={entity} onNavigate={onNavigate} onMutate={onProvenanceMutation}
+      onDirtyChange={onDirtyChange} onEditingChange={onProvenanceEditingChange} busy={busy} disabled={authExpired || editing} />
     <section className="admin-section">
       <h2>Historique</h2>
       {entity.revisions.length === 0 ? <p className="admin-muted">Aucune révision.</p> : (
@@ -228,10 +171,11 @@ export function AdminApp() {
   const [dataRefresh, setDataRefresh] = useState(0)
   const [detailRefresh, setDetailRefresh] = useState(0)
   const [editing, setEditing] = useState(false)
+  const [provenanceEditing, setProvenanceEditing] = useState(false)
   const [editDirty, setEditDirty] = useState(false)
   const [busy, setBusy] = useState(false)
   const [authExpired, setAuthExpired] = useState(false)
-  const [mutationError, setMutationError] = useState<{ status: number | null; message: string } | null>(null)
+  const [mutationError, setMutationError] = useState<{ status: number | null; message: string; code?: string } | null>(null)
   const mainRef = useRef<HTMLElement>(null)
   const focusAfterNavigation = useRef(false)
   const currentPath = useRef(window.location.pathname)
@@ -250,6 +194,7 @@ export function AdminApp() {
       }
       currentPath.current = window.location.pathname
       setEditing(false)
+      setProvenanceEditing(false)
       setEditDirty(false)
       setAuthExpired(false)
       focusAfterNavigation.current = true
@@ -351,6 +296,7 @@ export function AdminApp() {
     if (window.location.pathname !== path) {
       currentPath.current = path
       setEditing(false)
+      setProvenanceEditing(false)
       setEditDirty(false)
       setAuthExpired(false)
       setMutationError(null)
@@ -368,6 +314,7 @@ export function AdminApp() {
       window.history.replaceState(null, '', '/admin')
       currentPath.current = '/admin'
       setEditing(false)
+      setProvenanceEditing(false)
       setEditDirty(false)
       setRoute({ view: 'dashboard' })
       setSession({ phase: 'ready', data: { authenticated: false, isAdmin: false, user: null } })
@@ -377,6 +324,7 @@ export function AdminApp() {
   function cancelEdit() {
     if (editDirty && !window.confirm('Annuler et perdre les modifications non enregistrées ?')) return
     setEditing(false)
+    setProvenanceEditing(false)
     setEditDirty(false)
     setAuthExpired(false)
     setMutationError(null)
@@ -386,17 +334,20 @@ export function AdminApp() {
     const status = errorStatus(error)
     setBusy(false)
     if (status === 401) {
-      setAuthExpired(editing)
+      setAuthExpired(editing || provenanceEditing)
       setMutationError({ status, message: 'Session expirée. Vos modifications restent affichées : copiez-les avant de vous reconnecter.' })
       setSession({ phase: 'ready', data: { authenticated: false, isAdmin: false, user: null } })
     } else if (status === 403) {
       setEditing(false)
+      setProvenanceEditing(false)
       setEditDirty(false)
       setSession((current) => current.phase === 'ready' && current.data.authenticated
         ? { phase: 'ready', data: { ...current.data, isAdmin: false } } : current)
     } else {
-      setMutationError({ status, message: status === 409
-        ? 'Cette fiche a été modifiée depuis son ouverture. Rechargez la version récente avant de réessayer.'
+      const code = error instanceof HttpError ? error.code : undefined
+      setMutationError({ status, code, message: status === 409 && code?.endsWith('_MODIFIED')
+        ? 'Cet objet a été modifié depuis son ouverture. Rechargez la version récente avant de réessayer.'
+        : status === 409 && error instanceof HttpError ? error.message
         : status === 400 || status === 422 ? error instanceof HttpError ? error.message : 'Données invalides.'
           : `Impossible d’enregistrer la fiche${status ? ` (erreur ${status})` : ''}.` })
     }
@@ -406,6 +357,7 @@ export function AdminApp() {
     setDetailFor(updated.slug)
     setDetail({ phase: 'ready', data: updated })
     setEditing(false)
+    setProvenanceEditing(false)
     setEditDirty(false)
     setAuthExpired(false)
     setMutationError(null)
@@ -420,6 +372,20 @@ export function AdminApp() {
     try {
       mutationSucceeded(await mutateJson<AdminEntityDetail>(`/api/admin/entities/${encodeURIComponent(activeSlug)}`, 'PATCH', input))
     } catch (error) { mutationFailed(error) }
+  }
+
+  async function provenanceMutation(path: string, method: 'PATCH' | 'POST', body: unknown): Promise<boolean> {
+    if (busy || authExpired || !activeSlug) return false
+    setBusy(true)
+    setMutationError(null)
+    try {
+      await mutateJson(path, method, body)
+      setBusy(false)
+      setMutationError(null)
+      setDataRefresh((value) => value + 1)
+      setDetailRefresh((value) => value + 1)
+      return true
+    } catch (error) { mutationFailed(error); return false }
   }
 
   async function workflow(action: 'publish' | 'unpublish') {
@@ -508,18 +474,20 @@ export function AdminApp() {
           </>)}
         </section>
       </>}
-      {(isAdmin || (authExpired && editing)) && route.view === 'entity' && <>
+      {(isAdmin || (authExpired && (editing || provenanceEditing))) && route.view === 'entity' && <>
         {(detailFor !== activeSlug || detail.phase === 'loading') && <StateMessage>Chargement de la fiche…</StateMessage>}
         {detailFor === activeSlug && detail.phase === 'error' && <div className="admin-state" role="alert"><h1>{detail.status === 404 ? 'Fiche introuvable' : 'Fiche indisponible'}</h1>
           <a href="/admin" onClick={(event) => onNavigate(event, '/admin')}>Retour au tableau de bord</a></div>}
         {detailFor === activeSlug && detail.phase === 'ready' && <Detail entity={detail.data} onNavigate={onNavigate}
-          editing={editing} busy={busy} authExpired={authExpired} error={mutationError}
+          editing={editing} provenanceEditing={provenanceEditing} busy={busy} authExpired={authExpired} error={mutationError}
           onEdit={() => { setMutationError(null); setEditing(true) }} onCancel={cancelEdit}
           onSave={(input) => void save(input)} onDirtyChange={setEditDirty}
+          onProvenanceMutation={provenanceMutation} onProvenanceEditingChange={setProvenanceEditing}
           onWorkflow={(action) => void workflow(action)}
           onReload={() => {
             if (editDirty && !window.confirm('Recharger la fiche et perdre les modifications non enregistrées ?')) return
             setEditing(false)
+            setProvenanceEditing(false)
             setEditDirty(false)
             setMutationError(null)
             setDetailRefresh((value) => value + 1)

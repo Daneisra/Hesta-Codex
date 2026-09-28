@@ -15,13 +15,13 @@ test('admin Prisma reads include PROPOSED GM records, provenance, relations and 
   }
   const source = {
     id: 'source-1', kind: 'MANUAL', label: 'Notes de partie', externalId: 'notes-001',
-    url: null, authorLabel: 'MJ', visibility: 'GM',
+    url: null, authorLabel: 'MJ', visibility: 'GM', publishedAt: null, updatedAt: date,
     metadata: { internalSecret: 'must stay private' },
   }
   const evidence = {
     id: 'evidence-1', claimText: 'Fait sourcé', sourceExcerpt: 'Extrait', locator: 'p. 2',
     timeStartSeconds: null, timeEndSeconds: null, confidence: { toString: () => '0.800' },
-    visibility: 'GM', source,
+    visibility: 'GM', updatedAt: date, source,
   }
   const relationType = {
     id: 'type-1', code: 'member_of', label: 'membre de',
@@ -31,7 +31,7 @@ test('admin Prisma reads include PROPOSED GM records, provenance, relations and 
   const detailRow = {
     ...listRow, bodyMarkdown: '**Texte privé**', aliases: ['Alias'], createdAt: date, publishedAt: null,
     evidence: [evidence],
-    outgoingRelations: [{ id: 'relation-1', description: null, status: 'PROPOSED', visibility: 'GM',
+    outgoingRelations: [{ id: 'relation-1', description: null, status: 'PROPOSED', visibility: 'GM', updatedAt: date,
       relationType, evidence: [evidence], toEntity: neighbor }],
     incomingRelations: [],
     revisions: [{ id: 'revision-1', number: 1, snapshot: { entity: { title: 'Barolt' } },

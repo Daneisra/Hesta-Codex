@@ -72,10 +72,14 @@ session active et la whitelist. Un utilisateur Discord non admin reçoit `403`.
   révisions et snapshots.
 - `PATCH /api/admin/entities/:slug` : édition contrôlée d'une fiche.
 - `POST /api/admin/entities/:slug/publish` et `/unpublish` : actions éditoriales explicites.
+- `PATCH /api/admin/relations/:id` et `POST /api/admin/relations/:id/publish` ou `/unpublish` :
+  correction et publication des relations importées.
+- `PATCH /api/admin/sources/:id` et `PATCH /api/admin/evidence/:id` : correction de provenance.
 
 L'API admin omet `metadata` tant que ses clés et leur confidentialité ne sont pas définies.
-L'interface `/admin` permet l'inspection, l'édition et la publication des fiches. Les sources,
-preuves et relations y restent en lecture seule. Voir [EDITORIAL-WORKFLOW.md](EDITORIAL-WORKFLOW.md).
+L'interface `/admin` permet l'inspection, l'édition et la publication des fiches et relations,
+ainsi que la correction des sources et preuves. Voir [EDITORIAL-WORKFLOW.md](EDITORIAL-WORKFLOW.md)
+et [PROVENANCE-WORKFLOW.md](PROVENANCE-WORKFLOW.md).
 
 ## Test et mise en production
 
@@ -87,7 +91,9 @@ n'appellent pas Discord ni PostgreSQL du VPS.
 
 En production, les six variables sont conservées dans `/srv/hesta-codex/repo/.env` et l'URI
 HTTPS est enregistrée dans Discord. Le workflow existant fait `npm ci`, le build,
-`prisma migrate deploy`, puis redémarre PM2. v0.4b ne demande aucune migration nouvelle.
+`prisma migrate deploy`, puis redémarre PM2. v0.4c ajoute une migration additive pour
+`Evidence.updatedAt` ; elle doit être relue avant tout push, car le workflow l'appliquera
+automatiquement.
 Après déploiement, vérifier `/api/v1/health`, l'accès `/admin`, puis les mutations avec un
 compte autorisé et une fiche de test choisie explicitement. Ne jamais afficher `.env` dans
 les logs.

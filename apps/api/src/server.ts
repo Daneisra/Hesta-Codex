@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { createApp } from './app.js'
 import { createPrismaAdminStore } from './admin/store.js'
 import { createPrismaEditorialService } from './admin/editorial.js'
+import { createPrismaProvenanceService } from './admin/provenance.js'
 import { readAuthConfig } from './auth/config.js'
 import { createDiscordOAuth } from './auth/discord.js'
 import { createPrismaAuthStore } from './auth/store.js'
@@ -27,6 +28,7 @@ const app = createApp(createPrismaStore(prisma), {
   },
   admin: createPrismaAdminStore(prisma),
   editorial: createPrismaEditorialService(prisma),
+  provenance: createPrismaProvenanceService(prisma),
 })
 const server = app.listen(port, () => {
   console.log(`Hesta Codex API listening on http://localhost:${port}`)

@@ -31,7 +31,7 @@ d'armure restent dans Système PA.
 | `RelationType` | Catalogue contrôlé | `code` unique, libellé, `inverseCode?` unique, libellé inverse, `symmetric` ; aucune fiche lore. |
 | `Relation` | Arête orientée | `fromEntityId` → `toEntityId`, `relationTypeId`, description, statut, visibilité, dates ; preuves. |
 | `Source` | Document ou origine | Type (`MANUAL`, `OBSIDIAN`, `DISCORD`, `HESTA_MAP`, `YOUTUBE`, `AI_DERIVED`, `OTHER`), identifiant externe et URL facultatifs, auteur, metadata ; une source dérivée peut référencer sa source d'origine. Aucune clé étrangère vers une autre application. |
-| `Evidence` | Fait précis soutenu par une source | Une source, exactement une fiche ou une relation, énoncé, extrait, repère et timestamps facultatifs, confiance facultative. |
+| `Evidence` | Fait précis soutenu par une source | Une source, exactement une fiche ou une relation, énoncé, extrait, repère et timestamps facultatifs, confiance facultative, dates de création/modification. |
 | `Revision` | Historique d'une fiche | Numéro par `Entity`, snapshot, message et attribution textuelle facultative. |
 | `User` | Identité Discord minimale pour l'administration | Discord ID unique, username, display name facultatif ; aucun rôle persistant. |
 | `Session` | Session serveur révocable | Hash unique du token de cookie, utilisateur, création et expiration ; aucun jeton OAuth Discord conservé. |
@@ -85,7 +85,7 @@ prévenir les collisions entre un `code` et l'`inverseCode` d'un autre type.
 
 ## Reporté
 
-Permissions fines, édition des relations/sources/preuves, connecteurs d'import, révisions des relations, dates structurées
+Permissions fines, création/suppression des relations/sources/preuves, connecteurs d'import, révisions des relations, dates structurées
 du calendrier d'Hesta, recherche plein texte, extraction des `[[wikilinks]]` et calcul du
 graphe affiché. Les UUID, index, alias, Markdown et relations orientées en préparent la base.
 
@@ -100,3 +100,8 @@ L'accès admin v0.4a repose sur la whitelist Discord externe au modèle ; voir [
 
 Le workflow d'édition/publication v0.4b utilise les modèles et contraintes existants, sans
 migration supplémentaire. Voir [EDITORIAL-WORKFLOW.md](EDITORIAL-WORKFLOW.md).
+
+v0.4c ajoute `Evidence.updatedAt` pour la concurrence optimiste, avec une migration additive
+qui initialise les preuves existantes à leur `createdAt`. `Relation` et `Source` disposaient
+déjà de ce champ. Voir [PROVENANCE-WORKFLOW.md](PROVENANCE-WORKFLOW.md). `Revision` reste liée
+uniquement à `Entity` ; les corrections des autres modèles n'ont pas encore d'audit détaillé.

@@ -11,8 +11,10 @@ const original: AdminEntityDetail = {
   createdAt: '2026-09-28T00:00:00.000Z', updatedAt: '2026-09-28T00:00:00.000Z', publishedAt: null,
   evidence: [{ id: 'evidence-1', claimText: 'Note source', sourceExcerpt: null, locator: null,
     timeStartSeconds: null, timeEndSeconds: null, confidence: null, visibility: 'GM',
+    updatedAt: '2026-09-28T00:00:00.000Z',
     source: { id: 'source-1', kind: 'MANUAL', label: 'Notes', externalId: null,
-      url: null, authorLabel: null, visibility: 'GM' } }],
+      url: null, authorLabel: null, visibility: 'GM', publishedAt: null,
+      updatedAt: '2026-09-28T00:00:00.000Z' } }],
   outgoingRelations: [], incomingRelations: [],
   revisions: [{ id: 'revision-1', number: 1, snapshot: { version: 1, entity: { title: 'Barolt' } },
     message: null, editorLabel: 'Import CLI', createdAt: '2026-09-28T00:00:00.000Z' }],
@@ -40,7 +42,7 @@ function mockEditorialApi(options: { entity?: AdminEntityDetail; mutationStatus?
     if (url.startsWith('/api/admin/entities/barolt') && init?.method) {
       const body = JSON.parse(String(init.body)) as Record<string, unknown>
       mutations.push({ url, method: init.method, body })
-      if (options.mutationStatus) return response({ error: { code: 'FAILED' } }, options.mutationStatus)
+      if (options.mutationStatus) return response({ error: { code: options.mutationStatus === 409 ? 'ENTITY_MODIFIED' : 'FAILED' } }, options.mutationStatus)
       const number = entity.revisions[0]!.number + 1
       const nextTime = `2026-09-28T00:00:0${number}.000Z`
       if (init.method === 'PATCH') {
@@ -212,6 +214,7 @@ describe('édition et publication admin', () => {
     const user = userEvent.setup()
     mockEditorialApi({ entity: { ...original, outgoingRelations: [{
       id: 'relation-1', description: null, status: 'PROPOSED', visibility: 'GM', evidence: [],
+      updatedAt: '2026-09-28T00:00:00.000Z',
       relationType: { id: 'type-1', code: 'member_of', label: 'membre de', inverseCode: 'has_member',
         inverseLabel: 'compte parmi ses membres', symmetric: false },
       entity: { id: 'entity-2', slug: 'geirvor', kind: 'PERSON', placeKind: null, title: 'Geirvor',
