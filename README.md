@@ -11,7 +11,8 @@
 Base de connaissance structurée du Monde d’Hesta. À terme, le Codex sera la source de vérité
 du lore durable et exposera des données sourcées aux autres applications. Le dépôt contient
 le socle web/API et le premier modèle PostgreSQL ; aucune fiche lore n'est créée automatiquement.
-L'interface publique permet de consulter les fiches publiées et leurs relations.
+L'interface publique permet de consulter les fiches publiées et leurs relations. L'espace
+`/admin`, protégé par Discord, permet d'inspecter les propositions sans les modifier.
 
 ## Stack
 
@@ -21,6 +22,7 @@ L'interface publique permet de consulter les fiches publiées et leurs relations
 - Types partagés dans `packages/shared`.
 - PostgreSQL et Prisma dans `prisma/`, avec une première migration métier et un seed du
   seul catalogue de types de relations.
+- Authentification Discord `identify` et sessions révocables dans PostgreSQL pour `/admin`.
 
 ## Développement local
 
@@ -41,6 +43,11 @@ Pour lancer l’API, utiliser les migrations ou le seed, copier `.env.example` e
 valeurs fictives de `DATABASE_URL` par celles d'une base PostgreSQL. Le fichier `.env` est
 ignoré par Git. `PORT` vaut 3000 par défaut ; garder cette valeur avec la configuration
 Vite actuelle.
+
+L'administration locale utilise l'URI de callback
+`http://localhost:5173/api/auth/discord/callback`, relayée par Vite. Les variables Discord et
+de session de `.env.example` doivent être remplacées dans `.env` avant de démarrer l'API ;
+aucun secret n'est versionné. Voir [docs/AUTH.md](docs/AUTH.md) pour la configuration.
 
 ## Vérifications
 
@@ -95,6 +102,14 @@ publication n'est automatique. Le fichier dans `examples/` est un **template tec
 non canonique** et n'est jamais chargé par le seed ni par la CI. Le format, les conflits
 et les garanties du pipeline sont détaillés dans [docs/IMPORT.md](docs/IMPORT.md).
 
+## Administration en lecture seule
+
+`/admin` est réservé aux Discord IDs inscrits dans `DISCORD_ADMIN_IDS`. Un administrateur y voit
+les fiches de tout statut et toute visibilité, leurs sources, preuves, relations et révisions.
+Le premier lot `PROPOSED + GM` y est consultable ; l'API publique ne l'expose pas. Aucune action
+de publication, modification ou suppression n'est disponible dans ce jalon. Les routes et la
+procédure de mise en production sont décrites dans [docs/AUTH.md](docs/AUTH.md).
+
 ## Structure
 
 ```text
@@ -107,9 +122,9 @@ examples/         Modèle JSON technique d'import, jamais importé automatiqueme
 scripts/          Emplacement pour les futurs scripts nécessaires
 ```
 
-Les modèles `Entity`, `RelationType`, `Relation`, `Source`, `Evidence` et `Revision`, leurs
+Les modèles `Entity`, `RelationType`, `Relation`, `Source`, `Evidence`, `Revision`, `User` et `Session`, leurs
 contraintes SQL et les fonctionnalités reportées sont décrits dans
-[docs/DATA-MODEL.md](docs/DATA-MODEL.md). Aucun `User` n'est créé à ce stade.
+[docs/DATA-MODEL.md](docs/DATA-MODEL.md).
 Les routes de lecture et leurs limites sont décrites dans [docs/API.md](docs/API.md).
 
 ## Écosystème Hesta

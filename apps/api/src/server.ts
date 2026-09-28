@@ -1,6 +1,10 @@
 import { config } from 'dotenv'
 import { resolve } from 'node:path'
 import { createApp } from './app.js'
+import { createPrismaAdminStore } from './admin/store.js'
+import { readAuthConfig } from './auth/config.js'
+import { createDiscordOAuth } from './auth/discord.js'
+import { createPrismaAuthStore } from './auth/store.js'
 import { createPrismaClient } from './db.js'
 import { createPrismaStore } from './store.js'
 
@@ -12,8 +16,16 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error('PORT must be an integer between 1 and 65535')
 }
 
+const authConfig = readAuthConfig()
 const prisma = createPrismaClient()
-const app = createApp(createPrismaStore(prisma))
+const app = createApp(createPrismaStore(prisma), {
+  auth: {
+    config: authConfig,
+    store: createPrismaAuthStore(prisma),
+    discord: createDiscordOAuth(authConfig),
+  },
+  admin: createPrismaAdminStore(prisma),
+})
 const server = app.listen(port, () => {
   console.log(`Hesta Codex API listening on http://localhost:${port}`)
 })

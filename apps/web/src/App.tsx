@@ -9,6 +9,7 @@ import type {
   HealthResponse,
   PlaceKind,
 } from '@hesta-codex/shared'
+import { AdminApp } from './AdminApp'
 
 const kindOptions: { kind: EntityKind; label: string }[] = [
   { kind: 'PERSON', label: 'Personnages' },
@@ -408,7 +409,7 @@ function RelationsPanel({ entity, onNavigate }: { entity: EntityDetail; onNaviga
   )
 }
 
-export function App() {
+function PublicApp() {
   const [route, setRoute] = useState<Route>(readRoute)
   const [apiState, setApiState] = useState<ApiState>('checking')
   const [selectedKind, setSelectedKind] = useState<EntityKind | null>(null)
@@ -531,6 +532,7 @@ export function App() {
           <span className="brand-wordmark"><small>HESTA <span aria-hidden="true">·</span></small><strong>Hesta Codex</strong></span>
         </InternalLink>
         <div className="header-actions">
+          <a className="hub-link" href="/admin">Administration</a>
           <a className="hub-link" href="https://hesta.dannytech.fr/">Portail Hesta <span aria-hidden="true">↗</span></a>
           <span className={`api-state api-state--${apiState}`} role="status" aria-live="polite">
             <span className="api-dot" aria-hidden="true" />{apiLabel}
@@ -611,4 +613,10 @@ export function App() {
       </div>
     </div>
   )
+}
+
+export function App() {
+  return window.location.pathname === '/admin' || window.location.pathname.startsWith('/admin/')
+    ? <AdminApp />
+    : <PublicApp />
 }

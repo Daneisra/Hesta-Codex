@@ -60,3 +60,83 @@ export interface EntityDetail extends EntityListItem {
   outgoingRelations: EntityRelationItem[]
   incomingRelations: EntityRelationItem[]
 }
+
+export type EditorialStatus = 'DRAFT' | 'PROPOSED' | 'PUBLISHED' | 'ARCHIVED'
+export type Visibility = 'PUBLIC' | 'PLAYERS' | 'GM' | 'SECRET'
+export type SourceKind = 'MANUAL' | 'OBSIDIAN' | 'DISCORD' | 'HESTA_MAP' | 'YOUTUBE' | 'AI_DERIVED' | 'OTHER'
+
+export type AuthSessionResponse =
+  | { authenticated: false; isAdmin: false; user: null }
+  | { authenticated: true; isAdmin: boolean; user: { username: string; displayName: string | null } }
+
+export interface AdminEntityListItem extends EntityListItem {
+  status: EditorialStatus
+  visibility: Visibility
+  updatedAt: string
+}
+
+export interface AdminEntityListResponse {
+  items: AdminEntityListItem[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export interface AdminSource {
+  id: string
+  kind: SourceKind
+  label: string
+  externalId: string | null
+  url: string | null
+  authorLabel: string | null
+  visibility: Visibility
+}
+
+export interface AdminEvidence {
+  id: string
+  claimText: string
+  sourceExcerpt: string | null
+  locator: string | null
+  timeStartSeconds: number | null
+  timeEndSeconds: number | null
+  confidence: string | null
+  visibility: Visibility
+  source: AdminSource
+}
+
+export interface AdminRelation {
+  id: string
+  description: string | null
+  status: EditorialStatus
+  visibility: Visibility
+  relationType: RelationTypeItem
+  entity: AdminEntityListItem
+  evidence: AdminEvidence[]
+}
+
+export interface AdminRevision {
+  id: string
+  number: number
+  snapshot: unknown
+  message: string | null
+  editorLabel: string | null
+  createdAt: string
+}
+
+export interface AdminEntityDetail extends AdminEntityListItem {
+  bodyMarkdown: string
+  aliases: string[]
+  createdAt: string
+  publishedAt: string | null
+  evidence: AdminEvidence[]
+  outgoingRelations: AdminRelation[]
+  incomingRelations: AdminRelation[]
+  revisions: AdminRevision[]
+}
+
+export interface AdminStats {
+  byStatus: Record<EditorialStatus, number>
+  byVisibility: Record<Visibility, number>
+  sources: number
+  relations: number
+}

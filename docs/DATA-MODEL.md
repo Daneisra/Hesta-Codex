@@ -32,7 +32,9 @@ d'armure restent dans Système PA.
 | `Relation` | Arête orientée | `fromEntityId` → `toEntityId`, `relationTypeId`, description, statut, visibilité, dates ; preuves. |
 | `Source` | Document ou origine | Type (`MANUAL`, `OBSIDIAN`, `DISCORD`, `HESTA_MAP`, `YOUTUBE`, `AI_DERIVED`, `OTHER`), identifiant externe et URL facultatifs, auteur, metadata ; une source dérivée peut référencer sa source d'origine. Aucune clé étrangère vers une autre application. |
 | `Evidence` | Fait précis soutenu par une source | Une source, exactement une fiche ou une relation, énoncé, extrait, repère et timestamps facultatifs, confiance facultative. |
-| `Revision` | Historique d'une fiche | Numéro par `Entity`, snapshot, message et attribution textuelle facultative. Aucun modèle `User` pour le moment. |
+| `Revision` | Historique d'une fiche | Numéro par `Entity`, snapshot, message et attribution textuelle facultative. |
+| `User` | Identité Discord minimale pour l'administration | Discord ID unique, username, display name facultatif ; aucun rôle persistant. |
+| `Session` | Session serveur révocable | Hash unique du token de cookie, utilisateur, création et expiration ; aucun jeton OAuth Discord conservé. |
 
 `Entity.kind = PLACE` exige `placeKind` ; pour toute autre valeur de `kind`, `placeKind`
 est null. Les valeurs initiales de `PlaceKind` sont `CITY`, `CONTINENT`, `REGION`, `SEA`,
@@ -56,6 +58,9 @@ Prisma définit les clés étrangères, index et contraintes d'unicité suivants
 - les deux extrémités de `Relation`, son type, les trois références d'`Evidence`,
   `Source.derivedFromSourceId`, ainsi que les filtres `kind/placeKind` et
   `status/visibility` disposent d'index utiles à la navigation et aux backlinks.
+- `User.discordId` et `Session.tokenHash` sont uniques. `Session.userId` et
+  `Session.expiresAt` sont indexés. Une suppression explicite de `User` révoquerait ses
+  sessions, sans toucher aux données de lore.
 
 Les contraintes SQL suivantes sont ajoutées à la migration, car le schéma Prisma ne les
 exprime pas directement :
@@ -80,7 +85,7 @@ prévenir les collisions entre un `code` et l'`inverseCode` d'un autre type.
 
 ## Reporté
 
-Authentification, `User`, permissions, connecteurs d'import, révisions des relations, dates structurées
+Permissions fines, publication/édition dans l'administration, connecteurs d'import, révisions des relations, dates structurées
 du calendrier d'Hesta, recherche plein texte, extraction des `[[wikilinks]]` et calcul du
 graphe affiché. Les UUID, index, alias, Markdown et relations orientées en préparent la base.
 
@@ -89,3 +94,6 @@ Référence : `Hesta-Hub/docs/HESTA-CODEX-ARCHITECTURE.md` dans le dépôt voisi
 L'import JSON contrôlé de v0.3 est décrit dans [IMPORT.md](IMPORT.md). Il crée uniquement
 des propositions et une `Revision` initiale pour chaque nouvelle `Entity` ; les révisions
 des `Source` et `Relation` restent reportées conformément au schéma actuel.
+
+La migration `20260928120000_discord_auth_sessions` ajoute uniquement `User` et `Session`.
+L'accès admin v0.4a repose sur la whitelist Discord externe au modèle ; voir [AUTH.md](AUTH.md).

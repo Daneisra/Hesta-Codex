@@ -128,3 +128,77 @@ test('Prisma reads restrict entities and backlinks to published public content',
     fromEntity: { is: { status: 'PUBLISHED', visibility: 'PUBLIC' } },
   })
 })
+
+test('eight PROPOSED GM Entities are never returned by either public Entity route', async () => {
+  const privateEntities = Array.from({ length: 8 }, (_, index) => ({
+    id: `private-${index + 1}`, slug: `private-entry-${index + 1}`, status: 'PROPOSED', visibility: 'GM',
+  }))
+  const prisma = {
+    entity: {
+      async findMany(query: { where: { status: string; visibility: string } }) {
+        assert.equal(query.where.status, 'PUBLISHED')
+        assert.equal(query.where.visibility, 'PUBLIC')
+        return privateEntities.filter((entity) => entity.status === query.where.status &&
+          entity.visibility === query.where.visibility)
+      },
+      async findFirst(query: { where: { slug: string; status: string; visibility: string } }) {
+        assert.equal(query.where.status, 'PUBLISHED')
+        assert.equal(query.where.visibility, 'PUBLIC')
+        return privateEntities.find((entity) => entity.slug === query.where.slug &&
+          entity.status === query.where.status && entity.visibility === query.where.visibility) ?? null
+      },
+    },
+  } as unknown as PrismaClient
+  const store = createPrismaStore(prisma)
+  assert.deepEqual(await store.listEntities({}), [])
+  for (const entity of privateEntities) assert.equal(await store.getEntityBySlug(entity.slug), null)
+})
+
+test('every non-public status or visibility is excluded, including direct slug access', async () => {
+  for (const [status, visibility] of [
+    ['PROPOSED', 'GM'], ['DRAFT', 'PUBLIC'], ['ARCHIVED', 'PUBLIC'],
+    ['PUBLISHED', 'GM'], ['PUBLISHED', 'SECRET'], ['PUBLISHED', 'PLAYERS'],
+  ]) {
+    const entity = { slug: 'private-entry', status, visibility }
+    const prisma = {
+      entity: {
+        async findMany(query: { where: { status: string; visibility: string } }) {
+          return entity.status === query.where.status && entity.visibility === query.where.visibility ? [entity] : []
+        },
+        async findFirst(query: { where: { status: string; visibility: string } }) {
+          return entity.status === query.where.status && entity.visibility === query.where.visibility ? entity : null
+        },
+      },
+    } as unknown as PrismaClient
+    const store = createPrismaStore(prisma)
+    assert.deepEqual(await store.listEntities({}), [], `${status}/${visibility} in public list`)
+    assert.equal(await store.getEntityBySlug(entity.slug), null, `${status}/${visibility} by slug`)
+  }
+})
+
+test('public detail excludes relations to private neighbors and returns no provenance', async () => {
+  const now = new Date('2026-01-01T00:00:00.000Z')
+  const entity = {
+    id: 'public-1', slug: 'public-entry', kind: 'PERSON', placeKind: null,
+    title: 'Public Entry', summary: null, tags: [], aliases: [], bodyMarkdown: 'Public text',
+    createdAt: now, updatedAt: now, publishedAt: now,
+  }
+  const prisma = {
+    entity: { async findFirst() { return entity } },
+    relation: {
+      async findMany(query: { where: Record<string, unknown> }) {
+        assert.equal(query.where.status, 'PUBLISHED')
+        assert.equal(query.where.visibility, 'PUBLIC')
+        const neighbor = query.where.fromEntityId ? query.where.toEntity : query.where.fromEntity
+        assert.deepEqual(neighbor, { is: { status: 'PUBLISHED', visibility: 'PUBLIC' } })
+        return []
+      },
+    },
+  } as unknown as PrismaClient
+  const detail = await createPrismaStore(prisma).getEntityBySlug('public-entry')
+  assert.deepEqual(detail?.outgoingRelations, [])
+  assert.deepEqual(detail?.incomingRelations, [])
+  assert.equal(Object.hasOwn(detail ?? {}, 'evidence'), false)
+  assert.equal(Object.hasOwn(detail ?? {}, 'revisions'), false)
+  assert.equal(Object.hasOwn(detail ?? {}, 'source'), false)
+})

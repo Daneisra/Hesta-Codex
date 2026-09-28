@@ -178,3 +178,27 @@ model Revision {
 
   @@unique([entityId, number])
 }
+
+model User {
+  id          String    @id @default(uuid()) @db.Uuid
+  discordId   String    @unique @db.VarChar(32)
+  username    String    @db.VarChar(100)
+  displayName String?   @db.VarChar(200)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(3)
+
+  sessions Session[]
+}
+
+model Session {
+  id        String   @id @default(uuid()) @db.Uuid
+  tokenHash String   @unique @db.Char(64)
+  userId    String   @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  expiresAt DateTime @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Restrict)
+
+  @@index([userId])
+  @@index([expiresAt])
+}

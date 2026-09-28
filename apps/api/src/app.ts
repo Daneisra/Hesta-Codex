@@ -1,6 +1,9 @@
 import express, { type ErrorRequestHandler } from 'express'
 import type { HealthResponse } from '@hesta-codex/shared'
 import { EntityKind } from './prisma-client/enums.ts'
+import { createAdminRouter } from './admin/routes.js'
+import type { AdminStore } from './admin/store.js'
+import { createAuthRouter, requireAdmin, type AuthDependencies } from './auth/routes.js'
 import type { CodexStore, EntityFilters } from './store.js'
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
@@ -28,8 +31,20 @@ function parseEntityFilters(query: Record<string, unknown>): EntityFilters {
   return filters
 }
 
-export function createApp(store: CodexStore) {
+export function createApp(store: CodexStore, privateServices?: { auth: AuthDependencies; admin: AdminStore }) {
   const app = express()
+  app.disable('x-powered-by')
+
+  if (privateServices) {
+    app.use('/api/auth', createAuthRouter(privateServices.auth))
+    app.use('/api/admin', requireAdmin(privateServices.auth), createAdminRouter(privateServices.admin))
+    app.use('/api/auth', (_request, response) => {
+      response.status(404).json({ error: { code: 'NOT_FOUND', message: 'Endpoint not found' } })
+    })
+    app.use('/api/admin', (_request, response) => {
+      response.status(404).json({ error: { code: 'NOT_FOUND', message: 'Endpoint not found' } })
+    })
+  }
 
   app.get('/api/v1/health', async (_request, response) => {
     try {
