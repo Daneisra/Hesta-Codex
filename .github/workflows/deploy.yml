@@ -1,0 +1,172 @@
+name: Deploy Hesta Codex
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: hesta-codex-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Validate deployment inputs
+        env:
+          DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          for name in VPS_HOST VPS_PORT VPS_USER VPS_SSH_PRIVATE_KEY VPS_SSH_KNOWN_HOSTS; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Missing GitHub secret: $name"
+              exit 1
+            fi
+          done
+          if [[ ! "$DEPLOY_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo '::error::Invalid deployment commit SHA'
+            exit 1
+          fi
+          if [[ ! "$VPS_PORT" =~ ^[0-9]+$ ]] || (( VPS_PORT < 1 || VPS_PORT > 65535 )); then
+            echo '::error::Invalid VPS_PORT'
+            exit 1
+          fi
+
+      - name: Deploy validated commit over SSH
+        env:
+          DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          ssh_dir="$RUNNER_TEMP/hesta-codex-ssh"
+          install -d -m 700 "$ssh_dir"
+          ssh_key="$ssh_dir/key"
+          known_hosts="$ssh_dir/known_hosts"
+          trap 'rm -f "$ssh_key" "$known_hosts"' EXIT
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$ssh_key"
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > "$known_hosts"
+          chmod 600 "$ssh_key" "$known_hosts"
+
+          if ! ssh -p "$VPS_PORT" -i "$ssh_key" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o ConnectTimeout=15 \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=3 \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$known_hosts" \
+            "$VPS_USER@$VPS_HOST" bash -se -- "$DEPLOY_SHA" 2>/dev/null <<'REMOTE'
+          set -euo pipefail
+          deploy_sha="$1"
+
+          run_step() {
+            label="$1"
+            shift
+            if "$@" >/dev/null 2>&1; then
+              printf 'OK: %s\n' "$label"
+            else
+              printf 'FAILED: %s\n' "$label"
+              exit 1
+            fi
+          }
+
+          export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+          if [[ ! -s "$NVM_DIR/nvm.sh" ]]; then
+            echo 'FAILED: NVM is unavailable'
+            exit 1
+          fi
+          . "$NVM_DIR/nvm.sh" >/dev/null 2>&1
+          run_step 'Select Node 24' nvm use 24
+          if [[ "$(node --version)" != v24.* ]]; then
+            echo 'FAILED: Node 24 is unavailable'
+            exit 1
+          fi
+
+          if ! cd /srv/hesta-codex/repo; then
+            echo 'FAILED: repository is unavailable'
+            exit 1
+          fi
+          if [[ ! -f .env ]] || git ls-files --error-unmatch .env >/dev/null 2>&1; then
+            echo 'FAILED: local .env is missing or tracked by Git'
+            exit 1
+          fi
+
+          run_step 'Fetch origin/main' git fetch --quiet origin main
+          run_step 'Verify commit belongs to main' git merge-base --is-ancestor "$deploy_sha" FETCH_HEAD
+          if git cat-file -e "$deploy_sha:.env" 2>/dev/null; then
+            echo 'FAILED: deployment commit tracks .env'
+            exit 1
+          fi
+          run_step 'Checkout main' git checkout main
+          run_step 'Prevent stale deployment' git merge-base --is-ancestor HEAD "$deploy_sha"
+          run_step 'Set main to validated commit' git reset --hard "$deploy_sha"
+          if [[ ! -f .env ]]; then
+            echo 'FAILED: local .env was not preserved'
+            exit 1
+          fi
+
+          run_step 'Install dependencies' npm ci --include=optional
+          run_step 'Build applications' npm run build
+          run_step 'Apply Prisma migrations' npm run prisma:deploy
+          run_step 'Restart API' pm2 restart hesta-codex-api --update-env
+
+          healthy=false
+          for attempt in {1..12}; do
+            if code=$(curl --silent --fail --max-time 5 --output /dev/null \
+              --write-out '%{http_code}' http://127.0.0.1:3000/api/v1/health 2>/dev/null) \
+              && [[ "$code" == 200 ]]; then
+              healthy=true
+              break
+            fi
+            sleep 2
+          done
+          if [[ "$healthy" != true ]]; then
+            echo 'FAILED: local API healthcheck'
+            exit 1
+          fi
+          echo 'OK: local API healthcheck'
+          run_step 'Save PM2 state' pm2 save
+          REMOTE
+          then
+            echo '::error::SSH deployment failed'
+            exit 1
+          fi
+
+      - name: Check public API health
+        run: |
+          set -euo pipefail
+          for attempt in {1..12}; do
+            if code=$(curl --silent --fail --max-time 10 --output /dev/null \
+              --write-out '%{http_code}' https://codexhesta.dannytech.fr/api/v1/health 2>/dev/null) \
+              && [[ "$code" == 200 ]]; then
+              echo 'OK: public API healthcheck'
+              exit 0
+            fi
+            sleep 2
+          done
+          echo '::error::Public API healthcheck failed'
+          exit 1
