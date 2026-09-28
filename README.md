@@ -11,6 +11,7 @@
 Base de connaissance structurée du Monde d’Hesta. À terme, le Codex sera la source de vérité
 du lore durable et exposera des données sourcées aux autres applications. Le dépôt contient
 le socle web/API et le premier modèle PostgreSQL ; aucune fiche lore n'est créée.
+L'interface publique permet de consulter les fiches publiées et leurs relations.
 
 ## Stack
 
@@ -31,6 +32,10 @@ npm run dev
 Le site est accessible sur `http://localhost:5173` et l’API sur
 `http://localhost:3000/api/v1/health`. En développement, Vite relaie `/api` vers Express.
 L’API utilise `DATABASE_URL` pour lire PostgreSQL ; sa route de santé vérifie aussi la base.
+La bibliothèque est accessible à `/` et chaque fiche à `/fiches/:slug`. Les liens de fiche
+sont partageables ; le serveur web doit renvoyer `index.html` pour ces chemins frontend.
+La recherche démarre à deux caractères. La liste affiche au plus 100 fiches par requête,
+limite actuelle de l'API ; il n'y a pas encore de pagination ni de total global.
 
 Pour lancer l’API, utiliser les migrations ou le seed, copier `.env.example` en `.env` et remplacer les
 valeurs fictives de `DATABASE_URL` par celles d'une base PostgreSQL. Le fichier `.env` est
@@ -50,8 +55,9 @@ npm run prisma:generate
 
 La validation et la génération Prisma ne demandent pas de base locale. Une URL non joignable
 sert seulement à la validation hors ligne quand `DATABASE_URL` est absente. Le workflow
-GitHub Actions contrôle le code ; il ne déploie rien et n'applique aucune migration.
-Les tests API utilisent une source de données simulée et n’accèdent pas au VPS.
+GitHub Actions contrôle le code, puis le workflow de déploiement applique les migrations
+sur le VPS si la CI de `main` réussit. Les tests API utilisent une source de données simulée
+et les tests web simulent les réponses HTTP ; ils n’accèdent pas au VPS.
 
 Sur une base PostgreSQL configurée, appliquer la migration puis créer ou actualiser les
 quatre types de relations initiaux :
@@ -64,12 +70,12 @@ npm run prisma:seed
 `prisma:migrate` utilise `prisma migrate dev` pour le développement local. Pour appliquer
 des migrations déjà validées dans un environnement non interactif, utiliser
 `npm run prisma:deploy` après avoir configuré `DATABASE_URL`. Le seed est idempotent et
-ne crée aucune `Entity`. Ces commandes ne sont pas exécutées par la CI actuelle.
+ne crée aucune `Entity`. Ces commandes ne sont pas exécutées par le workflow CI.
 
 ## Structure
 
 ```text
-apps/web/         Page publique minimale
+apps/web/         Bibliothèque publique, fiches et tests d'interface
 apps/api/         API Express, client Prisma et tests de lecture
 packages/shared/  Contrats TypeScript communs
 prisma/           Schéma PostgreSQL, migration initiale et seed RelationType

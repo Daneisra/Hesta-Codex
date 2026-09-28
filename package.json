@@ -15,7 +15,7 @@
     "lint": "eslint .",
     "typecheck": "npm run prisma:generate && npm run typecheck:prisma && npm run build -w @hesta-codex/shared && npm run typecheck -w @hesta-codex/shared && npm run typecheck -w @hesta-codex/api && npm run typecheck -w @hesta-codex/web",
     "typecheck:prisma": "tsc --noEmit -p tsconfig.prisma.json",
-    "test": "npm run prisma:generate && npm run build -w @hesta-codex/shared && npm run test -w @hesta-codex/api",
+    "test": "npm run prisma:generate && npm run build -w @hesta-codex/shared && npm run test -w @hesta-codex/api && npm run test -w @hesta-codex/web",
     "build": "npm run prisma:generate && npm run build -w @hesta-codex/shared && npm run build -w @hesta-codex/api && npm run build -w @hesta-codex/web",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
