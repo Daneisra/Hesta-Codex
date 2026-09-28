@@ -26,10 +26,16 @@ async function shutdown() {
     await new Promise<void>((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()))
     })
-    await prisma.$disconnect()
   } catch {
     console.error('Hesta Codex API shutdown failed')
     process.exitCode = 1
+  } finally {
+    try {
+      await prisma.$disconnect()
+    } catch {
+      console.error('Hesta Codex database disconnect failed')
+      process.exitCode = 1
+    }
   }
 }
 

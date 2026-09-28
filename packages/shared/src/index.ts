@@ -31,13 +31,6 @@ export type EntityKind =
   | 'OTHER'
 
 export type PlaceKind = 'CITY' | 'CONTINENT' | 'REGION' | 'SEA' | 'OCEAN' | 'OTHER'
-export type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | JsonValue[]
-  | { [key: string]: JsonValue | undefined }
 
 export interface EntityListItem {
   id: string
@@ -59,7 +52,6 @@ export interface EntityRelationItem {
 export interface EntityDetail extends EntityListItem {
   bodyMarkdown: string
   aliases: string[]
-  metadata: JsonValue | null
   status: 'PUBLISHED'
   visibility: 'PUBLIC'
   createdAt: string

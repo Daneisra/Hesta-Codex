@@ -24,7 +24,6 @@ const exampleEntity: EntityDetail = {
   summary: 'Example summary',
   tags: [],
   aliases: [],
-  metadata: null,
   bodyMarkdown: 'Example body',
   status: 'PUBLISHED',
   visibility: 'PUBLIC',

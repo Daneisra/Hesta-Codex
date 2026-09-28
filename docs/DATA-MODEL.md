@@ -11,7 +11,8 @@ d'armure restent dans Système PA.
   changer un titre ne change ni l'UUID ni les liens relationnels.
 - Le texte narratif est en Markdown. Les types, relations, sources et preuves sont des
   colonnes et tables relationnelles ; `metadata` JSONB sert uniquement aux variantes
-  encore non stabilisées. Les snapshots JSONB de `Revision` servent à l'historique.
+  encore non stabilisées. Le JSON libre n'est pas exposé par l'API publique tant que ses clés
+  publiques ne sont pas définies. Les snapshots JSONB de `Revision` servent à l'historique.
 - `DRAFT`, `PROPOSED`, `PUBLISHED` et `ARCHIVED` sont les statuts éditoriaux. Un import ou
   une extraction IA reste `PROPOSED` jusqu'à validation humaine ; `PUBLISHED` désigne le canon.
 - `PUBLIC`, `PLAYERS`, `GM` et `SECRET` sont des niveaux de visibilité, avec `GM` par défaut.

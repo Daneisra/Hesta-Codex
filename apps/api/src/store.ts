@@ -52,11 +52,26 @@ type SelectedEntity = Prisma.EntityGetPayload<{ select: typeof entityListSelect 
 type SelectedRelationType = Prisma.RelationTypeGetPayload<{ select: typeof relationTypeSelect }>
 
 function toEntityItem(entity: SelectedEntity): EntityListItem {
-  return entity
+  return {
+    id: entity.id,
+    slug: entity.slug,
+    kind: entity.kind,
+    placeKind: entity.placeKind,
+    title: entity.title,
+    summary: entity.summary,
+    tags: entity.tags,
+  }
 }
 
 function toRelationTypeItem(relationType: SelectedRelationType): RelationTypeItem {
-  return relationType
+  return {
+    id: relationType.id,
+    code: relationType.code,
+    label: relationType.label,
+    inverseCode: relationType.inverseCode,
+    inverseLabel: relationType.inverseLabel,
+    symmetric: relationType.symmetric,
+  }
 }
 
 export function createPrismaStore(prisma: PrismaClient): CodexStore {
@@ -102,7 +117,6 @@ export function createPrismaStore(prisma: PrismaClient): CodexStore {
           ...entityListSelect,
           bodyMarkdown: true,
           aliases: true,
-          metadata: true,
           createdAt: true,
           updatedAt: true,
           publishedAt: true,
@@ -160,7 +174,6 @@ export function createPrismaStore(prisma: PrismaClient): CodexStore {
         ...toEntityItem(entity),
         bodyMarkdown: entity.bodyMarkdown,
         aliases: entity.aliases,
-        metadata: entity.metadata,
         status: 'PUBLISHED',
         visibility: 'PUBLIC',
         createdAt: entity.createdAt.toISOString(),

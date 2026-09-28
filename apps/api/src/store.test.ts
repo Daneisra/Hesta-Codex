@@ -17,7 +17,7 @@ test('Prisma reads restrict entities and backlinks to published public content',
     summary: null,
     tags: [],
     aliases: [],
-    metadata: null,
+    metadata: { internalNote: 'must not appear in a public response' },
     bodyMarkdown: 'Example body',
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
     updatedAt: new Date('2026-01-02T00:00:00.000Z'),
@@ -97,6 +97,8 @@ test('Prisma reads restrict entities and backlinks to published public content',
 
   const detail = await store.getEntityBySlug('example-city')
   assert.equal(detail?.slug, 'example-city')
+  assert.equal(Object.hasOwn(detail ?? {}, 'metadata'), false)
+  assert.equal((entityQueries[1] as { select: Record<string, unknown> }).select.metadata, undefined)
   assert.equal(detail?.outgoingRelations[0]?.id, 'relation-out')
   assert.equal(detail?.outgoingRelations[0]?.entity.slug, 'example-neighbor')
   assert.equal(detail?.outgoingRelations[0]?.relationType.code, 'located_in')
