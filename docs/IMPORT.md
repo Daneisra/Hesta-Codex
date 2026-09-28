@@ -128,8 +128,11 @@ du schéma. La publication et les permissions restent hors du CLI.
 
 ## Évolutions prévues
 
+La revue, l'édition et la publication des fiches importées sont disponibles depuis v0.4b
+dans le back-office authentifié ; voir [EDITORIAL-WORKFLOW.md](EDITORIAL-WORKFLOW.md).
+
 - Mode update explicite avec politique de conflit et révisions correspondantes.
-- Validation et publication depuis un back-office authentifié.
+- Gestion des relations et preuves depuis le back-office.
 - Import Obsidian, Discord et Carte Hesta.
 - Ingestion de transcriptions YouTube et de parties JDR horodatées.
 - Propositions générées par IA conservées en `PROPOSED` et revues humainement avant publication.

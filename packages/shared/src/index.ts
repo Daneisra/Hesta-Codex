@@ -134,6 +134,24 @@ export interface AdminEntityDetail extends AdminEntityListItem {
   revisions: AdminRevision[]
 }
 
+export interface AdminEntityPatch {
+  title: string
+  summary: string | null
+  bodyMarkdown: string
+  kind: EntityKind
+  placeKind: PlaceKind | null
+  aliases: string[]
+  tags: string[]
+  visibility: Visibility
+  expectedUpdatedAt: string
+  revisionMessage?: string | null
+}
+
+export interface AdminWorkflowRequest {
+  expectedUpdatedAt: string
+  revisionMessage?: string | null
+}
+
 export interface AdminStats {
   byStatus: Record<EditorialStatus, number>
   byVisibility: Record<Visibility, number>

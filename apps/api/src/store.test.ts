@@ -156,7 +156,7 @@ test('eight PROPOSED GM Entities are never returned by either public Entity rout
 
 test('every non-public status or visibility is excluded, including direct slug access', async () => {
   for (const [status, visibility] of [
-    ['PROPOSED', 'GM'], ['DRAFT', 'PUBLIC'], ['ARCHIVED', 'PUBLIC'],
+    ['PROPOSED', 'GM'], ['PROPOSED', 'PUBLIC'], ['DRAFT', 'PUBLIC'], ['ARCHIVED', 'PUBLIC'],
     ['PUBLISHED', 'GM'], ['PUBLISHED', 'SECRET'], ['PUBLISHED', 'PLAYERS'],
   ]) {
     const entity = { slug: 'private-entry', status, visibility }

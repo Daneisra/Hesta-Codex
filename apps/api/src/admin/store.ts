@@ -125,6 +125,11 @@ function detailItem(row: DetailRow): AdminEntityDetail {
   }
 }
 
+export async function readAdminEntity(database: Pick<PrismaClient, 'entity'>, slug: string): Promise<AdminEntityDetail | null> {
+  const row = await database.entity.findUnique({ where: { slug }, select: detailSelect })
+  return row ? detailItem(row) : null
+}
+
 export function createPrismaAdminStore(prisma: PrismaClient): AdminStore {
   return {
     async listEntities({ status, visibility, kind, q, page }) {
@@ -149,8 +154,7 @@ export function createPrismaAdminStore(prisma: PrismaClient): AdminStore {
       return { items: rows.map(listItem), total, page, pageSize }
     },
     async getEntity(slug) {
-      const row = await prisma.entity.findUnique({ where: { slug }, select: detailSelect })
-      return row ? detailItem(row) : null
+      return readAdminEntity(prisma, slug)
     },
     async getStats() {
       const [statuses, visibilities, sources, relations] = await Promise.all([

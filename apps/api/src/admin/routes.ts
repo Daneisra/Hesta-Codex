@@ -1,7 +1,10 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { EditorialStatus, EntityKind, Visibility } from '../prisma-client/enums.ts'
+import { adminSession } from '../auth/routes.js'
+import type { EditorialService } from './editorial.js'
 import type { AdminStore } from './store.js'
+import { patchSchema, validationMessage, workflowSchema } from './validation.js'
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const filtersSchema = z.strictObject({
@@ -12,7 +15,16 @@ const filtersSchema = z.strictObject({
   page: z.string().regex(/^[1-9]\d{0,3}$/).transform(Number).optional().default(1),
 })
 
-export function createAdminRouter(store: AdminStore) {
+function validSlug(slug: string | undefined): slug is string {
+  return !!slug && slug.length <= 200 && slugPattern.test(slug)
+}
+
+function editorLabel(response: { locals: Record<string, unknown> }): string {
+  const actor = adminSession(response)
+  return (actor.displayName?.trim() || actor.username).replace(/[\r\n]/g, ' ')
+}
+
+export function createAdminRouter(store: AdminStore, editorial: EditorialService) {
   const router = Router()
 
   router.get('/stats', async (_request, response) => {
@@ -30,7 +42,7 @@ export function createAdminRouter(store: AdminStore) {
 
   router.get('/entities/:slug', async (request, response) => {
     const slug = request.params.slug
-    if (!slug || slug.length > 200 || !slugPattern.test(slug)) {
+    if (!validSlug(slug)) {
       response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'Slug invalide' } })
       return
     }
@@ -40,6 +52,45 @@ export function createAdminRouter(store: AdminStore) {
       return
     }
     response.json(entity)
+  })
+
+  router.patch('/entities/:slug', async (request, response) => {
+    if (!validSlug(request.params.slug)) {
+      response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'Slug invalide' } })
+      return
+    }
+    const parsed = patchSchema.safeParse(request.body)
+    if (!parsed.success) {
+      response.status(400).json({ error: { code: 'INVALID_REQUEST', message: validationMessage(parsed.error) } })
+      return
+    }
+    response.json(await editorial.patch(request.params.slug, parsed.data, editorLabel(response)))
+  })
+
+  router.post('/entities/:slug/publish', async (request, response) => {
+    if (!validSlug(request.params.slug)) {
+      response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'Slug invalide' } })
+      return
+    }
+    const parsed = workflowSchema.safeParse(request.body)
+    if (!parsed.success) {
+      response.status(400).json({ error: { code: 'INVALID_REQUEST', message: validationMessage(parsed.error) } })
+      return
+    }
+    response.json(await editorial.publish(request.params.slug, parsed.data, editorLabel(response)))
+  })
+
+  router.post('/entities/:slug/unpublish', async (request, response) => {
+    if (!validSlug(request.params.slug)) {
+      response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'Slug invalide' } })
+      return
+    }
+    const parsed = workflowSchema.safeParse(request.body)
+    if (!parsed.success) {
+      response.status(400).json({ error: { code: 'INVALID_REQUEST', message: validationMessage(parsed.error) } })
+      return
+    }
+    response.json(await editorial.unpublish(request.params.slug, parsed.data, editorLabel(response)))
   })
 
   return router

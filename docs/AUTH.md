@@ -1,6 +1,6 @@
-# Authentification Discord et administration v0.4a
+# Authentification Discord et administration
 
-L'administration `/admin` est en lecture seule. L'API publique `/api/v1` conserve strictement
+L'administration `/admin` permet l'édition contrôlée des fiches depuis v0.4b. L'API publique `/api/v1` conserve strictement
 la condition `PUBLISHED + PUBLIC` pour fiches, relations et voisins. Une connexion Discord ne
 change jamais les résultats publics.
 
@@ -55,22 +55,27 @@ une déconnexion révoque uniquement le token présenté. Il n'existe pas de cha
 la révocation supprime la ligne `Session`. Les lignes expirées ne donnent plus accès aux routes
 mais restent en base. Un nettoyage périodique sera à prévoir si leur volume le justifie.
 
-Toutes les réponses `/api/auth` et `/api/admin` sont `Cache-Control: no-store`. Aucun CORS
+Toutes les réponses `/api/auth` et `/api/admin` sont `Cache-Control: no-store`. Les requêtes
+admin mutantes exigent un header `Origin` exactement égal à l'origine de
+`DISCORD_REDIRECT_URI` ; une Origin absente ou différente est refusée côté serveur. Ce contrôle
+est commun aux méthodes `PATCH`, `POST`, `PUT` et `DELETE` actuelles ou futures. Aucun CORS
 n'est ouvert : le frontend et l'API utilisent la même origine via Nginx ou le proxy Vite.
 Les données `GM` et `SECRET` ne sont accessibles que si le middleware serveur vérifie une
 session active et la whitelist. Un utilisateur Discord non admin reçoit `403`.
 
-## Routes de lecture admin
+## Routes admin
 
 - `GET /api/admin/stats` : comptes éditoriaux et totaux de sources/relations.
 - `GET /api/admin/entities` : liste paginée par 50, filtres `status`, `visibility`, `kind`,
   `q` et `page`.
 - `GET /api/admin/entities/:slug` : contenu, preuves et sources, relations et preuves liées,
   révisions et snapshots.
+- `PATCH /api/admin/entities/:slug` : édition contrôlée d'une fiche.
+- `POST /api/admin/entities/:slug/publish` et `/unpublish` : actions éditoriales explicites.
 
 L'API admin omet `metadata` tant que ses clés et leur confidentialité ne sont pas définies.
-L'interface `/admin` permet l'inspection seulement. Aucun endpoint métier d'écriture,
-publication ou import navigateur n'est présent.
+L'interface `/admin` permet l'inspection, l'édition et la publication des fiches. Les sources,
+preuves et relations y restent en lecture seule. Voir [EDITORIAL-WORKFLOW.md](EDITORIAL-WORKFLOW.md).
 
 ## Test et mise en production
 
@@ -80,12 +85,12 @@ Ouvrir `/admin`, se connecter et vérifier qu'un ID absent de `DISCORD_ADMIN_IDS
 refus. Les tests automatisés utilisent un faux fournisseur Discord et une fausse base ; ils
 n'appellent pas Discord ni PostgreSQL du VPS.
 
-Avant de déployer ce commit en production, configurer les six variables dans
-`/srv/hesta-codex/repo/.env` et enregistrer l'URI HTTPS de production dans Discord. Le
-workflow de déploiement existant fait `npm ci`, le build, `prisma migrate deploy`, puis
-redémarre PM2. La migration doit réussir avant le redémarrage ; les tables `User` et
-`Session` sont alors créées. Vérifier ensuite `/api/v1/health`, puis `/admin` avec un ID
-whitelisté et un ID non whitelisté. Ne jamais afficher le contenu de `.env` dans les logs.
+En production, les six variables sont conservées dans `/srv/hesta-codex/repo/.env` et l'URI
+HTTPS est enregistrée dans Discord. Le workflow existant fait `npm ci`, le build,
+`prisma migrate deploy`, puis redémarre PM2. v0.4b ne demande aucune migration nouvelle.
+Après déploiement, vérifier `/api/v1/health`, l'accès `/admin`, puis les mutations avec un
+compte autorisé et une fiche de test choisie explicitement. Ne jamais afficher `.env` dans
+les logs.
 
 Nginx doit déjà proxifier tout `/api/` vers Express et renvoyer `index.html` pour les chemins
 frontend `/admin` et `/admin/fiches/:slug`. Si sa configuration actuelle ne couvre pas ces

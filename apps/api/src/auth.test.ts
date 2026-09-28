@@ -7,6 +7,7 @@ import type { AdminEntityDetail, AdminStats } from '@hesta-codex/shared'
 import type { PrismaClient } from './prisma-client/client.ts'
 import { createApp } from './app.js'
 import type { AdminStore } from './admin/store.js'
+import type { EditorialService } from './admin/editorial.js'
 import { readAuthConfig } from './auth/config.js'
 import { createDiscordOAuth, type DiscordOAuth } from './auth/discord.js'
 import { beginOAuth, checkOAuthState } from './auth/session.js'
@@ -76,6 +77,11 @@ const adminStore: AdminStore = {
   async getEntity(slug) { return slug === 'barolt' ? detail : null },
   async getStats() { return stats },
 }
+const editorial: EditorialService = {
+  async patch() { return detail },
+  async publish() { return detail },
+  async unpublish() { return detail },
+}
 const publicStore: CodexStore = {
   async ping() {},
   async listRelationTypes() { return [] },
@@ -86,7 +92,7 @@ const publicStore: CodexStore = {
 let server: Server
 let baseUrl: string
 before(async () => {
-  server = createApp(publicStore, { auth: { config, store: authStore, discord }, admin: adminStore }).listen(0)
+  server = createApp(publicStore, { auth: { config, store: authStore, discord }, admin: adminStore, editorial }).listen(0)
   await once(server, 'listening')
   const address = server.address()
   assert.ok(address && typeof address !== 'string')
@@ -250,7 +256,7 @@ test('production login cookies are HttpOnly Secure SameSite=Lax and host-only', 
     NODE_ENV: 'production', DISCORD_REDIRECT_URI: 'https://codexhesta.dannytech.fr/api/auth/discord/callback',
   })
   const secureServer = createApp(publicStore, {
-    auth: { config: production, store: authStore, discord }, admin: adminStore,
+    auth: { config: production, store: authStore, discord }, admin: adminStore, editorial,
   }).listen(0)
   try {
     await once(secureServer, 'listening')

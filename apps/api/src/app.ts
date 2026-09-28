@@ -3,7 +3,8 @@ import type { HealthResponse } from '@hesta-codex/shared'
 import { EntityKind } from './prisma-client/enums.ts'
 import { createAdminRouter } from './admin/routes.js'
 import type { AdminStore } from './admin/store.js'
-import { createAuthRouter, requireAdmin, type AuthDependencies } from './auth/routes.js'
+import { EditorialError, type EditorialService } from './admin/editorial.js'
+import { createAuthRouter, requireAdmin, requireSameOrigin, type AuthDependencies } from './auth/routes.js'
 import type { CodexStore, EntityFilters } from './store.js'
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
@@ -31,13 +32,16 @@ function parseEntityFilters(query: Record<string, unknown>): EntityFilters {
   return filters
 }
 
-export function createApp(store: CodexStore, privateServices?: { auth: AuthDependencies; admin: AdminStore }) {
+export function createApp(store: CodexStore, privateServices?: {
+  auth: AuthDependencies; admin: AdminStore; editorial: EditorialService
+}) {
   const app = express()
   app.disable('x-powered-by')
 
   if (privateServices) {
     app.use('/api/auth', createAuthRouter(privateServices.auth))
-    app.use('/api/admin', requireAdmin(privateServices.auth), createAdminRouter(privateServices.admin))
+    app.use('/api/admin', requireAdmin(privateServices.auth), requireSameOrigin(privateServices.auth.config.origin),
+      express.json({ limit: '1mb' }), createAdminRouter(privateServices.admin, privateServices.editorial))
     app.use('/api/auth', (_request, response) => {
       response.status(404).json({ error: { code: 'NOT_FOUND', message: 'Endpoint not found' } })
     })
@@ -96,6 +100,18 @@ export function createApp(store: CodexStore, privateServices?: { auth: AuthDepen
 
   const handleError: ErrorRequestHandler = (error: unknown, _request, response, _next) => {
     void _next
+    if (error instanceof EditorialError) {
+      response.status(error.status).json({ error: { code: error.code, message: error.message } })
+      return
+    }
+    if (typeof error === 'object' && error !== null && 'status' in error && error.status === 413) {
+      response.status(413).json({ error: { code: 'PAYLOAD_TOO_LARGE', message: 'Requête trop volumineuse' } })
+      return
+    }
+    if (error instanceof SyntaxError && 'body' in error) {
+      response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'JSON invalide' } })
+      return
+    }
     if (error instanceof BadRequestError) {
       response.status(400).json({ error: { code: 'INVALID_REQUEST', message: error.message } })
       return

@@ -1,7 +1,7 @@
-# API publique et administration en lecture seule
+# API publique et administration éditoriale
 
-L’API Express utilise un seul client Prisma par processus. Les routes métier restent en
-lecture seule ; l'authentification écrit uniquement `User` et `Session` pour les connexions.
+L’API Express utilise un seul client Prisma par processus. Les routes publiques restent en
+lecture seule ; l'administration peut modifier et publier des `Entity` après authentification.
 `DATABASE_URL` est requis au démarrage ; copier `.env.example` en `.env` pour le
 développement local. Le client est fermé lors de l’arrêt du serveur. Les tests utilisent des
 doubles en mémoire et ne contactent pas PostgreSQL.
@@ -42,7 +42,23 @@ portent `Cache-Control: no-store`.
 | `GET /api/admin/stats` | Comptes par statut et visibilité, nombre de sources et relations. |
 | `GET /api/admin/entities` | `{ items, total, page, pageSize }` ; 50 fiches par page, tous statuts et visibilités. Filtres facultatifs `status`, `visibility`, `kind`, `q` (2 à 100 caractères), `page` (1 à 9999). |
 | `GET /api/admin/entities/:slug` | Fiche éditoriale complète, preuves avec Source, relations entrantes/sortantes avec preuves, historique des Revision ; `404` si absente. |
+| `PATCH /api/admin/entities/:slug` | Remplace les champs éditables de la fiche ; retourne la fiche et ses révisions à jour. |
+| `POST /api/admin/entities/:slug/publish` | Publie une fiche `PROPOSED` sourcée ; retourne la fiche à jour. |
+| `POST /api/admin/entities/:slug/unpublish` | Retire une fiche `PUBLISHED` de la publication ; retourne la fiche à jour. |
 
 Les filtres inconnus, répétés ou invalides donnent `400`. Les champs `metadata` restent exclus
-pour éviter d'exposer un JSON dont le contenu n'a pas encore été classé. Aucun endpoint
-d'écriture métier n'existe dans v0.4a.
+pour éviter d'exposer un JSON dont le contenu n'a pas encore été classé.
+
+Le `PATCH` exige un JSON complet contenant `title`, `summary`, `bodyMarkdown`, `kind`,
+`placeKind`, `aliases`, `tags`, `visibility`, `expectedUpdatedAt` et éventuellement
+`revisionMessage`. Les actions de publication exigent `expectedUpdatedAt` et acceptent
+`revisionMessage`. Les propriétés supplémentaires sont refusées avec `400 INVALID_REQUEST` ;
+le slug, le statut, les dates, `metadata`, les relations et les preuves ne peuvent pas être
+modifiés via le formulaire. Une fiche absente donne `404`, une version obsolète
+`409 ENTITY_MODIFIED`, un statut inadapté `409 INVALID_STATUS` et une publication sans preuve
+`422 EVIDENCE_REQUIRED`. Aucune écriture sur Relation, Source ou Evidence n'est exposée.
+
+Toutes les mutations admin exigent une session et une Origin identique à l'origine configurée,
+y compris si le cookie est présent. Une Origin absente ou différente donne `403 INVALID_ORIGIN`.
+Voir [EDITORIAL-WORKFLOW.md](EDITORIAL-WORKFLOW.md) pour les états, révisions et règles de
+visibilité.

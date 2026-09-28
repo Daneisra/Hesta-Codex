@@ -12,7 +12,8 @@ Base de connaissance structurée du Monde d’Hesta. À terme, le Codex sera la 
 du lore durable et exposera des données sourcées aux autres applications. Le dépôt contient
 le socle web/API et le premier modèle PostgreSQL ; aucune fiche lore n'est créée automatiquement.
 L'interface publique permet de consulter les fiches publiées et leurs relations. L'espace
-`/admin`, protégé par Discord, permet d'inspecter les propositions sans les modifier.
+`/admin`, protégé par Discord, permet d'inspecter et de réviser les fiches, puis de publier
+explicitement les propositions validées.
 
 ## Stack
 
@@ -102,13 +103,21 @@ publication n'est automatique. Le fichier dans `examples/` est un **template tec
 non canonique** et n'est jamais chargé par le seed ni par la CI. Le format, les conflits
 et les garanties du pipeline sont détaillés dans [docs/IMPORT.md](docs/IMPORT.md).
 
-## Administration en lecture seule
+## Administration éditoriale
 
 `/admin` est réservé aux Discord IDs inscrits dans `DISCORD_ADMIN_IDS`. Un administrateur y voit
 les fiches de tout statut et toute visibilité, leurs sources, preuves, relations et révisions.
-Le premier lot `PROPOSED + GM` y est consultable ; l'API publique ne l'expose pas. Aucune action
-de publication, modification ou suppression n'est disponible dans ce jalon. Les routes et la
-procédure de mise en production sont décrites dans [docs/AUTH.md](docs/AUTH.md).
+Il peut modifier les champs éditoriaux d'une fiche non archivée, publier une proposition ou
+retirer une publication. Chaque changement réel crée une Revision ; un `expectedUpdatedAt`
+empêche l'écrasement silencieux des modifications d'un autre administrateur. Les actions de
+publication sont distinctes de l'enregistrement et demandent confirmation. Seules les fiches
+`PUBLISHED + PUBLIC` apparaissent dans l'API et la bibliothèque publiques ; les relations
+importées restent privées tant qu'elles ne sont pas publiées séparément.
+
+Le premier lot `PROPOSED + GM` reste invisible publiquement jusqu'aux validations humaines.
+Le workflow est détaillé dans [docs/EDITORIAL-WORKFLOW.md](docs/EDITORIAL-WORKFLOW.md), et la
+configuration Discord dans [docs/AUTH.md](docs/AUTH.md). Aucune édition de Relation, Source ou
+Evidence n'est exposée.
 
 ## Structure
 

@@ -2,9 +2,10 @@ import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type {
-  AdminEntityDetail, AdminEntityListResponse, AdminEvidence, AdminRelation, AdminStats,
+  AdminEntityDetail, AdminEntityListResponse, AdminEntityPatch, AdminEvidence, AdminRelation, AdminStats,
   AuthSessionResponse, EditorialStatus, EntityKind, Visibility,
 } from '@hesta-codex/shared'
+import { AdminEditor } from './AdminEditor'
 import './Admin.css'
 
 type AdminRoute = { view: 'dashboard' } | { view: 'entity'; slug: string } | { view: 'not-found' }
@@ -30,7 +31,7 @@ function readRoute(): AdminRoute {
 }
 
 class HttpError extends Error {
-  constructor(readonly status: number) { super(`HTTP ${status}`) }
+  constructor(readonly status: number, message = `HTTP ${status}`) { super(message) }
 }
 
 async function getJson<T>(url: string, signal: AbortSignal): Promise<T> {
@@ -38,6 +39,20 @@ async function getJson<T>(url: string, signal: AbortSignal): Promise<T> {
     signal, credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' },
   })
   if (!response.ok) throw new HttpError(response.status)
+  return response.json() as Promise<T>
+}
+
+async function mutateJson<T>(url: string, method: 'PATCH' | 'POST', body: unknown): Promise<T> {
+  const response = await fetch(url, {
+    method, credentials: 'same-origin', cache: 'no-store',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { error?: { message?: unknown } } | null
+    const message = payload?.error?.message
+    throw new HttpError(response.status, typeof message === 'string' ? message : `HTTP ${response.status}`)
+  }
   return response.json() as Promise<T>
 }
 
@@ -114,9 +129,20 @@ function RelationSection({ title, relations, direction, onNavigate }: {
   </section>
 }
 
-function Detail({ entity, onNavigate }: {
+function Detail({ entity, onNavigate, editing, busy, authExpired, error, onEdit, onCancel, onSave,
+  onDirtyChange, onWorkflow, onReload }: {
   entity: AdminEntityDetail
   onNavigate: (event: MouseEvent<HTMLAnchorElement>, path: string) => void
+  editing: boolean
+  busy: boolean
+  authExpired: boolean
+  error: { status: number | null; message: string } | null
+  onEdit: () => void
+  onCancel: () => void
+  onSave: (input: AdminEntityPatch) => void
+  onDirtyChange: (dirty: boolean) => void
+  onWorkflow: (action: 'publish' | 'unpublish') => void
+  onReload: () => void
 }) {
   return <article className="admin-detail">
     <a className="admin-back" href="/admin" onClick={(event) => onNavigate(event, '/admin')}>← Tableau de bord</a>
@@ -124,12 +150,20 @@ function Detail({ entity, onNavigate }: {
       <p className="admin-eyebrow">Fiche éditoriale · {entity.kind}{entity.placeKind ? ` / ${entity.placeKind}` : ''}</p>
       <h1>{entity.title}</h1>
       <p className="admin-muted">/{entity.slug} · Mise à jour {dateLabel(entity.updatedAt)}</p>
+      {entity.publishedAt && <p className="admin-muted">Publiée le {dateLabel(entity.publishedAt)}</p>}
       <div className="admin-badges">
         <span className="admin-badge">{statusLabels[entity.status]}</span>
         <span className="admin-badge">{visibilityLabels[entity.visibility]}</span>
       </div>
+      {!editing && entity.status !== 'ARCHIVED' &&
+        <button className="admin-edit-button" type="button" onClick={onEdit}>Modifier</button>}
     </div>
-    <section className="admin-section">
+    {error && <div className="admin-form-error" role="alert">{error.message}
+      {error.status === 409 && <button type="button" onClick={onReload}>Recharger la version récente</button>}
+      {error.status === 401 && <a href="/api/auth/discord/login">Se reconnecter avec Discord</a>}
+    </div>}
+    {editing ? <AdminEditor entity={entity} busy={busy} saveDisabled={authExpired} error={null} onSave={onSave}
+      onCancel={onCancel} onDirtyChange={onDirtyChange} /> : <section className="admin-section">
       <h2>Contenu</h2>
       {entity.summary && <p className="admin-summary">{entity.summary}</p>}
       {entity.aliases.length > 0 && <p><strong>Alias :</strong> {entity.aliases.join(' · ')}</p>}
@@ -138,7 +172,24 @@ function Detail({ entity, onNavigate }: {
         {entity.bodyMarkdown.trim() ? <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>{entity.bodyMarkdown}</ReactMarkdown>
           : <p className="admin-muted">Aucun contenu détaillé.</p>}
       </div>
-    </section>
+    </section>}
+    {!editing && (entity.status === 'PROPOSED' || entity.status === 'PUBLISHED') &&
+      <section className="admin-section admin-publication">
+        <h2>Publication</h2>
+        <p>Visibilité actuelle : <strong>{visibilityLabels[entity.visibility]}</strong>.</p>
+        {entity.status === 'PROPOSED' ? <>
+          <p>{entity.visibility === 'PUBLIC'
+            ? 'Cette fiche deviendra visible publiquement après publication.'
+            : 'Cette fiche sera validée mais restera invisible dans la bibliothèque publique.'}</p>
+          <button className="admin-primary-button" type="button" disabled={busy}
+            onClick={() => onWorkflow('publish')}>{busy ? 'Publication…' : 'Publier'}</button>
+        </> : <>
+          <p>{entity.visibility === 'PUBLIC'
+            ? 'Cette fiche est visible dans la bibliothèque publique.'
+            : 'Cette fiche est publiée mais reste invisible dans la bibliothèque publique.'}</p>
+          <button type="button" disabled={busy} onClick={() => onWorkflow('unpublish')}>Retirer de la publication</button>
+        </>}
+      </section>}
     <section className="admin-section"><h2>Provenance</h2><EvidenceList evidence={entity.evidence} /></section>
     <div className="admin-relations">
       <RelationSection title="Relations sortantes" direction="outgoing" relations={entity.outgoingRelations} onNavigate={onNavigate} />
@@ -174,18 +225,46 @@ export function AdminApp() {
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(1)
   const [refresh, setRefresh] = useState(0)
+  const [dataRefresh, setDataRefresh] = useState(0)
+  const [detailRefresh, setDetailRefresh] = useState(0)
+  const [editing, setEditing] = useState(false)
+  const [editDirty, setEditDirty] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [authExpired, setAuthExpired] = useState(false)
+  const [mutationError, setMutationError] = useState<{ status: number | null; message: string } | null>(null)
   const mainRef = useRef<HTMLElement>(null)
   const focusAfterNavigation = useRef(false)
+  const currentPath = useRef(window.location.pathname)
+  const dirtyRef = useRef(false)
+  dirtyRef.current = editDirty
 
   const isAdmin = session.phase === 'ready' && session.data.authenticated && session.data.isAdmin
   const activeSlug = route.view === 'entity' ? route.slug : null
   const listKey = JSON.stringify([status, visibility, kind, query, page])
 
   useEffect(() => {
-    const onPop = () => { focusAfterNavigation.current = true; setRoute(readRoute()) }
+    const onPop = () => {
+      if (dirtyRef.current && !window.confirm('Quitter cette fiche et perdre les modifications non enregistrées ?')) {
+        window.history.pushState(null, '', currentPath.current)
+        return
+      }
+      currentPath.current = window.location.pathname
+      setEditing(false)
+      setEditDirty(false)
+      setAuthExpired(false)
+      focusAfterNavigation.current = true
+      setRoute(readRoute())
+    }
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [])
+
+  useEffect(() => {
+    if (!editDirty) return
+    const protect = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
+    window.addEventListener('beforeunload', protect)
+    return () => window.removeEventListener('beforeunload', protect)
+  }, [editDirty])
 
   useEffect(() => {
     if (focusAfterNavigation.current) {
@@ -222,7 +301,7 @@ export function AdminApp() {
         else setStats({ phase: 'error', status: errorStatus(error) })
       })
     return () => controller.abort()
-  }, [isAdmin, refresh])
+  }, [isAdmin, refresh, dataRefresh])
 
   useEffect(() => {
     if (!isAdmin || route.view !== 'dashboard') return
@@ -244,7 +323,7 @@ export function AdminApp() {
         else setList({ phase: 'error', status: errorStatus(error) })
       })
     return () => controller.abort()
-  }, [isAdmin, route.view, status, visibility, kind, query, page, listKey, refresh])
+  }, [isAdmin, route.view, status, visibility, kind, query, page, listKey, refresh, dataRefresh])
 
   useEffect(() => {
     if (!isAdmin || !activeSlug) return
@@ -261,14 +340,20 @@ export function AdminApp() {
         else setDetail({ phase: 'error', status: errorStatus(error) })
       })
     return () => controller.abort()
-  }, [isAdmin, activeSlug, refresh])
+  }, [isAdmin, activeSlug, refresh, detailRefresh])
 
   useEffect(() => { document.title = 'Administration · Hesta Codex' }, [])
 
   function onNavigate(event: MouseEvent<HTMLAnchorElement>, path: string) {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
     event.preventDefault()
+    if (editDirty && !window.confirm('Quitter cette fiche et perdre les modifications non enregistrées ?')) return
     if (window.location.pathname !== path) {
+      currentPath.current = path
+      setEditing(false)
+      setEditDirty(false)
+      setAuthExpired(false)
+      setMutationError(null)
       focusAfterNavigation.current = true
       window.history.pushState(null, '', path)
       setRoute(readRoute())
@@ -276,13 +361,85 @@ export function AdminApp() {
   }
 
   async function logout() {
+    if (editDirty && !window.confirm('Se déconnecter et perdre les modifications non enregistrées ?')) return
     try {
       const response = await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin', cache: 'no-store' })
       if (!response.ok) throw new Error('Logout failed')
       window.history.replaceState(null, '', '/admin')
+      currentPath.current = '/admin'
+      setEditing(false)
+      setEditDirty(false)
       setRoute({ view: 'dashboard' })
       setSession({ phase: 'ready', data: { authenticated: false, isAdmin: false, user: null } })
     } catch { setSession({ phase: 'error', status: null }) }
+  }
+
+  function cancelEdit() {
+    if (editDirty && !window.confirm('Annuler et perdre les modifications non enregistrées ?')) return
+    setEditing(false)
+    setEditDirty(false)
+    setAuthExpired(false)
+    setMutationError(null)
+  }
+
+  function mutationFailed(error: unknown) {
+    const status = errorStatus(error)
+    setBusy(false)
+    if (status === 401) {
+      setAuthExpired(editing)
+      setMutationError({ status, message: 'Session expirée. Vos modifications restent affichées : copiez-les avant de vous reconnecter.' })
+      setSession({ phase: 'ready', data: { authenticated: false, isAdmin: false, user: null } })
+    } else if (status === 403) {
+      setEditing(false)
+      setEditDirty(false)
+      setSession((current) => current.phase === 'ready' && current.data.authenticated
+        ? { phase: 'ready', data: { ...current.data, isAdmin: false } } : current)
+    } else {
+      setMutationError({ status, message: status === 409
+        ? 'Cette fiche a été modifiée depuis son ouverture. Rechargez la version récente avant de réessayer.'
+        : status === 400 || status === 422 ? error instanceof HttpError ? error.message : 'Données invalides.'
+          : `Impossible d’enregistrer la fiche${status ? ` (erreur ${status})` : ''}.` })
+    }
+  }
+
+  function mutationSucceeded(updated: AdminEntityDetail) {
+    setDetailFor(updated.slug)
+    setDetail({ phase: 'ready', data: updated })
+    setEditing(false)
+    setEditDirty(false)
+    setAuthExpired(false)
+    setMutationError(null)
+    setBusy(false)
+    setDataRefresh((value) => value + 1)
+  }
+
+  async function save(input: AdminEntityPatch) {
+    if (busy || authExpired || !activeSlug) return
+    setBusy(true)
+    setMutationError(null)
+    try {
+      mutationSucceeded(await mutateJson<AdminEntityDetail>(`/api/admin/entities/${encodeURIComponent(activeSlug)}`, 'PATCH', input))
+    } catch (error) { mutationFailed(error) }
+  }
+
+  async function workflow(action: 'publish' | 'unpublish') {
+    if (busy || authExpired || detail.phase !== 'ready' || !activeSlug) return
+    const entity = detail.data
+    const message = action === 'publish'
+      ? entity.visibility === 'PUBLIC'
+        ? `Publier « ${entity.title} » ?\nCette fiche sera immédiatement visible dans la bibliothèque publique.`
+        : `Valider « ${entity.title} » ?\nLa fiche sera marquée comme publiée mais restera invisible pour le public avec la visibilité ${visibilityLabels[entity.visibility]}.`
+      : `Retirer « ${entity.title} » de la publication ?${entity.visibility === 'PUBLIC'
+        ? '\nCette fiche disparaîtra immédiatement de la bibliothèque publique.' : ''}`
+    if (!window.confirm(message)) return
+    setBusy(true)
+    setMutationError(null)
+    try {
+      mutationSucceeded(await mutateJson<AdminEntityDetail>(
+        `/api/admin/entities/${encodeURIComponent(activeSlug)}/${action}`,
+        'POST', { expectedUpdatedAt: entity.updatedAt },
+      ))
+    } catch (error) { mutationFailed(error) }
   }
 
   const user = session.phase === 'ready' && session.data.authenticated ? session.data.user : null
@@ -300,7 +457,7 @@ export function AdminApp() {
       {session.phase === 'loading' && <StateMessage>Vérification de la session…</StateMessage>}
       {session.phase === 'error' && <div className="admin-state" role="alert"><h1>Administration indisponible</h1>
         <p>Impossible de vérifier la session pour le moment.</p><button type="button" onClick={() => setRefresh((value) => value + 1)}>Réessayer</button></div>}
-      {session.phase === 'ready' && !session.data.authenticated && <div className="admin-state">
+      {session.phase === 'ready' && !session.data.authenticated && !authExpired && <div className="admin-state">
         <p className="admin-eyebrow">Espace réservé</p><h1>Administration Hesta Codex</h1>
         <p>Connectez-vous pour consulter les propositions et leur provenance.</p>
         <a className="admin-primary-link" href="/api/auth/discord/login">Se connecter avec Discord</a>
@@ -310,8 +467,8 @@ export function AdminApp() {
       </div>}
       {isAdmin && route.view === 'not-found' && <div className="admin-state"><h1>Page introuvable</h1><a href="/admin">Retour au tableau de bord</a></div>}
       {isAdmin && route.view === 'dashboard' && <>
-        <div className="admin-page-heading"><p className="admin-eyebrow">Pilotage éditorial · lecture seule</p>
-          <h1>Tableau de bord</h1><p>Explorer les fiches en attente de validation, leurs liens et leurs sources.</p></div>
+        <div className="admin-page-heading"><p className="admin-eyebrow">Pilotage éditorial</p>
+          <h1>Tableau de bord</h1><p>Explorer les fiches, leurs liens, leurs sources et leur état de publication.</p></div>
         {stats.phase === 'loading' && <StateMessage>Chargement des statistiques…</StateMessage>}
         {stats.phase === 'error' && <p className="admin-message" role="alert">Statistiques indisponibles.</p>}
         {stats.phase === 'ready' && <div className="admin-stats" aria-label="Statistiques éditoriales">
@@ -351,11 +508,22 @@ export function AdminApp() {
           </>)}
         </section>
       </>}
-      {isAdmin && route.view === 'entity' && <>
+      {(isAdmin || (authExpired && editing)) && route.view === 'entity' && <>
         {(detailFor !== activeSlug || detail.phase === 'loading') && <StateMessage>Chargement de la fiche…</StateMessage>}
         {detailFor === activeSlug && detail.phase === 'error' && <div className="admin-state" role="alert"><h1>{detail.status === 404 ? 'Fiche introuvable' : 'Fiche indisponible'}</h1>
           <a href="/admin" onClick={(event) => onNavigate(event, '/admin')}>Retour au tableau de bord</a></div>}
-        {detailFor === activeSlug && detail.phase === 'ready' && <Detail entity={detail.data} onNavigate={onNavigate} />}
+        {detailFor === activeSlug && detail.phase === 'ready' && <Detail entity={detail.data} onNavigate={onNavigate}
+          editing={editing} busy={busy} authExpired={authExpired} error={mutationError}
+          onEdit={() => { setMutationError(null); setEditing(true) }} onCancel={cancelEdit}
+          onSave={(input) => void save(input)} onDirtyChange={setEditDirty}
+          onWorkflow={(action) => void workflow(action)}
+          onReload={() => {
+            if (editDirty && !window.confirm('Recharger la fiche et perdre les modifications non enregistrées ?')) return
+            setEditing(false)
+            setEditDirty(false)
+            setMutationError(null)
+            setDetailRefresh((value) => value + 1)
+          }} />}
       </>}
     </main>
   </div>

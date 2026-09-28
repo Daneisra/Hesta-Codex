@@ -68,8 +68,8 @@ exprime pas directement :
 - `Entity_placeKind_matches_kind_check` : `placeKind` présent si et seulement si
   `kind = PLACE` ;
 - `Entity_publishedAt_required_check` : une fiche `PUBLISHED` a un `publishedAt` non null.
-  Le service métier devra fixer cet instant lors de la publication et le conserver en cas
-  d'archivage ;
+  Le service métier fixe cet instant lors de la publication, le conserve pendant l'édition
+  d'une fiche publiée et le remet à null lors du retrait de publication ;
 - `Evidence_exactly_one_target_check` : `entityId` ou `relationId`, exclusivement ;
 - `Evidence_time_start_nonnegative_check`, `Evidence_time_end_nonnegative_check` et
   `Evidence_time_order_check` : bornes positives et fin non antérieure au début ;
@@ -79,13 +79,13 @@ exprime pas directement :
 - `Revision_positive_number_check` : numérotation à partir de 1.
 
 La base ne peut pas garantir qu'une fiche publiée possède au moins une `Evidence` sans
-déclencheur supplémentaire. Le futur service devra écrire fiche, preuves et révision dans
-une transaction et ne publier qu'après validation de la provenance. Il devra également
+déclencheur supplémentaire. Le service éditorial v0.4b vérifie cette présence avant de
+publier, puis écrit l'Entity et sa Revision dans une transaction. Il devra également
 prévenir les collisions entre un `code` et l'`inverseCode` d'un autre type.
 
 ## Reporté
 
-Permissions fines, publication/édition dans l'administration, connecteurs d'import, révisions des relations, dates structurées
+Permissions fines, édition des relations/sources/preuves, connecteurs d'import, révisions des relations, dates structurées
 du calendrier d'Hesta, recherche plein texte, extraction des `[[wikilinks]]` et calcul du
 graphe affiché. Les UUID, index, alias, Markdown et relations orientées en préparent la base.
 
@@ -97,3 +97,6 @@ des `Source` et `Relation` restent reportées conformément au schéma actuel.
 
 La migration `20260928120000_discord_auth_sessions` ajoute uniquement `User` et `Session`.
 L'accès admin v0.4a repose sur la whitelist Discord externe au modèle ; voir [AUTH.md](AUTH.md).
+
+Le workflow d'édition/publication v0.4b utilise les modèles et contraintes existants, sans
+migration supplémentaire. Voir [EDITORIAL-WORKFLOW.md](EDITORIAL-WORKFLOW.md).

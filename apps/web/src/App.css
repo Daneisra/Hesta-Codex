@@ -19,7 +19,7 @@ button { cursor: pointer; }
 
 a { color: inherit; }
 
-a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, main:focus-visible {
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, main:focus-visible {
   outline: 2px solid #dcc18e;
   outline-offset: 3px;
 }

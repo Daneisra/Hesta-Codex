@@ -7,7 +7,8 @@
 .admin-header { flex-wrap: wrap; }
 .admin-header .header-actions { flex-wrap: wrap; }
 .admin-user { color: #dcc18e; font-size: .9rem; }
-.admin-logout, .admin-pagination button, .admin-state button, .admin-message button {
+.admin-logout, .admin-pagination button, .admin-state button, .admin-message button,
+.admin-edit-button, .admin-publication button, .admin-editor button, .admin-form-error button {
   border: 1px solid #5b6780;
   border-radius: .45rem;
   padding: .55rem .8rem;
@@ -81,6 +82,27 @@
 .admin-revision-list summary { cursor: pointer; color: #dfc992; }
 .admin-revision-list pre { max-height: 26rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 
+.admin-edit-button { margin-top: 1.2rem; }
+.admin-publication p { color: #c9d4e6; }
+.admin-primary-button { background: #d5b981 !important; color: #101724 !important; border-color: #d5b981 !important; font-weight: 700; }
+.admin-primary-button:hover { background: #eed29b !important; }
+.admin-publication button:disabled, .admin-editor button:disabled { opacity: .55; cursor: wait; }
+.admin-warning, .admin-form-error { padding: .9rem 1rem; border: 1px solid #a98a52; border-radius: .5rem; background: #29251e; color: #f3dfb6; }
+.admin-form-error { border-color: #b96f76; background: #2b1b27; color: #ffe1e4; }
+.admin-form-error button { margin-left: .7rem; }
+.admin-editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.admin-editor-grid label { display: grid; gap: .4rem; min-width: 0; color: #d5deec; }
+.admin-editor-wide { grid-column: 1 / -1; }
+.admin-editor-grid input, .admin-editor-grid select, .admin-editor-grid textarea {
+  width: 100%; min-width: 0; padding: .7rem; border: 1px solid #63728c;
+  border-radius: .4rem; background: #0b1423; color: #f0f2f8; font: inherit;
+}
+.admin-editor-grid textarea { resize: vertical; }
+.admin-editor-grid p { margin: 0; }
+.admin-editor-preview { min-width: 0; margin-top: 1.2rem; padding: 1rem; border: 1px solid #394760; border-radius: .5rem; }
+.admin-editor-preview h3 { margin: 0 0 .8rem; }
+.admin-editor-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: .7rem; margin-top: 1.2rem; }
+
 @media (max-width: 900px) {
   .admin-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .admin-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -92,4 +114,5 @@
   .admin-stats > div { padding: .8rem; }
   .admin-main { padding: 1rem; }
   .admin-pagination { justify-content: space-between; }
+  .admin-editor-grid { grid-template-columns: minmax(0, 1fr); }
 }

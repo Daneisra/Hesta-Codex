@@ -1,7 +1,7 @@
 import { Router, type RequestHandler } from 'express'
 import type { AuthConfig } from './config.js'
 import type { DiscordOAuth } from './discord.js'
-import type { AuthStore } from './store.js'
+import type { AuthStore, StoredSession } from './store.js'
 import {
   beginOAuth, checkOAuthState, clearSessionCookie, currentSessionHash,
   newSessionToken, readSession, sessionHash, sessionResponse, setSessionCookie,
@@ -85,10 +85,29 @@ export function requireAdmin({ config, store }: Pick<AuthDependencies, 'config' 
       } else if (!config.adminIds.has(session.discordId)) {
         response.status(403).json({ error: { code: 'FORBIDDEN', message: 'Accès administrateur refusé' } })
       } else {
+        response.locals.adminSession = session
         next()
       }
     } catch (error) {
       next(error)
     }
+  }
+}
+
+export function adminSession(response: { locals: Record<string, unknown> }): StoredSession {
+  return response.locals.adminSession as StoredSession
+}
+
+export function requireSameOrigin(origin: string): RequestHandler {
+  return (request, response, next) => {
+    if (request.method === 'GET' || request.method === 'HEAD' || request.method === 'OPTIONS') {
+      next()
+      return
+    }
+    if (request.headers.origin !== origin) {
+      response.status(403).json({ error: { code: 'INVALID_ORIGIN', message: 'Origine refusée' } })
+      return
+    }
+    next()
   }
 }
