@@ -80,8 +80,12 @@ prévenir les collisions entre un `code` et l'`inverseCode` d'un autre type.
 
 ## Reporté
 
-Authentification, `User`, permissions, imports, révisions des relations, dates structurées
+Authentification, `User`, permissions, connecteurs d'import, révisions des relations, dates structurées
 du calendrier d'Hesta, recherche plein texte, extraction des `[[wikilinks]]` et calcul du
 graphe affiché. Les UUID, index, alias, Markdown et relations orientées en préparent la base.
 
 Référence : `Hesta-Hub/docs/HESTA-CODEX-ARCHITECTURE.md` dans le dépôt voisin.
+
+L'import JSON contrôlé de v0.3 est décrit dans [IMPORT.md](IMPORT.md). Il crée uniquement
+des propositions et une `Revision` initiale pour chaque nouvelle `Entity` ; les révisions
+des `Source` et `Relation` restent reportées conformément au schéma actuel.

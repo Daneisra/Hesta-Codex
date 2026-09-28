@@ -10,7 +10,7 @@
 
 Base de connaissance structurée du Monde d’Hesta. À terme, le Codex sera la source de vérité
 du lore durable et exposera des données sourcées aux autres applications. Le dépôt contient
-le socle web/API et le premier modèle PostgreSQL ; aucune fiche lore n'est créée.
+le socle web/API et le premier modèle PostgreSQL ; aucune fiche lore n'est créée automatiquement.
 L'interface publique permet de consulter les fiches publiées et leurs relations.
 
 ## Stack
@@ -72,14 +72,38 @@ des migrations déjà validées dans un environnement non interactif, utiliser
 `npm run prisma:deploy` après avoir configuré `DATABASE_URL`. Le seed est idempotent et
 ne crée aucune `Entity`. Ces commandes ne sont pas exécutées par le workflow CI.
 
+## Import éditorial contrôlé
+
+Un fichier JSON versionné permet de proposer des fiches et des relations depuis la ligne
+de commande, sans route d'écriture publique. Examiner d'abord le lot sans écrire en base :
+
+```bash
+npm run lore:import -- examples/lore-import.template.json --dry-run
+```
+
+Après revue du fichier et du résultat, effectuer l'import réel avec :
+
+```bash
+npm run lore:import -- chemin/vers/fichier.json
+```
+
+L'import utilise `DATABASE_URL` localement, valide le lot et ses références, puis écrit
+dans une transaction unique. Les nouvelles fiches et relations restent `PROPOSED`, avec
+visibilité `GM` par défaut ; chaque fiche obtient une première `Revision` et chaque fiche
+ou relation importée doit avoir au moins une `Evidence` liée à la `Source` du lot. Aucune
+publication n'est automatique. Le fichier dans `examples/` est un **template technique
+non canonique** et n'est jamais chargé par le seed ni par la CI. Le format, les conflits
+et les garanties du pipeline sont détaillés dans [docs/IMPORT.md](docs/IMPORT.md).
+
 ## Structure
 
 ```text
 apps/web/         Bibliothèque publique, fiches et tests d'interface
-apps/api/         API Express, client Prisma et tests de lecture
+apps/api/         API Express, client Prisma, import CLI et tests
 packages/shared/  Contrats TypeScript communs
 prisma/           Schéma PostgreSQL, migration initiale et seed RelationType
 docs/             Décisions et contraintes du modèle de données
+examples/         Modèle JSON technique d'import, jamais importé automatiquement
 scripts/          Emplacement pour les futurs scripts nécessaires
 ```
 

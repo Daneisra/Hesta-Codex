@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "MANUAL",
+    "label": "TEMPLATE technique — aucune donnée canonique",
+    "externalId": null,
+    "url": null,
+    "authorLabel": "Documentation technique"
+  },
+  "entities": [
+    {
+      "slug": "exemple-ville",
+      "kind": "PLACE",
+      "placeKind": "CITY",
+      "title": "Exemple ville",
+      "summary": "Fiche neutre destinée à montrer le format d'import.",
+      "bodyMarkdown": "## Description\n\nTexte technique à remplacer avant tout import réel.",
+      "aliases": [],
+      "tags": ["template"],
+      "visibility": "GM",
+      "evidence": [
+        {
+          "claimText": "Le présent document technique décrit cette fiche d'exemple.",
+          "sourceExcerpt": null,
+          "locator": "section 1",
+          "timeStartSeconds": null,
+          "timeEndSeconds": null,
+          "confidence": null
+        }
+      ]
+    },
+    {
+      "slug": "exemple-region",
+      "kind": "PLACE",
+      "placeKind": "REGION",
+      "title": "Exemple région",
+      "summary": null,
+      "bodyMarkdown": "",
+      "aliases": [],
+      "tags": [],
+      "evidence": [
+        {
+          "claimText": "Le présent document technique décrit cette seconde fiche d'exemple."
+        }
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "from": "exemple-ville",
+      "to": "exemple-region",
+      "type": "located_in",
+      "description": null,
+      "evidence": [
+        {
+          "claimText": "Le template relie les deux fiches pour illustrer une relation orientée."
+        }
+      ]
+    }
+  ]
+}
