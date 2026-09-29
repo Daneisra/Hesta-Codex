@@ -1,6 +1,7 @@
 import type { AdminEntityDetail, AdminSourceListResponse } from '@hesta-codex/shared'
 import { Prisma, type PrismaClient } from '../prisma-client/client.ts'
 import { EditorialError, entitySnapshot } from './editorial.js'
+import { createInitialEvidence, resolveCreationSource } from './creation-provenance.js'
 import type { ManualCreateInput, SourceLookupInput } from './manual-validation.js'
 import { readAdminEntity, sourceItem, sourceSelect } from './store.js'
 
@@ -13,10 +14,6 @@ export interface ManualService {
 
 function isUniqueConflict(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
-}
-
-function isForeignKeyConflict(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003'
 }
 
 export function createPrismaManualService(prisma: PrismaClient): ManualService {
@@ -40,28 +37,7 @@ export function createPrismaManualService(prisma: PrismaClient): ManualService {
         const existing = await tx.entity.findUnique({ where: { slug: input.entity.slug }, select: { id: true } })
         if (existing) throw new EditorialError(409, 'ENTITY_CONFLICT', 'Ce slug est déjà utilisé par une fiche.')
 
-        let sourceId: string
-        if (input.source.mode === 'existing') {
-          const source = await tx.source.findUnique({ where: { id: input.source.sourceId }, select: { id: true } })
-          if (!source) throw new EditorialError(404, 'SOURCE_NOT_FOUND', 'Source introuvable.')
-          sourceId = source.id
-        } else {
-          const data = input.source.data
-          try {
-            const source = await tx.source.create({ data: {
-              kind: data.kind, label: data.label, externalId: data.externalId,
-              url: data.url, authorLabel: data.authorLabel,
-              publishedAt: data.publishedAt ? new Date(data.publishedAt) : null,
-              visibility: data.visibility,
-            }, select: { id: true } })
-            sourceId = source.id
-          } catch (error) {
-            if (isUniqueConflict(error)) {
-              throw new EditorialError(409, 'SOURCE_CONFLICT', 'Une source de ce type utilise déjà cet identifiant externe.')
-            }
-            throw error
-          }
-        }
+        const sourceId = await resolveCreationSource(tx, input.source)
 
         const fields = input.entity
         let entity
@@ -77,20 +53,8 @@ export function createPrismaManualService(prisma: PrismaClient): ManualService {
           throw error
         }
 
-        const proof = input.evidence
-        try {
-          await tx.evidence.create({ data: {
-            sourceId, entityId: entity.id, relationId: null,
-            claimText: proof.claimText, sourceExcerpt: proof.sourceExcerpt, locator: proof.locator,
-            timeStartSeconds: proof.timeStartSeconds, timeEndSeconds: proof.timeEndSeconds,
-            confidence: proof.confidence, visibility: proof.visibility,
-          } })
-        } catch (error) {
-          if (input.source.mode === 'existing' && isForeignKeyConflict(error)) {
-            throw new EditorialError(404, 'SOURCE_NOT_FOUND', 'Source introuvable.')
-          }
-          throw error
-        }
+        await createInitialEvidence(tx, sourceId, { entityId: entity.id, relationId: null },
+          input.evidence, input.source.mode === 'existing')
         await tx.revision.create({ data: {
           entityId: entity.id, number: 1, snapshot: entitySnapshot(entity),
           editorLabel, message: 'Création manuelle depuis l’administration',

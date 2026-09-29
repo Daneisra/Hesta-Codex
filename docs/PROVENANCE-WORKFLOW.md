@@ -1,8 +1,9 @@
-# Relations et provenance v0.4c
+# Relations et provenance
 
 Les administrateurs autorisés inspectent et corrigent les données importées depuis une fiche
-`/admin/fiches/:slug`. Aucune création ni suppression n'est disponible. Les champs d'identité
-des liens et des preuves restent immuables.
+`/admin/fiches/:slug`. Depuis v0.5b, ils peuvent aussi créer une Relation avec Source et Evidence
+initiales ; voir [MANUAL-RELATIONS.md](MANUAL-RELATIONS.md). Aucune suppression n'est disponible.
+Les champs d'identité des liens et des preuves restent immuables.
 
 ```text
 Source → Evidence → Entity OU Relation

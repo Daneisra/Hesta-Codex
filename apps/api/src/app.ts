@@ -5,6 +5,7 @@ import { createAdminRouter } from './admin/routes.js'
 import type { AdminStore } from './admin/store.js'
 import { EditorialError, type EditorialService } from './admin/editorial.js'
 import type { ManualService } from './admin/manual.js'
+import type { ManualRelationService } from './admin/manual-relations.js'
 import type { ProvenanceService } from './admin/provenance.js'
 import { createAuthRouter, requireAdmin, requireSameOrigin, type AuthDependencies } from './auth/routes.js'
 import type { CodexStore, EntityFilters } from './store.js'
@@ -36,7 +37,7 @@ function parseEntityFilters(query: Record<string, unknown>): EntityFilters {
 
 export function createApp(store: CodexStore, privateServices?: {
   auth: AuthDependencies; admin: AdminStore; editorial: EditorialService;
-  provenance?: ProvenanceService; manual?: ManualService
+  provenance?: ProvenanceService; manual?: ManualService; manualRelations?: ManualRelationService
 }) {
   const app = express()
   app.disable('x-powered-by')
@@ -45,7 +46,7 @@ export function createApp(store: CodexStore, privateServices?: {
     app.use('/api/auth', createAuthRouter(privateServices.auth))
     app.use('/api/admin', requireAdmin(privateServices.auth), requireSameOrigin(privateServices.auth.config.origin),
       express.json({ limit: '1mb' }), createAdminRouter(privateServices.admin, privateServices.editorial,
-        privateServices.provenance, privateServices.manual))
+        privateServices.provenance, privateServices.manual, privateServices.manualRelations))
     app.use('/api/auth', (_request, response) => {
       response.status(404).json({ error: { code: 'NOT_FOUND', message: 'Endpoint not found' } })
     })

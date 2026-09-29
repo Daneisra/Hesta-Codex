@@ -1,8 +1,8 @@
-# Workflow éditorial v0.4b
+# Workflow éditorial
 
 L'administration `/admin` permet aux Discord IDs autorisés de modifier une `Entity`, de la
-publier et de retirer sa publication. Le slug, `metadata`, les relations, les sources et les
-preuves restent en lecture seule. Aucune création ou suppression de fiche n'est proposée.
+publier et de retirer sa publication. Le slug et `metadata` restent en lecture seule.
+Les relations, sources et preuves suivent leur workflow dédié ; aucune suppression n'est proposée.
 
 ## Statuts et visibilité
 
@@ -66,3 +66,7 @@ La fiche reçoit `PROPOSED`, `publishedAt = null` et `GM` par défaut. Une `Revi
 créée avec le même format de snapshot Entity version 1 que les éditions ultérieures ; son
 auteur est l'administrateur authentifié. Création, provenance et révision sont atomiques.
 La création ne publie jamais la fiche. Voir [MANUAL-CREATION.md](MANUAL-CREATION.md).
+
+Depuis v0.5b, une Relation peut également être créée depuis une fiche non archivée, avec une
+Source et une Evidence initiales. Elle reste `PROPOSED` ; les fiches et leurs Revision ne sont
+pas modifiées. Voir [MANUAL-RELATIONS.md](MANUAL-RELATIONS.md).

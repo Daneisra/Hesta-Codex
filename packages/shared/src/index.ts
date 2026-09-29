@@ -136,6 +136,16 @@ export interface AdminManualCreateRequest {
   }
 }
 
+export interface AdminManualRelationRequest {
+  fromEntityId: string
+  toEntityId: string
+  relationCode: string
+  description?: string | null
+  visibility?: Visibility
+  source: AdminManualCreateRequest['source']
+  evidence: AdminManualCreateRequest['evidence']
+}
+
 export interface AdminEvidence {
   id: string
   claimText: string

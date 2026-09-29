@@ -110,7 +110,10 @@ une Source existante ou nouvelle et une Evidence initiale. L'Entity, l'Evidence,
 éventuelle et la `Revision #1` sont écrites dans une seule transaction. La fiche reste
 `PROPOSED`, avec visibilité `GM` par défaut, jusqu'à une publication humaine explicite.
 Voir [docs/MANUAL-CREATION.md](docs/MANUAL-CREATION.md) pour le formulaire, les validations
-et les conflits. La création manuelle de relations viendra en v0.5b.
+et les conflits. Depuis une fiche non archivée, « Ajouter une relation » crée une arête
+`PROPOSED` avec Source et Evidence obligatoires, sans créer de `Revision` Entity. Les sens
+inverses et symétriques sont normalisés côté API ; voir
+[docs/MANUAL-RELATIONS.md](docs/MANUAL-RELATIONS.md).
 
 `/admin` est réservé aux Discord IDs inscrits dans `DISCORD_ADMIN_IDS`. Un administrateur y voit
 les fiches de tout statut et toute visibilité, leurs sources, preuves, relations et révisions.

@@ -2,8 +2,9 @@ import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 're
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type {
-  AdminManualCreateRequest, AdminSource, AdminSourceListResponse, EntityKind, PlaceKind, SourceKind, Visibility,
+  AdminManualCreateRequest, AdminSource, EntityKind, PlaceKind, SourceKind, Visibility,
 } from '@hesta-codex/shared'
+import { AdminSourcePicker } from './AdminSourcePicker'
 
 const kinds: EntityKind[] = ['PERSON', 'PLACE', 'ORGANIZATION', 'FAMILY', 'RELIGION', 'DEITY', 'SPECIES',
   'CREATURE', 'ARTIFACT', 'EVENT', 'QUEST', 'SESSION', 'CONCEPT', 'OTHER']
@@ -51,11 +52,6 @@ export function AdminCreate({ busy, disabled, error, onCreate, onClearError, onD
   const [slugEdited, setSlugEdited] = useState(false)
   const [mode, setMode] = useState<'existing' | 'new'>('existing')
   const [selectedSource, setSelectedSource] = useState<AdminSource | null>(null)
-  const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
-  const [sources, setSources] = useState<AdminSourceListResponse | null>(null)
-  const [sourceLoading, setSourceLoading] = useState(false)
-  const [sourceError, setSourceError] = useState<string | null>(null)
   const [review, setReview] = useState(false)
   const [localIssues, setLocalIssues] = useState<Issue[]>([])
   const errorRef = useRef<HTMLDivElement>(null)
@@ -75,33 +71,6 @@ export function AdminCreate({ busy, disabled, error, onCreate, onClearError, onD
   useEffect(() => {
     onDirtyChange(JSON.stringify(form) !== JSON.stringify(initial) || selectedSource !== null || mode !== 'existing')
   }, [form, selectedSource, mode, onDirtyChange])
-
-  useEffect(() => {
-    if (mode !== 'existing' || search.trim().length === 1) {
-      setSourceLoading(false)
-      setSourceError(null)
-      return
-    }
-    const controller = new AbortController()
-    setSourceLoading(true)
-    setSourceError(null)
-    setSources(null)
-    const timer = window.setTimeout(() => {
-      const params = new URLSearchParams({ page: String(page) })
-      if (search.trim().length >= 2) params.set('q', search.trim())
-      fetch(`/api/admin/sources?${params}`, { signal: controller.signal, credentials: 'same-origin', cache: 'no-store' })
-        .then(async (response) => {
-          if (!response.ok) throw new Error(response.status === 401 ? 'Session expirée.' : 'Recherche de sources indisponible.')
-          return response.json() as Promise<AdminSourceListResponse>
-        })
-        .then((data) => { if (!controller.signal.aborted) setSources(data) })
-        .catch((reason: unknown) => {
-          if (!controller.signal.aborted) setSourceError(reason instanceof Error ? reason.message : 'Recherche indisponible.')
-        })
-        .finally(() => { if (!controller.signal.aborted) setSourceLoading(false) })
-    }, search ? 320 : 0)
-    return () => { window.clearTimeout(timer); controller.abort() }
-  }, [mode, search, page])
 
   function change<K extends keyof Form>(key: K, value: Form[K]) {
     setForm((previous) => ({ ...previous, [key]: value }))
@@ -234,27 +203,9 @@ export function AdminCreate({ busy, disabled, error, onCreate, onClearError, onD
         <label><input type="radio" name="source-mode" checked={mode === 'existing'} onChange={() => switchMode('existing')} />Source existante</label>
         <label><input type="radio" name="source-mode" checked={mode === 'new'} onChange={() => switchMode('new')} />Nouvelle source</label>
       </fieldset>
-        {mode === 'existing' ? <div className="admin-source-picker">
-          <label>Rechercher une Source<input type="search" value={search} maxLength={100}
-            onChange={(event) => { setSearch(event.target.value); setPage(1) }} /></label>
-          {search.trim().length === 1 && <p className="admin-muted">Deux caractères minimum pour rechercher.</p>}
-          {sourceLoading && <p role="status">Recherche des Sources…</p>}
-          {sourceError && <p role="alert" className="admin-field-error">{sourceError}</p>}
-          {sources && !sourceLoading && !sourceError && search.trim().length !== 1 &&
-            <><p className="admin-muted">{sources.total} Source(s) trouvée(s), 20 par page.</p>
-            {sources.items.length === 0 && <p>Aucune Source trouvée. Vous pouvez en créer une nouvelle.</p>}
-            <div className="admin-source-options">{sources.items.map((source) => <label key={source.id}>
-              <input type="radio" name="existing-source" checked={selectedSource?.id === source.id}
-                onChange={() => { setSelectedSource(source); setLocalIssues([]); if (error?.status !== 401) onClearError() }} />
-              <span><strong>{source.label}</strong><small>{source.kind} · ID externe : {source.externalId ?? '—'}
-                {source.authorLabel ? ` · Auteur : ${source.authorLabel}` : ''}</small></span>
-            </label>)}</div><div className="admin-pagination"><button type="button" disabled={page <= 1}
-              onClick={() => setPage(page - 1)}>Précédent</button><span>Page {page}</span>
-              <button type="button" disabled={page * sources.pageSize >= sources.total}
-                onClick={() => setPage(page + 1)}>Suivant</button></div></>}
-          <span id="source.sourceId" tabIndex={-1}>{errorText('source.sourceId')}</span>
-          {selectedSource && <p className="admin-muted">Source choisie : {selectedSource.label} · {selectedSource.kind}</p>}
-        </div> : <><p className="admin-muted">Une nouvelle Source pourra ensuite être réutilisée par d’autres fiches et preuves.
+        {mode === 'existing' ? <AdminSourcePicker selected={selectedSource}
+          onSelect={(source) => { setSelectedSource(source); setLocalIssues([]); if (error?.status !== 401) onClearError() }}
+          error={issue('source.sourceId')} /> : <><p className="admin-muted">Une nouvelle Source pourra ensuite être réutilisée par d’autres fiches et preuves.
           Sans ID externe, un label identique ne réutilise pas automatiquement une Source existante.</p>
           <div className="admin-editor-grid">
             <label>Type de Source<select value={form.sourceKind} onChange={(event) => change('sourceKind', event.target.value as SourceKind)}>

@@ -5,6 +5,8 @@ import { adminSession } from '../auth/routes.js'
 import type { EditorialService } from './editorial.js'
 import type { ManualService } from './manual.js'
 import { manualCreateSchema, sourceLookupSchema } from './manual-validation.js'
+import type { ManualRelationService } from './manual-relations.js'
+import { manualRelationSchema } from './manual-relations-validation.js'
 import type { ProvenanceService } from './provenance.js'
 import { evidencePatchSchema, relationPatchSchema, relationWorkflowSchema, sourcePatchSchema } from './provenance-validation.js'
 import type { AdminStore } from './store.js'
@@ -29,7 +31,7 @@ function editorLabel(response: { locals: Record<string, unknown> }): string {
 }
 
 export function createAdminRouter(store: AdminStore, editorial: EditorialService,
-  provenance?: ProvenanceService, manual?: ManualService) {
+  provenance?: ProvenanceService, manual?: ManualService, manualRelations?: ManualRelationService) {
   const router = Router()
 
   router.get('/stats', async (_request, response) => {
@@ -66,6 +68,23 @@ export function createAdminRouter(store: AdminStore, editorial: EditorialService
       }
       const created = await manual.create(parsed.data, editorLabel(response))
       response.status(201).json(created)
+    })
+  }
+
+  if (manualRelations) {
+    router.get('/relation-types', async (_request, response) => {
+      response.json(await manualRelations.listTypes())
+    })
+    router.post('/relations', async (request, response) => {
+      const parsed = manualRelationSchema.safeParse(request.body)
+      if (!parsed.success) {
+        const issues = parsed.error.issues.flatMap((issue) => issue.code === 'unrecognized_keys'
+          ? issue.keys.map((key) => ({ path: [...issue.path, key].join('.'), message: 'Champ inconnu' }))
+          : [{ path: issue.path.join('.'), message: issue.message }])
+        response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'Relation invalide.', issues } })
+        return
+      }
+      response.status(201).json(await manualRelations.create(parsed.data))
     })
   }
 

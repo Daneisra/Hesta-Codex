@@ -136,7 +136,7 @@ v0.4c ajoute la correction des relations, sources et preuves importées ; voir
 [EDITORIAL-WORKFLOW.md](EDITORIAL-WORKFLOW.md) et [PROVENANCE-WORKFLOW.md](PROVENANCE-WORKFLOW.md).
 
 - Mode update explicite avec politique de conflit et révisions correspondantes.
-- Création et suppression contrôlées des relations, sources et preuves depuis le back-office.
+- Création de sources et preuves supplémentaires et suppression contrôlée depuis le back-office.
 - Import Obsidian, Discord et Carte Hesta.
 - Ingestion de transcriptions YouTube et de parties JDR horodatées.
 - Propositions générées par IA conservées en `PROPOSED` et revues humainement avant publication.

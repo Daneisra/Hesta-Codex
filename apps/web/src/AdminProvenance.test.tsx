@@ -37,6 +37,18 @@ function setup(options: { data?: AdminEntityDetail; result?: boolean; disabled?:
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 describe('relations et provenance admin', () => {
+  it('affiche le libellé inverse depuis la fiche cible et le libellé direct pour une relation symétrique', () => {
+    const directed = { ...entity.outgoingRelations[0]!, id: 'directed-in' }
+    const symmetric = { ...directed, id: 'symmetric-in', relationType: {
+      id: 'type-2', code: 'allied_with', label: 'allié à', inverseCode: null,
+      inverseLabel: null, symmetric: true,
+    } }
+    setup({ data: { ...entity, outgoingRelations: [], incomingRelations: [directed, symmetric] } })
+    expect(screen.getByText('contient')).toBeTruthy()
+    expect(screen.getByText('allié à')).toBeTruthy()
+    expect(screen.queryByText('situé dans')).toBeNull()
+  })
+
   it('affiche une Source partagée une seule fois malgré plusieurs preuves et relations', () => {
     const relatedEvidence = { ...entity.evidence[0]!, id: 'evidence-relation', claimText: 'Autre preuve' }
     setup({ data: { ...entity, outgoingRelations: [{ ...entity.outgoingRelations[0]!,

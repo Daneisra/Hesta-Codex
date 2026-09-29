@@ -84,6 +84,7 @@
 .admin-revision-list pre { max-height: 26rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .admin-edit-button { margin-top: 1.2rem; }
+.admin-add-relation { display: inline-flex; margin: 1.2rem 0 0 .7rem; }
 .admin-publication p { color: #c9d4e6; }
 .admin-primary-button { background: #d5b981 !important; color: #101724 !important; border-color: #d5b981 !important; font-weight: 700; }
 .admin-primary-button:hover { background: #eed29b !important; }
@@ -141,4 +142,5 @@
   .admin-pagination { justify-content: space-between; }
   .admin-editor-grid { grid-template-columns: minmax(0, 1fr); }
   .admin-create-review dl { grid-template-columns: minmax(0, 1fr); }
+  .admin-add-relation { margin-left: 0; }
 }

@@ -36,6 +36,13 @@ d'armure restent dans Système PA.
 | `User` | Identité Discord minimale pour l'administration | Discord ID unique, username, display name facultatif ; aucun rôle persistant. |
 | `Session` | Session serveur révocable | Hash unique du token de cookie, utilisateur, création et expiration ; aucun jeton OAuth Discord conservé. |
 
+La création admin v0.5b résout `inverseCode` vers le type canonique en échangeant les UUID.
+Pour un type symétrique, elle ordonne les UUID avant insertion ; une seule arête est stockée.
+L'unicité SQL directionnelle reste inchangée. Elle protège les créations concurrentes qui
+suivent cette normalisation, mais pas un outil tiers écrivant simultanément le sens opposé.
+Une Entity `ARCHIVED` ne peut être ni départ ni cible d'une nouvelle Relation. La création
+de Relation ne produit aucune `Revision` Entity.
+
 `Entity.kind = PLACE` exige `placeKind` ; pour toute autre valeur de `kind`, `placeKind`
 est null. Les valeurs initiales de `PlaceKind` sont `CITY`, `CONTINENT`, `REGION`, `SEA`,
 `OCEAN` et `OTHER`. `SESSION` est une fiche décrivant une partie JDR ; son enregistrement

@@ -56,5 +56,6 @@ pour les fiches importées.
 
 Ce jalon crée une seule fiche et une seule preuve initiale par opération. Les sources et
 preuves supplémentaires peuvent être consultées et corrigées, mais leur création séparée
-reste reportée. La création manuelle de Relations viendra en v0.5b. Aucune nouvelle table
-ou migration Prisma n'est nécessaire.
+reste reportée. La création manuelle de Relations est disponible depuis v0.5b ; voir
+[MANUAL-RELATIONS.md](MANUAL-RELATIONS.md). Aucune nouvelle table ou migration Prisma
+n'est nécessaire.

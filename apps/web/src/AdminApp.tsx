@@ -2,17 +2,20 @@ import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type {
-  AdminEntityDetail, AdminEntityListResponse, AdminEntityPatch, AdminManualCreateRequest, AdminStats,
+  AdminEntityDetail, AdminEntityListResponse, AdminEntityPatch, AdminManualCreateRequest, AdminManualRelationRequest, AdminStats,
   AuthSessionResponse, EditorialStatus, EntityKind, Visibility,
 } from '@hesta-codex/shared'
 import { AdminEditor } from './AdminEditor'
 import { AdminCreate } from './AdminCreate'
+import { AdminCreateRelation } from './AdminCreateRelation'
 import { AdminProvenance } from './AdminProvenance'
 import './Admin.css'
 
-type AdminRoute = { view: 'dashboard' } | { view: 'create' } | { view: 'entity'; slug: string } | { view: 'not-found' }
+type AdminRoute = { view: 'dashboard' } | { view: 'create' } | { view: 'relation-create'; slug: string } |
+  { view: 'entity'; slug: string } | { view: 'not-found' }
 type Load<T> = { phase: 'loading' } | { phase: 'ready'; data: T } | { phase: 'error'; status: number | null }
 const detailPath = /^\/admin\/fiches\/([a-z0-9]+(?:-[a-z0-9]+)*)\/?$/
+const relationCreatePath = /^\/admin\/fiches\/([a-z0-9]+(?:-[a-z0-9]+)*)\/nouvelle-relation\/?$/
 const statuses: EditorialStatus[] = ['DRAFT', 'PROPOSED', 'PUBLISHED', 'ARCHIVED']
 const visibilities: Visibility[] = ['PUBLIC', 'PLAYERS', 'GM', 'SECRET']
 const kinds: EntityKind[] = [
@@ -31,6 +34,8 @@ function readRoute(): AdminRoute {
   if (window.location.pathname === '/admin/nouvelle-fiche' || window.location.pathname === '/admin/nouvelle-fiche/') {
     return { view: 'create' }
   }
+  const relationMatch = relationCreatePath.exec(window.location.pathname)
+  if (relationMatch) return { view: 'relation-create', slug: relationMatch[1]! }
   const match = detailPath.exec(window.location.pathname)
   return match ? { view: 'entity', slug: match[1] } : { view: 'not-found' }
 }
@@ -116,6 +121,9 @@ function Detail({ entity, onNavigate, editing, provenanceEditing, busy, authExpi
       </div>
       {!editing && !provenanceEditing && entity.status !== 'ARCHIVED' &&
         <button className="admin-edit-button" type="button" onClick={onEdit}>Modifier</button>}
+      {!editing && !provenanceEditing && entity.status !== 'ARCHIVED' &&
+        <a className="admin-primary-link admin-add-relation" href={`/admin/fiches/${entity.slug}/nouvelle-relation`}
+          onClick={(event) => onNavigate(event, `/admin/fiches/${entity.slug}/nouvelle-relation`)}>Ajouter une relation</a>}
     </div>
     {error && <div className="admin-form-error" role="alert">{error.message}
       {error.status === 409 && error.code?.endsWith('_MODIFIED') &&
@@ -192,6 +200,7 @@ export function AdminApp() {
   const [mutationError, setMutationError] = useState<{ status: number | null; message: string;
     code?: string; issues?: Array<{ path: string; message: string }> } | null>(null)
   const [createdNotice, setCreatedNotice] = useState(false)
+  const [createdRelationNotice, setCreatedRelationNotice] = useState(false)
   const mainRef = useRef<HTMLElement>(null)
   const focusAfterNavigation = useRef(false)
   const currentPath = useRef(window.location.pathname)
@@ -199,7 +208,7 @@ export function AdminApp() {
   dirtyRef.current = editDirty
 
   const isAdmin = session.phase === 'ready' && session.data.authenticated && session.data.isAdmin
-  const activeSlug = route.view === 'entity' ? route.slug : null
+  const activeSlug = route.view === 'entity' || route.view === 'relation-create' ? route.slug : null
   const listKey = JSON.stringify([status, visibility, kind, query, page])
 
   useEffect(() => {
@@ -214,6 +223,7 @@ export function AdminApp() {
       setEditDirty(false)
       setAuthExpired(false)
       setCreatedNotice(false)
+      setCreatedRelationNotice(false)
       focusAfterNavigation.current = true
       setRoute(readRoute())
     }
@@ -317,6 +327,7 @@ export function AdminApp() {
       setEditDirty(false)
       setAuthExpired(false)
       setCreatedNotice(false)
+      setCreatedRelationNotice(false)
       setMutationError(null)
       focusAfterNavigation.current = true
       window.history.pushState(null, '', path)
@@ -352,7 +363,7 @@ export function AdminApp() {
     const status = errorStatus(error)
     setBusy(false)
     if (status === 401) {
-      setAuthExpired(editing || provenanceEditing || route.view === 'create')
+      setAuthExpired(editing || provenanceEditing || route.view === 'create' || route.view === 'relation-create')
       setMutationError({ status, message: 'Session expirée. Vos modifications restent affichées : copiez-les avant de vous reconnecter.' })
       setSession({ phase: 'ready', data: { authenticated: false, isAdmin: false, user: null } })
     } else if (status === 403) {
@@ -406,6 +417,22 @@ export function AdminApp() {
       focusAfterNavigation.current = true
       window.history.pushState(null, '', path)
       setRoute({ view: 'entity', slug: created.slug })
+    } catch (error) { mutationFailed(error) }
+  }
+
+  async function createRelation(input: AdminManualRelationRequest) {
+    if (busy || authExpired || !isAdmin || route.view !== 'relation-create') return
+    setBusy(true)
+    setMutationError(null)
+    try {
+      const updated = await mutateJson<AdminEntityDetail>('/api/admin/relations', 'POST', input)
+      mutationSucceeded(updated)
+      setCreatedRelationNotice(true)
+      const path = `/admin/fiches/${updated.slug}`
+      currentPath.current = path
+      focusAfterNavigation.current = true
+      window.history.pushState(null, '', path)
+      setRoute({ view: 'entity', slug: updated.slug })
     } catch (error) { mutationFailed(error) }
   }
 
@@ -514,8 +541,23 @@ export function AdminApp() {
       {(isAdmin || (authExpired && route.view === 'create')) && route.view === 'create' &&
         <AdminCreate busy={busy} disabled={authExpired} error={mutationError} onCreate={(input) => void create(input)}
           onClearError={() => setMutationError(null)} onDirtyChange={setEditDirty} onNavigate={onNavigate} />}
+      {(isAdmin || (authExpired && route.view === 'relation-create')) && route.view === 'relation-create' && <>
+        {(detailFor !== activeSlug || detail.phase === 'loading') && <StateMessage>Chargement de la fiche de départ…</StateMessage>}
+        {detailFor === activeSlug && detail.phase === 'error' && <div className="admin-state" role="alert">
+          <h1>{detail.status === 404 ? 'Fiche introuvable' : 'Fiche indisponible'}</h1>
+          <a href="/admin" onClick={(event) => onNavigate(event, '/admin')}>Retour au tableau de bord</a></div>}
+        {detailFor === activeSlug && detail.phase === 'ready' && detail.data.status === 'ARCHIVED' &&
+          <div className="admin-state" role="alert"><h1>Fiche archivée</h1>
+            <p>Une fiche archivée ne peut pas recevoir de nouvelle relation.</p>
+            <a href={`/admin/fiches/${detail.data.slug}`} onClick={(event) => onNavigate(event, `/admin/fiches/${detail.data.slug}`)}>Retour à la fiche</a></div>}
+        {detailFor === activeSlug && detail.phase === 'ready' && detail.data.status !== 'ARCHIVED' &&
+          <AdminCreateRelation entity={detail.data} busy={busy}
+          disabled={authExpired} error={mutationError} onCreate={(input) => void createRelation(input)}
+          onClearError={() => setMutationError(null)} onDirtyChange={setEditDirty} onNavigate={onNavigate} />}
+      </>}
       {(isAdmin || (authExpired && (editing || provenanceEditing))) && route.view === 'entity' && <>
         {createdNotice && <p className="admin-message" role="status">Fiche créée en proposition.</p>}
+        {createdRelationNotice && <p className="admin-message" role="status">Relation créée en proposition.</p>}
         {(detailFor !== activeSlug || detail.phase === 'loading') && <StateMessage>Chargement de la fiche…</StateMessage>}
         {detailFor === activeSlug && detail.phase === 'error' && <div className="admin-state" role="alert"><h1>{detail.status === 404 ? 'Fiche introuvable' : 'Fiche indisponible'}</h1>
           <a href="/admin" onClick={(event) => onNavigate(event, '/admin')}>Retour au tableau de bord</a></div>}

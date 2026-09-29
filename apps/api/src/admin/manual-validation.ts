@@ -15,7 +15,7 @@ const entity = editorialBase.extend({
   visibility: z.enum(Visibility).optional().default('GM'),
 }).superRefine(checkPlaceKind)
 
-const newSource = sourceFieldsSchema.extend({
+export const newSourceSchema = sourceFieldsSchema.extend({
   externalId: sourceFieldsSchema.shape.externalId.optional().default(null),
   url: sourceFieldsSchema.shape.url.optional().default(null),
   authorLabel: sourceFieldsSchema.shape.authorLabel.optional().default(null),
@@ -23,7 +23,7 @@ const newSource = sourceFieldsSchema.extend({
   visibility: z.enum(Visibility).optional().default('GM'),
 })
 
-const evidence = evidenceFieldsSchema.extend({
+export const initialEvidenceSchema = evidenceFieldsSchema.extend({
   sourceExcerpt: evidenceFieldsSchema.shape.sourceExcerpt.optional().default(null),
   locator: evidenceFieldsSchema.shape.locator.optional().default(null),
   timeStartSeconds: evidenceFieldsSchema.shape.timeStartSeconds.optional().default(null),
@@ -32,13 +32,18 @@ const evidence = evidenceFieldsSchema.extend({
   visibility: z.enum(Visibility).optional().default('GM'),
 }).superRefine(checkEvidenceTimeOrder)
 
+export const creationSourceSchema = z.discriminatedUnion('mode', [
+  z.strictObject({ mode: z.literal('existing'), sourceId: z.uuid() }),
+  z.strictObject({ mode: z.literal('new'), data: newSourceSchema }),
+])
+
+export type CreationSource = z.infer<typeof creationSourceSchema>
+export type InitialEvidence = z.infer<typeof initialEvidenceSchema>
+
 export const manualCreateSchema = z.strictObject({
   entity,
-  source: z.discriminatedUnion('mode', [
-    z.strictObject({ mode: z.literal('existing'), sourceId: z.uuid() }),
-    z.strictObject({ mode: z.literal('new'), data: newSource }),
-  ]),
-  evidence,
+  source: creationSourceSchema,
+  evidence: initialEvidenceSchema,
 })
 
 export type ManualCreateInput = z.infer<typeof manualCreateSchema>

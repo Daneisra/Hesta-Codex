@@ -45,6 +45,8 @@ portent `Cache-Control: no-store`.
 | `POST /api/admin/entities` | Crée une fiche `PROPOSED` avec une Source existante ou nouvelle, une Evidence et une `Revision #1` dans une transaction ; retourne la fiche admin (`201`). |
 | `GET /api/admin/entities/:slug` | Fiche éditoriale complète, preuves avec Source, relations entrantes/sortantes avec preuves, historique des Revision ; `404` si absente. |
 | `GET /api/admin/sources` | `{ items, total, page, pageSize }` ; 20 Sources par page, recherche facultative `q` (2 à 100 caractères) et `page` (1 à 1000). |
+| `GET /api/admin/relation-types` | Catalogue complet des types et sens inverses, trié par code. |
+| `POST /api/admin/relations` | Crée une Relation `PROPOSED` avec Source et Evidence initiales dans une transaction ; retourne la fiche admin de départ (`201`). |
 | `PATCH /api/admin/entities/:slug` | Remplace les champs éditables de la fiche ; retourne la fiche et ses révisions à jour. |
 | `POST /api/admin/entities/:slug/publish` | Publie une fiche `PROPOSED` sourcée ; retourne la fiche à jour. |
 | `POST /api/admin/entities/:slug/unpublish` | Retire une fiche `PUBLISHED` de la publication ; retourne la fiche à jour. |
@@ -68,11 +70,13 @@ modifiés via le formulaire. Une fiche absente donne `404`, une version obsolèt
 complets et stricts avec `expectedUpdatedAt`. Une version périmée donne respectivement
 `409 RELATION_MODIFIED`, `SOURCE_MODIFIED` ou `EVIDENCE_MODIFIED`. Une collision de
 `(Source.kind, Source.externalId)` donne `409 SOURCE_CONFLICT`. Les champs d'identité et de cible
-ne sont pas éditables. La création manuelle d'Entity est la seule route de création admin ;
-elle refuse les champs inconnus, le statut et les IDs de provenance injectés par le client.
+ne sont pas éditables. Les routes de création admin sont limitées aux fiches et relations ;
+elles refusent les champs inconnus, le statut et les IDs de provenance injectés par le client.
 Un slug déjà utilisé donne `409 ENTITY_CONFLICT`, une Source inexistante `404 SOURCE_NOT_FOUND`,
-et un identifiant externe de Source déjà utilisé `409 SOURCE_CONFLICT`. Aucune route de
-suppression ou de création de Relation n'est exposée. Voir [MANUAL-CREATION.md](MANUAL-CREATION.md).
+et un identifiant externe de Source déjà utilisé `409 SOURCE_CONFLICT`. La création de Relation
+accepte le code direct ou inverse du catalogue, mais interdit les doublons et toute fiche
+`ARCHIVED`. Voir [MANUAL-CREATION.md](MANUAL-CREATION.md) et
+[MANUAL-RELATIONS.md](MANUAL-RELATIONS.md). Aucune route de suppression n'est exposée.
 
 Toutes les mutations admin exigent une session et une Origin identique à l'origine configurée,
 y compris si le cookie est présent. Une Origin absente ou différente donne `403 INVALID_ORIGIN`.
