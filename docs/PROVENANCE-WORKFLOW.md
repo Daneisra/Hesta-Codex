@@ -5,6 +5,34 @@ Les administrateurs autorisés inspectent et corrigent les données importées d
 initiales ; voir [MANUAL-RELATIONS.md](MANUAL-RELATIONS.md). Aucune suppression n'est disponible.
 Les champs d'identité des liens et des preuves restent immuables.
 
+## Enrichissement v0.5c
+
+Sur une fiche ou relation existante, « Ajouter une preuve » associe une Source existante ou
+crée une Source puis une Evidence. La cible Entity ou Relation et l'ID de Source sont décidés
+par l'API, jamais par le corps de requête. La Source existante n'est pas modifiée. Une nouvelle
+Source avec `(kind, externalId)` déjà utilisé donne `409 SOURCE_CONFLICT` ; sans identifiant
+externe, un label semblable ne provoque pas de fusion automatique. La Source et la preuve sont
+écrites dans une transaction. Un échec de la preuve annule également la nouvelle Source.
+
+La même cible, la même Source et les mêmes `claimText`, `sourceExcerpt`, `locator`,
+`timeStartSeconds` et `timeEndSeconds` constituent un doublon certain : `409 EVIDENCE_CONFLICT`.
+`confidence` et `visibility` ne distinguent pas un nouveau passage ; corriger la preuve
+existante permet de les changer. Deux Sources distinctes peuvent soutenir le même énoncé.
+L'interface signale un doublon probable quand une preuve de la même Source a le même énoncé
+ou le même repère temporel, sans empêcher une preuve effectivement différente. L'API verrouille
+la ligne cible avant la recherche du doublon et l'insertion, afin de sérialiser les ajouts
+concurrents via ces routes. Les anciens outils d'écriture non coordonnés ne bénéficient pas de
+ce verrouillage ; aucune contrainte d'unicité SQL n'existe encore sur les longs textes Evidence.
+
+Une Entity `ARCHIVED` refuse l'ajout de provenance. Une Relation `ARCHIVED`, ou dont l'une des
+deux fiches est `ARCHIVED`, le refuse aussi. L'ajout ne change ni Entity ni Relation et ne crée
+aucune Revision. Il ne publie aucun objet. La section admin regroupe séparément les preuves
+directement liées à la fiche et celles de chaque relation, par Source dans chaque bloc. Une
+Source utilisée dans les deux blocs apparaît dans chacun pour conserver le contexte de la preuve.
+La correction d'une Evidence déjà liée à une fiche ou relation archivée est également refusée.
+La Source reste un document indépendant et peut être corrigée depuis une autre fiche où elle
+est utilisée ; elle n'est jamais modifiée implicitement par l'ajout d'une preuve.
+
 ```text
 Source → Evidence → Entity OU Relation
 

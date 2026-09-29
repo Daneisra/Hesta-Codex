@@ -28,10 +28,10 @@ function setup(options: { data?: AdminEntityDetail; result?: boolean; disabled?:
   const onNavigate = vi.fn()
   const view = render(<AdminProvenance entity={options.data ?? entity} onNavigate={onNavigate} onMutate={onMutate}
     onDirtyChange={onDirtyChange} onEditingChange={onEditingChange} busy={false}
-    disabled={options.disabled ?? false} />)
+    disabled={options.disabled ?? false} error={null} />)
   return { onMutate, onDirtyChange, onEditingChange, setDisabled(disabled: boolean) {
     view.rerender(<AdminProvenance entity={options.data ?? entity} onNavigate={onNavigate} onMutate={onMutate}
-      onDirtyChange={onDirtyChange} onEditingChange={onEditingChange} busy={false} disabled={disabled} />)
+      onDirtyChange={onDirtyChange} onEditingChange={onEditingChange} busy={false} disabled={disabled} error={null} />)
   } }
 }
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
@@ -49,11 +49,11 @@ describe('relations et provenance admin', () => {
     expect(screen.queryByText('situé dans')).toBeNull()
   })
 
-  it('affiche une Source partagée une seule fois malgré plusieurs preuves et relations', () => {
+  it('affiche une Source partagée une fois par bloc, avec les preuves de chaque cible', () => {
     const relatedEvidence = { ...entity.evidence[0]!, id: 'evidence-relation', claimText: 'Autre preuve' }
     setup({ data: { ...entity, outgoingRelations: [{ ...entity.outgoingRelations[0]!,
       evidence: [relatedEvidence] }] } })
-    expect(screen.getAllByRole('button', { name: 'Modifier la source' })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: 'Modifier la source' })).toHaveLength(2)
     expect(screen.getByText('Autre preuve')).toBeTruthy()
   })
 
@@ -130,5 +130,44 @@ describe('relations et provenance admin', () => {
     expect((screen.getByRole('textbox', { name: 'Description' }) as HTMLTextAreaElement).value).toContain('corrigée')
     setDisabled(true)
     expect(screen.getByRole('button', { name: 'Enregistrer' }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('regroupe plusieurs preuves par Source sur la fiche et sur la relation', () => {
+    const second = { ...entity.evidence[0]!, id: 'evidence-2', claimText: 'Autre passage' }
+    const relationProof = { ...entity.evidence[0]!, id: 'evidence-3', claimText: 'Preuve du lien',
+      source: { ...entity.evidence[0]!.source, id: 'source-2', label: 'Session JDR' } }
+    setup({ data: { ...entity, evidence: [entity.evidence[0]!, second],
+      outgoingRelations: [{ ...entity.outgoingRelations[0]!, evidence: [relationProof] }] } })
+    expect(screen.getByText(/1 source\(s\) · 2 preuve\(s\) directement sur la fiche/)).toBeTruthy()
+    expect(screen.getByText(/Preuves de la relation · 1 source\(s\) · 1 preuve\(s\)/)).toBeTruthy()
+    expect(screen.getByText('Autre passage')).toBeTruthy()
+    expect(screen.getByText('Preuve du lien')).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: 'Modifier la source' })).toHaveLength(2)
+  })
+
+  it('n’ouvre qu’un seul éditeur pour une Source partagée entre fiche et relation', async () => {
+    const user = userEvent.setup()
+    setup({ data: { ...entity, outgoingRelations: [{ ...entity.outgoingRelations[0]!, evidence: [
+      { ...entity.evidence[0]!, id: 'relation-evidence', claimText: 'Preuve de la relation' },
+    ] }] } })
+    const buttons = screen.getAllByRole('button', { name: 'Modifier la source' })
+    expect(buttons).toHaveLength(2)
+    await user.click(buttons[1]!)
+    expect(screen.getAllByRole('button', { name: 'Enregistrer' })).toHaveLength(1)
+  })
+
+  it('ajoute une preuve à la relation et affiche la confirmation sans modifier la fiche', async () => {
+    const user = userEvent.setup()
+    const { onMutate } = setup()
+    await user.click(screen.getByRole('button', { name: 'Ajouter une preuve' }))
+    await user.click(screen.getByRole('radio', { name: 'Nouvelle source' }))
+    await user.type(screen.getByRole('textbox', { name: 'Label' }), 'Session JDR')
+    await user.type(screen.getByRole('textbox', { name: 'Énoncé' }), 'Le lien est attesté')
+    await user.click(screen.getByRole('button', { name: 'Vérifier avant ajout' }))
+    expect(screen.getByText(/Barolt.*Archipel/)).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Ajouter la preuve' }))
+    expect(onMutate).toHaveBeenCalledWith('/api/admin/relations/relation-1/evidence', 'POST',
+      expect.objectContaining({ evidence: expect.objectContaining({ claimText: 'Le lien est attesté' }) }))
+    expect(screen.queryByRole('button', { name: 'Vérifier avant ajout' })).toBeNull()
   })
 })

@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { EditorialStatus, EntityKind, Visibility } from '../prisma-client/enums.ts'
 import { adminSession } from '../auth/routes.js'
 import type { EditorialService } from './editorial.js'
+import type { EvidenceAddService } from './evidence-add.js'
+import { evidenceAddSchema } from './evidence-add-validation.js'
 import type { ManualService } from './manual.js'
 import { manualCreateSchema, sourceLookupSchema } from './manual-validation.js'
 import type { ManualRelationService } from './manual-relations.js'
@@ -31,7 +33,8 @@ function editorLabel(response: { locals: Record<string, unknown> }): string {
 }
 
 export function createAdminRouter(store: AdminStore, editorial: EditorialService,
-  provenance?: ProvenanceService, manual?: ManualService, manualRelations?: ManualRelationService) {
+  provenance?: ProvenanceService, manual?: ManualService, manualRelations?: ManualRelationService,
+  evidenceAdd?: EvidenceAddService) {
   const router = Router()
 
   router.get('/stats', async (_request, response) => {
@@ -85,6 +88,36 @@ export function createAdminRouter(store: AdminStore, editorial: EditorialService
         return
       }
       response.status(201).json(await manualRelations.create(parsed.data))
+    })
+  }
+
+  if (evidenceAdd) {
+    const parseProof = (body: unknown, response: Response) => {
+      const parsed = evidenceAddSchema.safeParse(body)
+      if (parsed.success) return parsed.data
+      const issues = parsed.error.issues.flatMap((issue) => issue.code === 'unrecognized_keys'
+        ? issue.keys.map((key) => ({ path: [...issue.path, key].join('.'), message: 'Champ inconnu' }))
+        : [{ path: issue.path.join('.'), message: issue.message }])
+      response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'Preuve invalide.', issues } })
+      return null
+    }
+    router.post('/entities/:slug/evidence', async (request, response) => {
+      const slug = request.params.slug
+      if (!validSlug(slug)) {
+        response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'Slug invalide' } })
+        return
+      }
+      const input = parseProof(request.body, response)
+      if (input) response.status(201).json(await evidenceAdd.toEntity(slug, input))
+    })
+    router.post('/relations/:id/evidence', async (request, response) => {
+      const id = request.params.id
+      if (typeof id !== 'string' || !z.uuid().safeParse(id).success) {
+        response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'Identifiant invalide' } })
+        return
+      }
+      const input = parseProof(request.body, response)
+      if (input) response.status(201).json(await evidenceAdd.toRelation(id, input))
     })
   }
 

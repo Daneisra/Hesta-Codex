@@ -121,9 +121,19 @@ export function createPrismaProvenanceService(prisma: PrismaClient): ProvenanceS
         const row = await tx.evidence.findUnique({ where: { id }, select: {
           id: true, claimText: true, sourceExcerpt: true, locator: true, timeStartSeconds: true,
           timeEndSeconds: true, confidence: true, visibility: true, updatedAt: true,
+          entity: { select: { status: true } },
+          relation: { select: { status: true, fromEntity: { select: { status: true } },
+            toEntity: { select: { status: true } } } },
         } })
         if (!row) throw new EditorialError(404, 'NOT_FOUND', 'Preuve introuvable')
         expectFresh(row.updatedAt, input.expectedUpdatedAt, 'evidence')
+        if (row.entity?.status === 'ARCHIVED' || row.relation?.fromEntity.status === 'ARCHIVED' ||
+          row.relation?.toEntity.status === 'ARCHIVED') {
+          throw new EditorialError(409, 'ENTITY_ARCHIVED', 'Fiche archivée en lecture seule.')
+        }
+        if (row.relation?.status === 'ARCHIVED') {
+          throw new EditorialError(409, 'RELATION_ARCHIVED', 'Relation archivée en lecture seule.')
+        }
         if (row.claimText === input.claimText && row.sourceExcerpt === input.sourceExcerpt && row.locator === input.locator &&
           row.timeStartSeconds === input.timeStartSeconds && row.timeEndSeconds === input.timeEndSeconds &&
           (row.confidence?.toNumber() ?? null) === input.confidence && row.visibility === input.visibility) {

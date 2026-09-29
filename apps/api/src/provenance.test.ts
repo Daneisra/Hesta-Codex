@@ -31,7 +31,10 @@ function fakeDatabase() {
   const source = { id: sourceId, kind: 'MANUAL', label: 'Notes', externalId: null as string | null,
     url: null, authorLabel: null, publishedAt: null, visibility: 'GM', updatedAt: date }
   const evidence = { id: evidenceId, claimText: 'Énoncé', sourceExcerpt: null, locator: null,
-    timeStartSeconds: null, timeEndSeconds: null, confidence: null, visibility: 'GM', updatedAt: date }
+    timeStartSeconds: null, timeEndSeconds: null, confidence: null, visibility: 'GM', updatedAt: date,
+    entity: { status: 'PROPOSED' } as null | { status: string },
+    relation: null as null | { status: string; fromEntity: { status: string };
+      toEntity: { status: string } } }
   const writes: Array<{ table: string; where: Record<string, unknown>; data: Record<string, unknown> }> = []
   let collision = false
   let uniqueConflict = false
@@ -135,6 +138,20 @@ test('Source and Evidence use conditional updates, no-op, and safe unique confli
   racedEvidence.setCollision(true)
   await assert.rejects(racedEvidence.service.patchEvidence(evidenceId, { ...evidencePatch, claimText: 'Concurrent' }),
     { code: 'EVIDENCE_MODIFIED' })
+})
+
+test('Evidence of an archived Entity or Relation is read-only', async () => {
+  const db = fakeDatabase()
+  db.evidence.entity!.status = 'ARCHIVED'
+  await assert.rejects(db.service.patchEvidence(evidenceId, evidencePatch), { code: 'ENTITY_ARCHIVED' })
+  db.evidence.entity = null
+  db.evidence.relation = { status: 'ARCHIVED', fromEntity: { status: 'PROPOSED' },
+    toEntity: { status: 'PROPOSED' } }
+  await assert.rejects(db.service.patchEvidence(evidenceId, evidencePatch), { code: 'RELATION_ARCHIVED' })
+  db.evidence.relation.status = 'PROPOSED'
+  db.evidence.relation.toEntity.status = 'ARCHIVED'
+  await assert.rejects(db.service.patchEvidence(evidenceId, evidencePatch), { code: 'ENTITY_ARCHIVED' })
+  assert.equal(db.writes.length, 0)
 })
 
 test('strict provenance validation rejects identity changes, bad URL, timestamps and confidence', () => {

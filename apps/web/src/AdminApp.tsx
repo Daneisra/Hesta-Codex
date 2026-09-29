@@ -91,14 +91,15 @@ function StateMessage({ children }: { children: string }) {
 }
 
 function Detail({ entity, onNavigate, editing, provenanceEditing, busy, authExpired, error, onEdit, onCancel, onSave,
-  onDirtyChange, onWorkflow, onReload, onProvenanceMutation, onProvenanceEditingChange }: {
+  onDirtyChange, onWorkflow, onReload, onProvenanceMutation, onProvenanceEditingChange, evidenceNotice }: {
   entity: AdminEntityDetail
   onNavigate: (event: MouseEvent<HTMLAnchorElement>, path: string) => void
   editing: boolean
   provenanceEditing: boolean
   busy: boolean
   authExpired: boolean
-  error: { status: number | null; message: string; code?: string } | null
+  error: { status: number | null; message: string; code?: string;
+    issues?: Array<{ path: string; message: string }> } | null
   onEdit: () => void
   onCancel: () => void
   onSave: (input: AdminEntityPatch) => void
@@ -107,9 +108,11 @@ function Detail({ entity, onNavigate, editing, provenanceEditing, busy, authExpi
   onReload: () => void
   onProvenanceMutation: (path: string, method: 'PATCH' | 'POST', body: unknown) => Promise<boolean>
   onProvenanceEditingChange: (editing: boolean) => void
+  evidenceNotice: boolean
 }) {
   return <article className="admin-detail">
     <a className="admin-back" href="/admin" onClick={(event) => onNavigate(event, '/admin')}>← Tableau de bord</a>
+    {evidenceNotice && <p className="admin-message" role="status">Preuve ajoutée.</p>}
     <div className="admin-detail-header">
       <p className="admin-eyebrow">Fiche éditoriale · {entity.kind}{entity.placeKind ? ` / ${entity.placeKind}` : ''}</p>
       <h1>{entity.title}</h1>
@@ -158,7 +161,7 @@ function Detail({ entity, onNavigate, editing, provenanceEditing, busy, authExpi
           <button type="button" disabled={busy} onClick={() => onWorkflow('unpublish')}>Retirer de la publication</button>
         </>}
       </section>}
-    <AdminProvenance entity={entity} onNavigate={onNavigate} onMutate={onProvenanceMutation}
+    <AdminProvenance entity={entity} onNavigate={onNavigate} onMutate={onProvenanceMutation} error={error}
       onDirtyChange={onDirtyChange} onEditingChange={onProvenanceEditingChange} busy={busy} disabled={authExpired || editing} />
     <section className="admin-section">
       <h2>Historique</h2>
@@ -201,6 +204,7 @@ export function AdminApp() {
     code?: string; issues?: Array<{ path: string; message: string }> } | null>(null)
   const [createdNotice, setCreatedNotice] = useState(false)
   const [createdRelationNotice, setCreatedRelationNotice] = useState(false)
+  const [evidenceNotice, setEvidenceNotice] = useState(false)
   const mainRef = useRef<HTMLElement>(null)
   const focusAfterNavigation = useRef(false)
   const currentPath = useRef(window.location.pathname)
@@ -224,6 +228,7 @@ export function AdminApp() {
       setAuthExpired(false)
       setCreatedNotice(false)
       setCreatedRelationNotice(false)
+      setEvidenceNotice(false)
       focusAfterNavigation.current = true
       setRoute(readRoute())
     }
@@ -328,6 +333,7 @@ export function AdminApp() {
       setAuthExpired(false)
       setCreatedNotice(false)
       setCreatedRelationNotice(false)
+      setEvidenceNotice(false)
       setMutationError(null)
       focusAfterNavigation.current = true
       window.history.pushState(null, '', path)
@@ -444,6 +450,7 @@ export function AdminApp() {
       await mutateJson(path, method, body)
       setBusy(false)
       setMutationError(null)
+      if (method === 'POST' && path.endsWith('/evidence')) setEvidenceNotice(true)
       setDataRefresh((value) => value + 1)
       setDetailRefresh((value) => value + 1)
       return true
@@ -562,7 +569,8 @@ export function AdminApp() {
         {detailFor === activeSlug && detail.phase === 'error' && <div className="admin-state" role="alert"><h1>{detail.status === 404 ? 'Fiche introuvable' : 'Fiche indisponible'}</h1>
           <a href="/admin" onClick={(event) => onNavigate(event, '/admin')}>Retour au tableau de bord</a></div>}
         {detailFor === activeSlug && detail.phase === 'ready' && <Detail entity={detail.data} onNavigate={onNavigate}
-          editing={editing} provenanceEditing={provenanceEditing} busy={busy} authExpired={authExpired} error={mutationError}
+          editing={editing} provenanceEditing={provenanceEditing} busy={busy} authExpired={authExpired}
+          error={mutationError} evidenceNotice={evidenceNotice}
           onEdit={() => { setMutationError(null); setEditing(true) }} onCancel={cancelEdit}
           onSave={(input) => void save(input)} onDirtyChange={setEditDirty}
           onProvenanceMutation={provenanceMutation} onProvenanceEditingChange={setProvenanceEditing}

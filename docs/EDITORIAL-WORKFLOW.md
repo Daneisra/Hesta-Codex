@@ -70,3 +70,8 @@ La création ne publie jamais la fiche. Voir [MANUAL-CREATION.md](MANUAL-CREATIO
 Depuis v0.5b, une Relation peut également être créée depuis une fiche non archivée, avec une
 Source et une Evidence initiales. Elle reste `PROPOSED` ; les fiches et leurs Revision ne sont
 pas modifiées. Voir [MANUAL-RELATIONS.md](MANUAL-RELATIONS.md).
+
+v0.5c permet d'ajouter une Evidence à une fiche ou relation existante. Cette opération enrichit
+sa provenance sans modifier le contenu éditorial, le statut, la visibilité ou les Revision de
+la cible. Aucune publication automatique ne résulte d'une nouvelle preuve. Une fiche archivée
+et une relation archivée ou reliée à une fiche archivée restent en lecture seule pour cet ajout.

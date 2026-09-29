@@ -115,6 +115,11 @@ et les conflits. Depuis une fiche non archivée, « Ajouter une relation » cré
 inverses et symétriques sont normalisés côté API ; voir
 [docs/MANUAL-RELATIONS.md](docs/MANUAL-RELATIONS.md).
 
+Depuis v0.5c, « Ajouter une preuve » enrichit une fiche ou une relation existante avec
+une Source existante ou nouvelle. L'ajout est transactionnel, refuse les doublons certains
+et ne crée aucune Revision ni publication. Les preuves sont regroupées par Source dans
+l'administration ; voir [docs/PROVENANCE-WORKFLOW.md](docs/PROVENANCE-WORKFLOW.md).
+
 `/admin` est réservé aux Discord IDs inscrits dans `DISCORD_ADMIN_IDS`. Un administrateur y voit
 les fiches de tout statut et toute visibilité, leurs sources, preuves, relations et révisions.
 Il peut modifier les champs éditoriaux d'une fiche non archivée, publier une proposition ou

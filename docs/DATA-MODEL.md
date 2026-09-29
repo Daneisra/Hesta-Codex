@@ -92,7 +92,7 @@ prévenir les collisions entre un `code` et l'`inverseCode` d'un autre type.
 
 ## Reporté
 
-Permissions fines, création/suppression des relations/sources/preuves, connecteurs d'import, révisions des relations, dates structurées
+Permissions fines, suppression des relations/sources/preuves, connecteurs d'import, révisions des relations, dates structurées
 du calendrier d'Hesta, recherche plein texte, extraction des `[[wikilinks]]` et calcul du
 graphe affiché. Les UUID, index, alias, Markdown et relations orientées en préparent la base.
 
@@ -117,3 +117,9 @@ v0.5a utilise le schéma existant sans migration. Une création manuelle admin l
 obligatoirement une nouvelle `Entity` à une `Source` existante ou nouvelle par une `Evidence`
 et produit `Revision #1` dans la même transaction. La fiche commence en `PROPOSED`, avec
 `publishedAt = null` et `visibility = GM` par défaut. Voir [MANUAL-CREATION.md](MANUAL-CREATION.md).
+
+v0.5c ajoute des preuves à une `Entity` ou `Relation` existante sans migration. Le service
+verrouille la ligne cible avant de comparer les preuves et d'insérer l'`Evidence`, ce qui
+sérialise deux ajouts concurrents par cette API. Une Source nouvelle est créée dans la même
+transaction. Le contenu, les dates de mise à jour et les Revision des fiches et relations
+restent inchangés ; seule la nouvelle Evidence (et sa Source éventuelle) est ajoutée.

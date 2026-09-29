@@ -44,7 +44,7 @@
 .admin-stats > div { display: grid; gap: .3rem; padding: 1.2rem; border: 1px solid #394760; border-radius: .6rem; background: #142036; }
 .admin-stats strong { font-family: Georgia, 'Times New Roman', serif; color: #e5c68b; font-size: 2rem; font-weight: 500; }
 .admin-stats span { color: #c3cde0; font-size: .86rem; }
-.admin-section { min-width: 0; padding: clamp(1rem, 2.4vw, 1.7rem); border: 1px solid #344158; border-radius: .7rem; background: #111a2a; }
+.admin-section { min-width: 0; padding: clamp(1rem, 2.4vw, 1.7rem); border: 1px solid #344158; border-radius: .7rem; background: #111a2a; overflow-wrap: anywhere; }
 .admin-section + .admin-section { margin-top: 1rem; }
 .admin-section h2, .admin-section h3 { margin-top: 0; font-family: Georgia, 'Times New Roman', serif; font-weight: 500; }
 .admin-section-title { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .5rem; }
@@ -105,7 +105,10 @@
 .admin-editor-preview h3 { margin: 0 0 .8rem; }
 .admin-editor-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: .7rem; margin-top: 1.2rem; }
 .admin-provenance-editor { margin-top: 1rem; padding: 1rem; border: 1px solid #596781; border-radius: .5rem; }
-.admin-source-card { margin-top: 1rem; padding: .8rem; border-left: 2px solid #9e88ba; background: #101a2d; }
+.admin-source-card { min-width: 0; margin-top: 1rem; padding: .8rem; border-left: 2px solid #9e88ba; background: #101a2d; overflow-wrap: anywhere; }
+.admin-add-evidence { min-width: 0; margin-top: 1rem; }
+.admin-add-evidence .admin-editor-grid { margin-top: 1rem; }
+.admin-warning { padding: .7rem; border-left: 2px solid #d7af6b; background: #332b25; overflow-wrap: anywhere; }
 .admin-source-card p { margin: .35rem 0; }
 .admin-evidence-list button, .admin-relation-list button { margin-top: .5rem; }
 .admin-relation-list .admin-publication { margin: .6rem 0; }

@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { createApp } from './app.js'
 import { createPrismaAdminStore } from './admin/store.js'
 import { createPrismaEditorialService } from './admin/editorial.js'
+import { createPrismaEvidenceAddService } from './admin/evidence-add.js'
 import { createPrismaManualService } from './admin/manual.js'
 import { createPrismaManualRelationService } from './admin/manual-relations.js'
 import { createPrismaProvenanceService } from './admin/provenance.js'
@@ -32,6 +33,7 @@ const app = createApp(createPrismaStore(prisma), {
   editorial: createPrismaEditorialService(prisma),
   manual: createPrismaManualService(prisma),
   manualRelations: createPrismaManualRelationService(prisma),
+  evidenceAdd: createPrismaEvidenceAddService(prisma),
   provenance: createPrismaProvenanceService(prisma),
 })
 const server = app.listen(port, () => {

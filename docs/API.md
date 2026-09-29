@@ -47,6 +47,8 @@ portent `Cache-Control: no-store`.
 | `GET /api/admin/sources` | `{ items, total, page, pageSize }` ; 20 Sources par page, recherche facultative `q` (2 à 100 caractères) et `page` (1 à 1000). |
 | `GET /api/admin/relation-types` | Catalogue complet des types et sens inverses, trié par code. |
 | `POST /api/admin/relations` | Crée une Relation `PROPOSED` avec Source et Evidence initiales dans une transaction ; retourne la fiche admin de départ (`201`). |
+| `POST /api/admin/entities/:slug/evidence` | Ajoute une Evidence à une fiche avec Source existante ou nouvelle ; retourne `{ id }` (`201`). |
+| `POST /api/admin/relations/:id/evidence` | Ajoute une Evidence à une relation avec Source existante ou nouvelle ; retourne `{ id }` (`201`). |
 | `PATCH /api/admin/entities/:slug` | Remplace les champs éditables de la fiche ; retourne la fiche et ses révisions à jour. |
 | `POST /api/admin/entities/:slug/publish` | Publie une fiche `PROPOSED` sourcée ; retourne la fiche à jour. |
 | `POST /api/admin/entities/:slug/unpublish` | Retire une fiche `PUBLISHED` de la publication ; retourne la fiche à jour. |
@@ -66,7 +68,7 @@ Le `PATCH` exige un JSON complet contenant `title`, `summary`, `bodyMarkdown`, `
 le slug, le statut, les dates, `metadata`, les relations et les preuves ne peuvent pas être
 modifiés via le formulaire. Une fiche absente donne `404`, une version obsolète
 `409 ENTITY_MODIFIED`, un statut inadapté `409 INVALID_STATUS` et une publication sans preuve
-`422 EVIDENCE_REQUIRED`. Les nouvelles routes de provenance exigent des UUID et des JSON
+`422 EVIDENCE_REQUIRED`. Les routes de correction de provenance exigent des UUID et des JSON
 complets et stricts avec `expectedUpdatedAt`. Une version périmée donne respectivement
 `409 RELATION_MODIFIED`, `SOURCE_MODIFIED` ou `EVIDENCE_MODIFIED`. Une collision de
 `(Source.kind, Source.externalId)` donne `409 SOURCE_CONFLICT`. Les champs d'identité et de cible
@@ -77,6 +79,15 @@ et un identifiant externe de Source déjà utilisé `409 SOURCE_CONFLICT`. La cr
 accepte le code direct ou inverse du catalogue, mais interdit les doublons et toute fiche
 `ARCHIVED`. Voir [MANUAL-CREATION.md](MANUAL-CREATION.md) et
 [MANUAL-RELATIONS.md](MANUAL-RELATIONS.md). Aucune route de suppression n'est exposée.
+
+L'ajout v0.5c accepte strictement `{ source, evidence }` selon le format de création manuelle :
+`source` est `{ mode: "existing", sourceId }` ou `{ mode: "new", data }` ; `evidence` contient
+les champs éditoriaux de la preuve, sans ID de cible ni de Source. `visibility` vaut `GM` par
+défaut. Une preuve de même cible, même Source, même énoncé, extrait, repère et timestamps donne
+`409 EVIDENCE_CONFLICT`. Les variantes de confiance ou de visibilité d'un passage identique
+doivent être corrigées sur la preuve existante. Une cible absente donne `404 ENTITY_NOT_FOUND`
+ou `404 RELATION_NOT_FOUND`. Une cible `ARCHIVED` ou une relation liée à une fiche `ARCHIVED`
+refuse l'ajout en `409`. Ces routes ne changent ni la cible ni ses Revision.
 
 Toutes les mutations admin exigent une session et une Origin identique à l'origine configurée,
 y compris si le cookie est présent. Une Origin absente ou différente donne `403 INVALID_ORIGIN`.

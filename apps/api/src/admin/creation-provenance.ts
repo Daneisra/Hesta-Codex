@@ -31,14 +31,15 @@ export async function resolveCreationSource(tx: Prisma.TransactionClient, select
 
 export async function createInitialEvidence(tx: Prisma.TransactionClient, sourceId: string,
   target: { entityId: string; relationId: null } | { entityId: null; relationId: string },
-  proof: InitialEvidence, sourceWasExisting: boolean): Promise<void> {
+  proof: InitialEvidence, sourceWasExisting: boolean): Promise<string> {
   try {
-    await tx.evidence.create({ data: {
+    const created = await tx.evidence.create({ data: {
       sourceId, ...target,
       claimText: proof.claimText, sourceExcerpt: proof.sourceExcerpt, locator: proof.locator,
       timeStartSeconds: proof.timeStartSeconds, timeEndSeconds: proof.timeEndSeconds,
       confidence: proof.confidence, visibility: proof.visibility,
-    } })
+    }, select: { id: true } })
+    return created.id
   } catch (error) {
     if (sourceWasExisting && prismaCode(error, 'P2003')) {
       throw new EditorialError(404, 'SOURCE_NOT_FOUND', 'Source introuvable.')

@@ -57,6 +57,7 @@ function mockApi(options: {
   list?: AdminEntityListResponse
   detailStatus?: number
   sourceMutationStatus?: number
+  evidenceAddStatus?: number
 } = {}) {
   const requests: string[] = []
   vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -72,6 +73,14 @@ function mockApi(options: {
         : status === 401 ? { error: { code: 'UNAUTHORIZED', message: 'Session expirée.' } }
           : { id: 'source-1', updatedAt: detail.updatedAt }, status)
     }
+    if (url === '/api/admin/entities/barolt/evidence' && init?.method === 'POST') {
+      const status = options.evidenceAddStatus ?? 201
+      return response(status === 401 ? { error: { code: 'UNAUTHORIZED', message: 'Session expirée.' } }
+        : status === 409 ? { error: { code: 'EVIDENCE_CONFLICT', message: 'Cette preuve existe déjà.' } }
+          : { id: 'evidence-2' }, status)
+    }
+    if (url.startsWith('/api/admin/sources?')) return response({ items: [detail.evidence[0]!.source],
+      total: 1, page: 1, pageSize: 20 })
     if (url === '/api/admin/entities/barolt') return response(detail, options.detailStatus)
     if (url === '/api/auth/logout') return response({}, 204)
     return response({}, 404)
@@ -132,6 +141,20 @@ describe('administration en lecture seule', () => {
     expect(screen.getByText(/Revision #1/)).toBeTruthy()
     await user.click(screen.getByText('Consulter le snapshot'))
     expect(within(screen.getByRole('article')).getByText(/"title": "Barolt"/)).toBeTruthy()
+  })
+
+  it('ajoute une preuve depuis la fiche, rafraîchit le détail et garde la confirmation visible', async () => {
+    const user = userEvent.setup()
+    const requests = mockApi()
+    window.history.replaceState(null, '', '/admin/fiches/barolt')
+    render(<App />)
+    await user.click(await screen.findByRole('button', { name: 'Ajouter une preuve à la fiche' }))
+    await user.click(await screen.findByRole('radio', { name: /Notes de partie/ }))
+    await user.type(screen.getByRole('textbox', { name: 'Énoncé' }), 'Preuve complémentaire')
+    await user.click(screen.getByRole('button', { name: 'Vérifier avant ajout' }))
+    await user.click(screen.getByRole('button', { name: 'Ajouter la preuve' }))
+    expect(await screen.findByText('Preuve ajoutée.')).toBeTruthy()
+    expect(requests.filter((path) => path === '/api/admin/entities/barolt').length).toBeGreaterThan(1)
   })
 
   it('ouvre directement une URL admin partageable et gère erreurs de session ou de fiche', async () => {

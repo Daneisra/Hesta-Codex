@@ -146,6 +146,11 @@ export interface AdminManualRelationRequest {
   evidence: AdminManualCreateRequest['evidence']
 }
 
+export interface AdminEvidenceAddRequest {
+  source: AdminManualCreateRequest['source']
+  evidence: AdminManualCreateRequest['evidence']
+}
+
 export interface AdminEvidence {
   id: string
   claimText: string
