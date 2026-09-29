@@ -21,7 +21,7 @@ const editorialSelect = {
 
 type EditorialRow = Prisma.EntityGetPayload<{ select: typeof editorialSelect }>
 
-function snapshot(entity: EditorialRow): Prisma.InputJsonValue {
+export function entitySnapshot(entity: EditorialRow): Prisma.InputJsonValue {
   return {
     version: 1,
     entity: {
@@ -57,7 +57,7 @@ async function addRevision(
   const latest = await tx.revision.aggregate({ where: { entityId: entity.id }, _max: { number: true } })
   await tx.revision.create({ data: {
     entityId: entity.id, number: (latest._max.number ?? 0) + 1,
-    snapshot: snapshot(entity), editorLabel, message,
+    snapshot: entitySnapshot(entity), editorLabel, message,
   } })
 }
 

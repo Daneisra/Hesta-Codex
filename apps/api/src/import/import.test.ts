@@ -339,6 +339,9 @@ test('aliases and tags reject empty, invalid and duplicate values without silent
   Object.assign(invalid.entities[0], { aliases: ['  '], tags: [123] })
   expectIssue(invalid, 'entities[0].aliases[0]')
   expectIssue(invalid, 'entities[0].tags[0]')
+  const unicode = rawTemplate()
+  Object.assign(unicode.entities[0], { aliases: ['Épée', 'E\u0301pée'] })
+  expectIssue(unicode, 'entities[0].aliases[1]')
 })
 
 test('dry-run reads the base and never writes or starts a transaction', async () => {

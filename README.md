@@ -105,6 +105,13 @@ et les garanties du pipeline sont détaillés dans [docs/IMPORT.md](docs/IMPORT.
 
 ## Administration éditoriale
 
+Depuis `/admin`, « Nouvelle fiche » ouvre la création manuelle v0.5a. Chaque création impose
+une Source existante ou nouvelle et une Evidence initiale. L'Entity, l'Evidence, la Source
+éventuelle et la `Revision #1` sont écrites dans une seule transaction. La fiche reste
+`PROPOSED`, avec visibilité `GM` par défaut, jusqu'à une publication humaine explicite.
+Voir [docs/MANUAL-CREATION.md](docs/MANUAL-CREATION.md) pour le formulaire, les validations
+et les conflits. La création manuelle de relations viendra en v0.5b.
+
 `/admin` est réservé aux Discord IDs inscrits dans `DISCORD_ADMIN_IDS`. Un administrateur y voit
 les fiches de tout statut et toute visibilité, leurs sources, preuves, relations et révisions.
 Il peut modifier les champs éditoriaux d'une fiche non archivée, publier une proposition ou

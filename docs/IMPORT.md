@@ -1,5 +1,8 @@
 # Import structuré du lore — format v1
 
+Pour créer une seule fiche depuis l'administration avec sa provenance initiale, voir
+[MANUAL-CREATION.md](MANUAL-CREATION.md). Ce parcours conserve l'import JSON pour les lots.
+
 Ce pipeline CLI introduit des propositions éditoriales dans PostgreSQL. Il est séparé de
 l'API publique, qui reste uniquement en lecture. Aucun connecteur externe, compte utilisateur
 ou publication automatique n'est inclus.

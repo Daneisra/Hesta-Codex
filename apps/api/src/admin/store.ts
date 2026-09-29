@@ -23,7 +23,7 @@ const listSelect = {
   id: true, slug: true, kind: true, placeKind: true, title: true,
   summary: true, tags: true, status: true, visibility: true, updatedAt: true,
 } satisfies Prisma.EntitySelect
-const sourceSelect = {
+export const sourceSelect = {
   id: true, kind: true, label: true, externalId: true, url: true,
   authorLabel: true, publishedAt: true, visibility: true, updatedAt: true,
 } satisfies Prisma.SourceSelect
@@ -70,7 +70,7 @@ function listItem(row: ListRow): AdminEntityListItem {
   }
 }
 
-function sourceItem(row: EvidenceRow['source']): AdminSource {
+export function sourceItem(row: EvidenceRow['source']): AdminSource {
   return {
     id: row.id, kind: row.kind, label: row.label, externalId: row.externalId,
     url: row.url, authorLabel: row.authorLabel, publishedAt: row.publishedAt?.toISOString() ?? null,

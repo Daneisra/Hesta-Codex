@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { EditorialStatus, EntityKind, Visibility } from '../prisma-client/enums.ts'
 import { adminSession } from '../auth/routes.js'
 import type { EditorialService } from './editorial.js'
+import type { ManualService } from './manual.js'
+import { manualCreateSchema, sourceLookupSchema } from './manual-validation.js'
 import type { ProvenanceService } from './provenance.js'
 import { evidencePatchSchema, relationPatchSchema, relationWorkflowSchema, sourcePatchSchema } from './provenance-validation.js'
 import type { AdminStore } from './store.js'
@@ -26,7 +28,8 @@ function editorLabel(response: { locals: Record<string, unknown> }): string {
   return (actor.displayName?.trim() || actor.username).replace(/[\r\n]/g, ' ')
 }
 
-export function createAdminRouter(store: AdminStore, editorial: EditorialService, provenance?: ProvenanceService) {
+export function createAdminRouter(store: AdminStore, editorial: EditorialService,
+  provenance?: ProvenanceService, manual?: ManualService) {
   const router = Router()
 
   router.get('/stats', async (_request, response) => {
@@ -41,6 +44,30 @@ export function createAdminRouter(store: AdminStore, editorial: EditorialService
     }
     response.json(await store.listEntities(parsed.data))
   })
+
+  if (manual) {
+    router.get('/sources', async (request, response) => {
+      const parsed = sourceLookupSchema.safeParse(request.query)
+      if (!parsed.success) {
+        response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'Recherche de sources invalide.' } })
+        return
+      }
+      response.json(await manual.listSources(parsed.data))
+    })
+
+    router.post('/entities', async (request, response) => {
+      const parsed = manualCreateSchema.safeParse(request.body)
+      if (!parsed.success) {
+        const issues = parsed.error.issues.flatMap((issue) => issue.code === 'unrecognized_keys'
+          ? issue.keys.map((key) => ({ path: [...issue.path, key].join('.'), message: 'Champ inconnu' }))
+          : [{ path: issue.path.join('.'), message: issue.message }])
+        response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'Création invalide.', issues } })
+        return
+      }
+      const created = await manual.create(parsed.data, editorLabel(response))
+      response.status(201).json(created)
+    })
+  }
 
   router.get('/entities/:slug', async (request, response) => {
     const slug = request.params.slug

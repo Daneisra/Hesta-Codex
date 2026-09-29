@@ -4,6 +4,7 @@ import { EntityKind } from './prisma-client/enums.ts'
 import { createAdminRouter } from './admin/routes.js'
 import type { AdminStore } from './admin/store.js'
 import { EditorialError, type EditorialService } from './admin/editorial.js'
+import type { ManualService } from './admin/manual.js'
 import type { ProvenanceService } from './admin/provenance.js'
 import { createAuthRouter, requireAdmin, requireSameOrigin, type AuthDependencies } from './auth/routes.js'
 import type { CodexStore, EntityFilters } from './store.js'
@@ -34,7 +35,8 @@ function parseEntityFilters(query: Record<string, unknown>): EntityFilters {
 }
 
 export function createApp(store: CodexStore, privateServices?: {
-  auth: AuthDependencies; admin: AdminStore; editorial: EditorialService; provenance?: ProvenanceService
+  auth: AuthDependencies; admin: AdminStore; editorial: EditorialService;
+  provenance?: ProvenanceService; manual?: ManualService
 }) {
   const app = express()
   app.disable('x-powered-by')
@@ -42,7 +44,8 @@ export function createApp(store: CodexStore, privateServices?: {
   if (privateServices) {
     app.use('/api/auth', createAuthRouter(privateServices.auth))
     app.use('/api/admin', requireAdmin(privateServices.auth), requireSameOrigin(privateServices.auth.config.origin),
-      express.json({ limit: '1mb' }), createAdminRouter(privateServices.admin, privateServices.editorial, privateServices.provenance))
+      express.json({ limit: '1mb' }), createAdminRouter(privateServices.admin, privateServices.editorial,
+        privateServices.provenance, privateServices.manual))
     app.use('/api/auth', (_request, response) => {
       response.status(404).json({ error: { code: 'NOT_FOUND', message: 'Endpoint not found' } })
     })

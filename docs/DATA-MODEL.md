@@ -105,3 +105,8 @@ v0.4c ajoute `Evidence.updatedAt` pour la concurrence optimiste, avec une migrat
 qui initialise les preuves existantes à leur `createdAt`. `Relation` et `Source` disposaient
 déjà de ce champ. Voir [PROVENANCE-WORKFLOW.md](PROVENANCE-WORKFLOW.md). `Revision` reste liée
 uniquement à `Entity` ; les corrections des autres modèles n'ont pas encore d'audit détaillé.
+
+v0.5a utilise le schéma existant sans migration. Une création manuelle admin lie
+obligatoirement une nouvelle `Entity` à une `Source` existante ou nouvelle par une `Evidence`
+et produit `Revision #1` dans la même transaction. La fiche commence en `PROPOSED`, avec
+`publishedAt = null` et `visibility = GM` par défaut. Voir [MANUAL-CREATION.md](MANUAL-CREATION.md).

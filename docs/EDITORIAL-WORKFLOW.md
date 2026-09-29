@@ -58,3 +58,11 @@ Les modifications de slug, les brouillons séparés des fiches publiées, l'arch
 et la restauration de révisions sont reportés. L'édition contrôlée des relations, sources et
 preuves est décrite dans [PROVENANCE-WORKFLOW.md](PROVENANCE-WORKFLOW.md) ; elle ne crée pas de
 `Revision` Entity.
+
+## Création manuelle
+
+Depuis v0.5a, un administrateur peut créer une fiche avec une Source et une Evidence initiale.
+La fiche reçoit `PROPOSED`, `publishedAt = null` et `GM` par défaut. Une `Revision #1` est
+créée avec le même format de snapshot Entity version 1 que les éditions ultérieures ; son
+auteur est l'administrateur authentifié. Création, provenance et révision sont atomiques.
+La création ne publie jamais la fiche. Voir [MANUAL-CREATION.md](MANUAL-CREATION.md).

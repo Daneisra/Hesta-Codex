@@ -2,14 +2,15 @@ import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type {
-  AdminEntityDetail, AdminEntityListResponse, AdminEntityPatch, AdminStats,
+  AdminEntityDetail, AdminEntityListResponse, AdminEntityPatch, AdminManualCreateRequest, AdminStats,
   AuthSessionResponse, EditorialStatus, EntityKind, Visibility,
 } from '@hesta-codex/shared'
 import { AdminEditor } from './AdminEditor'
+import { AdminCreate } from './AdminCreate'
 import { AdminProvenance } from './AdminProvenance'
 import './Admin.css'
 
-type AdminRoute = { view: 'dashboard' } | { view: 'entity'; slug: string } | { view: 'not-found' }
+type AdminRoute = { view: 'dashboard' } | { view: 'create' } | { view: 'entity'; slug: string } | { view: 'not-found' }
 type Load<T> = { phase: 'loading' } | { phase: 'ready'; data: T } | { phase: 'error'; status: number | null }
 const detailPath = /^\/admin\/fiches\/([a-z0-9]+(?:-[a-z0-9]+)*)\/?$/
 const statuses: EditorialStatus[] = ['DRAFT', 'PROPOSED', 'PUBLISHED', 'ARCHIVED']
@@ -27,12 +28,22 @@ const visibilityLabels: Record<Visibility, string> = {
 
 function readRoute(): AdminRoute {
   if (window.location.pathname === '/admin' || window.location.pathname === '/admin/') return { view: 'dashboard' }
+  if (window.location.pathname === '/admin/nouvelle-fiche' || window.location.pathname === '/admin/nouvelle-fiche/') {
+    return { view: 'create' }
+  }
   const match = detailPath.exec(window.location.pathname)
   return match ? { view: 'entity', slug: match[1] } : { view: 'not-found' }
 }
 
 class HttpError extends Error {
-  constructor(readonly status: number, message = `HTTP ${status}`, readonly code?: string) { super(message) }
+  constructor(readonly status: number, message = `HTTP ${status}`, readonly code?: string,
+    readonly issues?: Array<{ path: string; message: string }>) { super(message) }
+}
+
+function readIssues(value: unknown): Array<{ path: string; message: string }> | undefined {
+  if (!Array.isArray(value)) return undefined
+  return value.filter((item): item is { path: string; message: string } =>
+    typeof item === 'object' && item !== null && typeof item.path === 'string' && typeof item.message === 'string')
 }
 
 async function getJson<T>(url: string, signal: AbortSignal): Promise<T> {
@@ -50,11 +61,14 @@ async function mutateJson<T>(url: string, method: 'PATCH' | 'POST', body: unknow
     body: JSON.stringify(body),
   })
   if (!response.ok) {
-    const payload = await response.json().catch(() => null) as { error?: { message?: unknown; code?: unknown } } | null
+    const payload = await response.json().catch(() => null) as { error?: {
+      message?: unknown; code?: unknown; issues?: unknown
+    } } | null
     const message = payload?.error?.message
     const code = payload?.error?.code
     throw new HttpError(response.status, typeof message === 'string' ? message : `HTTP ${response.status}`,
-      typeof code === 'string' ? code : undefined)
+      typeof code === 'string' ? code : undefined,
+      readIssues(payload?.error?.issues))
   }
   return response.json() as Promise<T>
 }
@@ -175,7 +189,9 @@ export function AdminApp() {
   const [editDirty, setEditDirty] = useState(false)
   const [busy, setBusy] = useState(false)
   const [authExpired, setAuthExpired] = useState(false)
-  const [mutationError, setMutationError] = useState<{ status: number | null; message: string; code?: string } | null>(null)
+  const [mutationError, setMutationError] = useState<{ status: number | null; message: string;
+    code?: string; issues?: Array<{ path: string; message: string }> } | null>(null)
+  const [createdNotice, setCreatedNotice] = useState(false)
   const mainRef = useRef<HTMLElement>(null)
   const focusAfterNavigation = useRef(false)
   const currentPath = useRef(window.location.pathname)
@@ -197,6 +213,7 @@ export function AdminApp() {
       setProvenanceEditing(false)
       setEditDirty(false)
       setAuthExpired(false)
+      setCreatedNotice(false)
       focusAfterNavigation.current = true
       setRoute(readRoute())
     }
@@ -299,6 +316,7 @@ export function AdminApp() {
       setProvenanceEditing(false)
       setEditDirty(false)
       setAuthExpired(false)
+      setCreatedNotice(false)
       setMutationError(null)
       focusAfterNavigation.current = true
       window.history.pushState(null, '', path)
@@ -334,7 +352,7 @@ export function AdminApp() {
     const status = errorStatus(error)
     setBusy(false)
     if (status === 401) {
-      setAuthExpired(editing || provenanceEditing)
+      setAuthExpired(editing || provenanceEditing || route.view === 'create')
       setMutationError({ status, message: 'Session expirée. Vos modifications restent affichées : copiez-les avant de vous reconnecter.' })
       setSession({ phase: 'ready', data: { authenticated: false, isAdmin: false, user: null } })
     } else if (status === 403) {
@@ -345,9 +363,10 @@ export function AdminApp() {
         ? { phase: 'ready', data: { ...current.data, isAdmin: false } } : current)
     } else {
       const code = error instanceof HttpError ? error.code : undefined
-      setMutationError({ status, code, message: status === 409 && code?.endsWith('_MODIFIED')
+      setMutationError({ status, code, issues: error instanceof HttpError ? error.issues : undefined,
+        message: status === 409 && code?.endsWith('_MODIFIED')
         ? 'Cet objet a été modifié depuis son ouverture. Rechargez la version récente avant de réessayer.'
-        : status === 409 && error instanceof HttpError ? error.message
+        : (status === 404 || status === 409) && error instanceof HttpError ? error.message
         : status === 400 || status === 422 ? error instanceof HttpError ? error.message : 'Données invalides.'
           : `Impossible d’enregistrer la fiche${status ? ` (erreur ${status})` : ''}.` })
     }
@@ -371,6 +390,22 @@ export function AdminApp() {
     setMutationError(null)
     try {
       mutationSucceeded(await mutateJson<AdminEntityDetail>(`/api/admin/entities/${encodeURIComponent(activeSlug)}`, 'PATCH', input))
+    } catch (error) { mutationFailed(error) }
+  }
+
+  async function create(input: AdminManualCreateRequest) {
+    if (busy || authExpired || !isAdmin || route.view !== 'create') return
+    setBusy(true)
+    setMutationError(null)
+    try {
+      const created = await mutateJson<AdminEntityDetail>('/api/admin/entities', 'POST', input)
+      mutationSucceeded(created)
+      setCreatedNotice(true)
+      const path = `/admin/fiches/${created.slug}`
+      currentPath.current = path
+      focusAfterNavigation.current = true
+      window.history.pushState(null, '', path)
+      setRoute({ view: 'entity', slug: created.slug })
     } catch (error) { mutationFailed(error) }
   }
 
@@ -434,7 +469,9 @@ export function AdminApp() {
       {isAdmin && route.view === 'not-found' && <div className="admin-state"><h1>Page introuvable</h1><a href="/admin">Retour au tableau de bord</a></div>}
       {isAdmin && route.view === 'dashboard' && <>
         <div className="admin-page-heading"><p className="admin-eyebrow">Pilotage éditorial</p>
-          <h1>Tableau de bord</h1><p>Explorer les fiches, leurs liens, leurs sources et leur état de publication.</p></div>
+          <h1>Tableau de bord</h1><p>Explorer les fiches, leurs liens, leurs sources et leur état de publication.</p>
+          <a className="admin-primary-link" href="/admin/nouvelle-fiche"
+            onClick={(event) => onNavigate(event, '/admin/nouvelle-fiche')}>Nouvelle fiche</a></div>
         {stats.phase === 'loading' && <StateMessage>Chargement des statistiques…</StateMessage>}
         {stats.phase === 'error' && <p className="admin-message" role="alert">Statistiques indisponibles.</p>}
         {stats.phase === 'ready' && <div className="admin-stats" aria-label="Statistiques éditoriales">
@@ -474,7 +511,11 @@ export function AdminApp() {
           </>)}
         </section>
       </>}
+      {(isAdmin || (authExpired && route.view === 'create')) && route.view === 'create' &&
+        <AdminCreate busy={busy} disabled={authExpired} error={mutationError} onCreate={(input) => void create(input)}
+          onClearError={() => setMutationError(null)} onDirtyChange={setEditDirty} onNavigate={onNavigate} />}
       {(isAdmin || (authExpired && (editing || provenanceEditing))) && route.view === 'entity' && <>
+        {createdNotice && <p className="admin-message" role="status">Fiche créée en proposition.</p>}
         {(detailFor !== activeSlug || detail.phase === 'loading') && <StateMessage>Chargement de la fiche…</StateMessage>}
         {detailFor === activeSlug && detail.phase === 'error' && <div className="admin-state" role="alert"><h1>{detail.status === 404 ? 'Fiche introuvable' : 'Fiche indisponible'}</h1>
           <a href="/admin" onClick={(event) => onNavigate(event, '/admin')}>Retour au tableau de bord</a></div>}

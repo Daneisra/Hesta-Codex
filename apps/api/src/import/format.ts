@@ -46,7 +46,7 @@ export const entitySchema = z.strictObject({
   for (const field of ['aliases', 'tags'] as const) {
     const seen = new Set<string>()
     for (const [index, value] of entity[field].entries()) {
-      const key = value.toLocaleLowerCase('fr')
+      const key = value.normalize('NFC').toLocaleLowerCase('fr')
       if (seen.has(key)) {
         context.addIssue({ code: 'custom', path: [field, index], message: 'Valeur dupliquée dans la liste' })
       }

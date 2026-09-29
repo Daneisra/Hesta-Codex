@@ -108,6 +108,25 @@
 .admin-source-card p { margin: .35rem 0; }
 .admin-evidence-list button, .admin-relation-list button { margin-top: .5rem; }
 .admin-relation-list .admin-publication { margin: .6rem 0; }
+.admin-create { max-width: 1120px; min-width: 0; }
+.admin-create form { display: grid; gap: 1rem; }
+.admin-create .admin-section { min-width: 0; }
+.admin-field-error { display: block; color: #ffb8c0; font-size: .88rem; overflow-wrap: anywhere; }
+.admin-source-mode { display: flex; flex-wrap: wrap; gap: .7rem 1.5rem; margin-bottom: 1rem; border: 1px solid #46546c; border-radius: .45rem; }
+.admin-source-mode label { display: inline-flex; align-items: center; gap: .5rem; }
+.admin-source-picker { min-width: 0; }
+.admin-source-picker > label { display: grid; gap: .4rem; }
+.admin-source-picker input[type="search"] { width: 100%; max-width: 32rem; padding: .7rem; border: 1px solid #63728c;
+  border-radius: .4rem; background: #0b1423; color: #f0f2f8; }
+.admin-source-options { display: grid; gap: .5rem; max-height: 22rem; overflow-y: auto; }
+.admin-source-options label { display: flex; align-items: flex-start; gap: .7rem; min-width: 0; padding: .7rem;
+  border: 1px solid #46546c; border-radius: .4rem; cursor: pointer; }
+.admin-source-options label:has(input:checked) { border-color: #d5b981; background: #21263b; }
+.admin-source-options span, .admin-source-options small { display: block; min-width: 0; overflow-wrap: anywhere; }
+.admin-create-review dl { display: grid; grid-template-columns: minmax(7rem, 1fr) minmax(0, 3fr); gap: .6rem 1rem; }
+.admin-create-review dt { color: #c7d3e7; }
+.admin-create-review dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.admin-create-review pre { max-width: 100%; max-height: 20rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 @media (max-width: 900px) {
   .admin-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -121,4 +140,5 @@
   .admin-main { padding: 1rem; }
   .admin-pagination { justify-content: space-between; }
   .admin-editor-grid { grid-template-columns: minmax(0, 1fr); }
+  .admin-create-review dl { grid-template-columns: minmax(0, 1fr); }
 }

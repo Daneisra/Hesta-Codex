@@ -5,13 +5,13 @@ const label = (max: number) => z.string().trim().min(1).max(max)
 const terms = (maxLength: number) => z.array(label(maxLength)).max(30).superRefine((values, context) => {
   const seen = new Set<string>()
   values.forEach((value, index) => {
-    const key = value.toLocaleLowerCase('fr')
+    const key = value.normalize('NFC').toLocaleLowerCase('fr')
     if (seen.has(key)) context.addIssue({ code: 'custom', path: [index], message: 'Valeur dupliquée' })
     seen.add(key)
   })
 })
 
-const editorialBase = z.strictObject({
+export const editorialBase = z.strictObject({
   title: label(200),
   summary: z.union([z.string().trim().max(500).transform((value) => value || null), z.null()]),
   bodyMarkdown: z.string().max(100_000),
@@ -22,7 +22,7 @@ const editorialBase = z.strictObject({
   visibility: z.enum(Visibility),
 })
 
-function checkPlaceKind(value: z.infer<typeof editorialBase>, context: z.RefinementCtx): void {
+export function checkPlaceKind(value: z.infer<typeof editorialBase>, context: z.RefinementCtx): void {
   if ((value.kind === 'PLACE') !== (value.placeKind !== null)) {
     context.addIssue({ code: 'custom', path: ['placeKind'], message: 'Requis uniquement pour PLACE' })
   }

@@ -94,6 +94,48 @@ export interface AdminSource {
   updatedAt: string
 }
 
+export interface AdminSourceListResponse {
+  items: AdminSource[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export interface AdminManualCreateRequest {
+  entity: {
+    slug: string
+    kind: EntityKind
+    placeKind: PlaceKind | null
+    title: string
+    summary: string | null
+    bodyMarkdown: string
+    aliases: string[]
+    tags: string[]
+    visibility: Visibility
+  }
+  source: { mode: 'existing'; sourceId: string } | {
+    mode: 'new'
+    data: {
+      kind: SourceKind
+      label: string
+      externalId: string | null
+      url: string | null
+      authorLabel: string | null
+      publishedAt: string | null
+      visibility: Visibility
+    }
+  }
+  evidence: {
+    claimText: string
+    sourceExcerpt: string | null
+    locator: string | null
+    timeStartSeconds: number | null
+    timeEndSeconds: number | null
+    confidence: number | null
+    visibility: Visibility
+  }
+}
+
 export interface AdminEvidence {
   id: string
   claimText: string

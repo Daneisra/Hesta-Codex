@@ -11,7 +11,7 @@ export const relationPatchSchema = z.strictObject({
   description: nullableText(10_000), visibility: z.enum(Visibility), expectedUpdatedAt,
 })
 
-export const sourcePatchSchema = z.strictObject({
+export const sourceFieldsSchema = z.strictObject({
   kind: z.enum(SourceKind),
   label: z.string().trim().min(1).max(250),
   externalId: z.string().min(1).max(250).refine((value) => value === value.trim(),
@@ -19,18 +19,25 @@ export const sourcePatchSchema = z.strictObject({
   url: z.url().refine((value) => /^https?:\/\//i.test(value), 'URL HTTP(S) attendue').nullable(),
   authorLabel: nullableText(200),
   publishedAt: expectedUpdatedAt.nullable(),
-  visibility: z.enum(Visibility), expectedUpdatedAt,
+  visibility: z.enum(Visibility),
 })
 
-export const evidencePatchSchema = z.strictObject({
+export const sourcePatchSchema = sourceFieldsSchema.extend({ expectedUpdatedAt })
+
+export const evidenceFieldsSchema = z.strictObject({
   claimText: z.string().trim().min(1).max(10_000),
   sourceExcerpt: nullableText(100_000), locator: nullableText(250),
   timeStartSeconds: seconds, timeEndSeconds: seconds,
-  confidence, visibility: z.enum(Visibility), expectedUpdatedAt,
-}).superRefine((value, context) => {
+  confidence, visibility: z.enum(Visibility),
+})
+
+export function checkEvidenceTimeOrder(value: { timeStartSeconds: number | null; timeEndSeconds: number | null },
+  context: z.RefinementCtx): void {
   if (value.timeStartSeconds !== null && value.timeEndSeconds !== null && value.timeEndSeconds < value.timeStartSeconds) {
     context.addIssue({ code: 'custom', path: ['timeEndSeconds'], message: 'La fin précède le début' })
   }
-})
+}
+
+export const evidencePatchSchema = evidenceFieldsSchema.extend({ expectedUpdatedAt }).superRefine(checkEvidenceTimeOrder)
 
 export const relationWorkflowSchema = z.strictObject({ expectedUpdatedAt })
