@@ -7,7 +7,8 @@ export interface GraphStore {
 }
 
 const publicOnly = { status: EditorialStatus.PUBLISHED, visibility: Visibility.PUBLIC } as const
-const nodeSelect = { id: true, slug: true, title: true, kind: true, placeKind: true } satisfies Prisma.EntitySelect
+const nodeSelect = { id: true, slug: true, title: true, kind: true, placeKind: true,
+  summary: true, aliases: true } satisfies Prisma.EntitySelect
 const edgeSelect = {
   id: true, fromEntityId: true, toEntityId: true,
   relationType: { select: { code: true, label: true, inverseLabel: true, symmetric: true } },

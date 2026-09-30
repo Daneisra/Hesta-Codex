@@ -9,11 +9,20 @@ import { readAuthConfig } from './auth/config.js'
 import { sessionHash } from './auth/session.js'
 
 const nodes = [
-  { id: 'a', slug: 'ville', title: 'Ville', kind: 'PLACE', placeKind: 'CITY', status: 'PUBLISHED', visibility: 'PUBLIC' },
-  { id: 'b', slug: 'continent', title: 'Continent', kind: 'PLACE', placeKind: 'CONTINENT', status: 'PUBLISHED', visibility: 'PUBLIC' },
-  { id: 'c', slug: 'secret', title: 'Secret', kind: 'PERSON', placeKind: null, status: 'PROPOSED', visibility: 'GM' },
-  { id: 'd', slug: 'joueurs', title: 'Joueurs', kind: 'PERSON', placeKind: null, status: 'PUBLISHED', visibility: 'PLAYERS' },
-  { id: 'e', slug: 'archive', title: 'Archive', kind: 'OTHER', placeKind: null, status: 'ARCHIVED', visibility: 'SECRET' },
+  { id: 'a', slug: 'ville', title: 'Ville', kind: 'PLACE', placeKind: 'CITY', summary: 'Ville publique',
+    aliases: ['Cité'], status: 'PUBLISHED', visibility: 'PUBLIC' },
+  { id: 'b', slug: 'continent', title: 'Continent', kind: 'PLACE', placeKind: 'CONTINENT', summary: null,
+    aliases: [], status: 'PUBLISHED', visibility: 'PUBLIC' },
+  { id: 'c', slug: 'secret', title: 'Secret', kind: 'PERSON', placeKind: null, summary: 'Résumé privé',
+    aliases: ['Alias privé'], status: 'PROPOSED', visibility: 'GM' },
+  { id: 'd', slug: 'joueurs', title: 'Joueurs', kind: 'PERSON', placeKind: null, summary: null,
+    aliases: [], status: 'PUBLISHED', visibility: 'PLAYERS' },
+  { id: 'e', slug: 'archive', title: 'Archive', kind: 'OTHER', placeKind: null, summary: null,
+    aliases: [], status: 'ARCHIVED', visibility: 'SECRET' },
+  { id: 'f', slug: 'brouillon', title: 'Brouillon', kind: 'OTHER', placeKind: null, summary: null,
+    aliases: [], status: 'DRAFT', visibility: 'PUBLIC' },
+  { id: 'g', slug: 'confidentiel', title: 'Confidentiel', kind: 'OTHER', placeKind: null, summary: null,
+    aliases: [], status: 'PUBLISHED', visibility: 'SECRET' },
 ]
 const relationType = { code: 'located_in', label: 'situé dans', inverseLabel: 'contient', symmetric: false }
 const edges = [
@@ -21,6 +30,8 @@ const edges = [
   { id: 'ac', fromEntityId: 'a', toEntityId: 'c', status: 'PUBLISHED', visibility: 'PUBLIC', relationType },
   { id: 'ad', fromEntityId: 'a', toEntityId: 'd', status: 'PUBLISHED', visibility: 'PUBLIC', relationType },
   { id: 'ae', fromEntityId: 'a', toEntityId: 'e', status: 'PUBLISHED', visibility: 'PUBLIC', relationType },
+  { id: 'af', fromEntityId: 'a', toEntityId: 'f', status: 'PUBLISHED', visibility: 'PUBLIC', relationType },
+  { id: 'ag', fromEntityId: 'a', toEntityId: 'g', status: 'PUBLISHED', visibility: 'PUBLIC', relationType },
   { id: 'private-status', fromEntityId: 'a', toEntityId: 'b', status: 'PROPOSED', visibility: 'PUBLIC', relationType },
   { id: 'private-visibility', fromEntityId: 'a', toEntityId: 'b', status: 'PUBLISHED', visibility: 'GM', relationType },
   { id: 'ally', fromEntityId: 'b', toEntityId: 'a', status: 'PUBLISHED', visibility: 'PUBLIC',
@@ -54,6 +65,9 @@ test('public graph filters both endpoints and edge state, with an explicit minim
   assert.deepEqual(publicGraph.edges[0], { id: 'ab', source: 'a', target: 'b', type: 'located_in',
     label: 'situé dans', inverseLabel: 'contient', symmetric: false })
   assert.equal(JSON.stringify(publicGraph).includes('secret'), false)
+  assert.equal(publicGraph.nodes[0]?.summary, 'Ville publique')
+  assert.deepEqual(publicGraph.nodes[0]?.aliases, ['Cité'])
+  assert.equal(JSON.stringify(publicGraph).includes('Alias privé'), false)
   assert.equal(JSON.stringify(publicGraph).includes('sourceExcerpt'), false)
   const entityQuery = queries[0] as { where: unknown; select: Record<string, unknown> }
   const relationQuery = queries[1] as { where: Record<string, unknown>; select: Record<string, unknown> }
@@ -66,8 +80,8 @@ test('public graph filters both endpoints and edge state, with an explicit minim
     }
   }
   const adminGraph = await store.adminGraph()
-  assert.equal(adminGraph.nodes.length, 5)
-  assert.equal(adminGraph.edges.length, 7)
+  assert.equal(adminGraph.nodes.length, 7)
+  assert.equal(adminGraph.edges.length, 9)
   assert.equal(adminGraph.nodes[2]?.status, 'PROPOSED')
   assert.equal(adminGraph.edges[0]?.visibility, 'PUBLIC')
 })
@@ -79,9 +93,9 @@ let server: Server
 let base: string
 let adminReads = 0
 const graph: GraphStore = { async publicGraph() { return { nodes: [{ id: 'a', slug: 'ville', title: 'Ville',
-  kind: 'PLACE', placeKind: 'CITY' }], edges: [] } }, async adminGraph() { adminReads++
+  kind: 'PLACE', placeKind: 'CITY', summary: 'Ville publique', aliases: ['Cité'] }], edges: [] } }, async adminGraph() { adminReads++
   return { nodes: [{ id: 'c', slug: 'secret', title: 'Secret', kind: 'PERSON', placeKind: null,
-    status: 'PROPOSED', visibility: 'GM' }], edges: [] } } }
+    summary: 'Résumé privé', aliases: ['Alias privé'], status: 'PROPOSED', visibility: 'GM' }], edges: [] } } }
 before(async () => {
   server = createApp({ async ping() {}, async listRelationTypes() { return [] },
     async listEntities() { return [] }, async getEntityBySlug() { return null } }, {

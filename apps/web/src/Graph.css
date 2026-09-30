@@ -2,15 +2,41 @@
 .graph-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem 1rem; align-items: end; margin-bottom: 1rem; }
 .graph-heading h1 { margin: .3rem 0; font: 400 clamp(1.8rem, 4vw, 2.7rem) Georgia, serif; color: #f0e5d0; }
 .graph-heading p { color: #b9c7dc; margin: .3rem 0; }
-.graph-count { white-space: nowrap; font-size: .88rem; }
+.graph-count { font-size: .88rem; overflow-wrap: anywhere; }
+.graph-count small { display: block; color: #92a7c6; white-space: normal; }
+.graph-filters { margin-bottom: 1rem; padding: 1rem; border: 1px solid #33445e; border-radius: .7rem; background: #121e31; min-width: 0; }
+.graph-search { max-width: 32rem; }
+.graph-search label { display: block; margin-bottom: .4rem; color: #dbe4f3; }
+.graph-search input, .graph-filter-fields select { width: 100%; min-width: 0; padding: .55rem .65rem; border: 1px solid #657a9c; border-radius: .35rem; color: #eef2fa; background: #192840; }
+.graph-search-results { margin-top: .5rem; padding: .45rem; border: 1px solid #465b78; border-radius: .35rem; background: #1a2a42; overflow-wrap: anywhere; }
+.graph-search-results p { margin: .3rem; color: #c9d5e6; font-size: .85rem; }
+.graph-search-results ul { margin: 0; padding: 0; list-style: none; max-height: 12rem; overflow-y: auto; }
+.graph-search-results button { width: 100%; padding: .4rem .5rem; text-align: left; color: #eef2fa; background: none; border: 0; border-radius: .25rem; }
+.graph-search-results button:hover, .graph-search-results button:focus-visible { background: #304260; }
+.graph-search-results small { color: #a9bbd6; overflow-wrap: anywhere; }
+.graph-filter-toggle { margin-top: .65rem; padding: .35rem .6rem; border: 1px solid #657a9c; border-radius: .35rem; color: #eef2fa; background: #1d2b42; }
+.graph-filter-fields { min-width: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: .7rem; margin: .8rem 0 0; padding: .8rem 0 0; border: 0; border-top: 1px solid #33445e; }
+.graph-filter-fields legend { padding: 0 .3rem; color: #eed9ab; }
+.graph-filter-fields label { min-width: 0; display: grid; gap: .35rem; color: #dbe4f3; font-size: .85rem; }
+.graph-filter-bottom { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: .7rem; margin-top: .9rem; }
+.graph-filter-bottom .graph-legend { margin: 0; border: 0; }
+.graph-filter-bottom .graph-legend h2 { margin: 0 0 .4rem; font-size: 1rem; }
+.graph-legend-buttons { display: flex; flex-wrap: wrap; gap: .35rem; }
+.graph-legend-buttons button, .graph-reset { display: inline-flex; align-items: center; gap: .4rem; padding: .42rem .65rem; border: 1px solid #657a9c; border-radius: .35rem; color: #eef2fa; background: #1d2b42; }
+.graph-legend-buttons button[aria-pressed="false"] { opacity: .5; text-decoration: line-through; }
+.graph-legend-buttons button[aria-pressed="true"] { border-color: #d5b979; }
+.graph-reset { flex: 0 0 auto; }
 .graph-layout { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(230px, 285px); gap: 1rem; align-items: start; }
 .graph-main, .graph-side { min-width: 0; }
 .graph-main { border: 1px solid #33445e; border-radius: .7rem; overflow: hidden; background: #0c1525; }
 .graph-controls { display: flex; flex-wrap: wrap; gap: .5rem; padding: .7rem; border-bottom: 1px solid #33445e; }
 .graph-controls button, .graph-side button, .graph-message button { padding: .48rem .7rem; border: 1px solid #657a9c; border-radius: .35rem; color: #eef2fa; background: #1d2b42; }
 .graph-controls button:hover, .graph-side button:hover { background: #304260; }
+.graph-controls button:disabled { opacity: .45; cursor: not-allowed; }
 .graph-canvas { width: 100%; height: min(70vh, 680px); min-height: 320px; overflow: hidden; touch-action: none; }
+.graph-canvas { position: relative; }
 .graph-canvas canvas { display: block; max-width: 100%; }
+.graph-hover { position: absolute; left: .7rem; bottom: .7rem; max-width: calc(100% - 1.4rem); margin: 0; padding: .35rem .55rem; border: 1px solid #b29867; border-radius: .3rem; background: #15243b; color: #f5e8d0; overflow-wrap: anywhere; pointer-events: none; }
 .graph-hint { margin: 0; padding: .7rem; color: #b8c6db; font-size: .83rem; overflow-wrap: anywhere; }
 .graph-side { padding: 1rem; border: 1px solid #33445e; border-radius: .7rem; background: #121e31; overflow-wrap: anywhere; }
 .graph-side label { display: grid; gap: .4rem; color: #dbe4f3; }
@@ -18,9 +44,14 @@
 .graph-selected { margin-top: 1rem; border-top: 1px solid #33445e; padding-top: .5rem; }
 .graph-selected h2, .graph-legend h2 { font: 400 1.25rem Georgia, serif; color: #eed9ab; overflow-wrap: anywhere; }
 .graph-selected p { color: #c2cee1; overflow-wrap: anywhere; }
+.graph-selected .graph-summary { color: #e1e8f3; line-height: 1.5; }
 .graph-selected ul, .graph-legend ul { list-style: none; padding: 0; display: grid; gap: .5rem; }
 .graph-selected li button { width: 100%; text-align: left; overflow-wrap: anywhere; }
+.graph-selected li small { color: #aebfda; }
 .graph-selected .graph-open { background: #554872; border-color: #ad97cb; font-weight: 700; }
+.graph-detail-actions { display: grid; gap: .5rem; }
+.graph-edge-detail { border-bottom: 1px solid #33445e; padding-bottom: .7rem; overflow-wrap: anywhere; }
+.graph-edge-detail h2 { font: 400 1.1rem Georgia, serif; color: #eed9ab; }
 .graph-legend { margin-top: 1.5rem; border-top: 1px solid #33445e; }
 .graph-legend li { display: flex; align-items: center; gap: .6rem; color: #c6d3e5; font-size: .85rem; }
 .graph-swatch { width: .8rem; height: .8rem; border-radius: 50%; flex: 0 0 auto; }
@@ -38,9 +69,13 @@
 }
 @media (max-width: 560px) {
   .graph-page { padding: .75rem; }
+  .graph-filters { padding: .7rem; }
+  .graph-filter-toggle { width: 100%; }
+  .graph-filter-bottom { align-items: stretch; }
+  .graph-reset { width: 100%; justify-content: center; }
   .graph-layout { gap: .75rem; }
   .graph-canvas { height: 50vh; min-height: 320px; }
   .graph-side { display: block; }
-  .graph-controls { gap: .35rem; }
-  .graph-controls button { flex: 1 1 auto; }
+  .graph-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .35rem; }
+  .graph-controls button { min-width: 0; white-space: normal; }
 }

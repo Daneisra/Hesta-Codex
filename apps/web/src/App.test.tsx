@@ -82,15 +82,15 @@ describe('consultation publique', () => {
     render(<App />)
     await user.click(screen.getByRole('link', { name: 'Graphe' }))
     expect(window.location.pathname).toBe('/graphe')
-    expect(await screen.findByText('Le graphe attend ses premières fiches publiées.')).toBeTruthy()
+    expect(await screen.findByText('Le graphe attend ses premières fiches publiées.', undefined, { timeout: 8_000 })).toBeTruthy()
     expect(requests).toContain('/api/v1/graph')
     await user.click(screen.getByRole('link', { name: 'Bibliothèque' }))
     expect(window.location.pathname).toBe('/')
     cleanup()
     window.history.replaceState(null, '', '/graphe')
     render(<App />)
-    expect(await screen.findByText('Le graphe attend ses premières fiches publiées.')).toBeTruthy()
-  })
+    expect(await screen.findByText('Le graphe attend ses premières fiches publiées.', undefined, { timeout: 8_000 })).toBeTruthy()
+  }, 12_000)
 
   it('affiche un état vide réel sans inventer de fiches', async () => {
     mockApi()

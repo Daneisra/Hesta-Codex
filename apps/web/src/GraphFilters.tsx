@@ -1,0 +1,88 @@
+import { useState } from 'react'
+import type { EntityKind } from '@hesta-codex/shared'
+import { graphGroups, kindLabels, placeLabels, type GraphData, type GraphFilters } from './graph-model'
+
+const statuses = ['DRAFT', 'PROPOSED', 'PUBLISHED', 'ARCHIVED']
+const visibilities = ['PUBLIC', 'PLAYERS', 'GM', 'SECRET']
+
+export function GraphFiltersPanel({ data, admin, filters, activeGroups, query, results, onQueryChange,
+  onSelectResult, onFiltersChange, onToggleGroup, onReset }: {
+  data: GraphData
+  admin: boolean
+  filters: GraphFilters
+  activeGroups: ReadonlySet<string>
+  query: string
+  results: GraphData['nodes']
+  onQueryChange: (value: string) => void
+  onSelectResult: (id: string) => void
+  onFiltersChange: (next: GraphFilters) => void
+  onToggleGroup: (id: string) => void
+  onReset: () => void
+}) {
+  const [open, setOpen] = useState(() => typeof window === 'undefined' || !window.matchMedia?.('(max-width: 560px)').matches)
+  const types = [...new Map(data.edges.map((edge) => [edge.type, edge.label])).entries()]
+    .sort(([a], [b]) => a.localeCompare(b, 'fr'))
+  const update = (key: keyof GraphFilters, value: string) => onFiltersChange({ ...filters, [key]: value })
+
+  return <section className="graph-filters" aria-label="Recherche et filtres du graphe">
+    <div className="graph-search"><label htmlFor="graph-search">Rechercher une fiche</label>
+      <input id="graph-search" type="search" value={query} onChange={(event) => onQueryChange(event.target.value)}
+        placeholder="Titre, slug ou alias" autoComplete="off" />
+      {query.trim() && <div className="graph-search-results">
+        {results.length === 0 ? <p role="status">Aucune fiche trouvée.</p> : <>
+          <p role="status">{results.length} résultat{results.length > 1 ? 's' : ''}</p>
+          <ul>{results.slice(0, 12).map((node) => <li key={node.id}>
+            <button type="button" onClick={() => onSelectResult(node.id)}>{node.title} <small>/{node.slug}</small></button>
+          </li>)}</ul>
+          {results.length > 12 && <p>12 premiers résultats affichés. Précisez la recherche.</p>}
+        </>}
+      </div>}
+    </div>
+    <button type="button" className="graph-filter-toggle" aria-expanded={open} aria-controls="graph-filter-options"
+      onClick={() => setOpen((value) => !value)}>{open ? 'Masquer les filtres' : 'Afficher les filtres'}</button>
+    <div id="graph-filter-options" hidden={!open}>
+    <fieldset className="graph-filter-fields"><legend>Filtres</legend>
+      <label>Type de fiche<select value={filters.kind} onChange={(event) => update('kind', event.target.value)}>
+        <option value="">Tous</option>
+        {(Object.entries(kindLabels) as [EntityKind, string][]).map(([kind, label]) =>
+          <option key={kind} value={kind}>{label}</option>)}
+      </select></label>
+      <label>Sous-type de lieu<select value={filters.placeKind} onChange={(event) => update('placeKind', event.target.value)}>
+        <option value="">Tous</option>
+        {Object.entries(placeLabels).map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}
+      </select></label>
+      <label>Type de relation<select value={filters.relationType} onChange={(event) => update('relationType', event.target.value)}>
+        <option value="">Tous</option>
+        {types.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
+      </select></label>
+      {admin && <>
+        <label>Statut de fiche<select value={filters.nodeStatus} onChange={(event) => update('nodeStatus', event.target.value)}>
+          <option value="">Tous</option>
+          {statuses.map((value) => <option key={value} value={value}>{value}</option>)}
+        </select></label>
+        <label>Visibilité de fiche<select value={filters.nodeVisibility} onChange={(event) => update('nodeVisibility', event.target.value)}>
+          <option value="">Toutes</option>
+          {visibilities.map((value) => <option key={value} value={value}>{value}</option>)}
+        </select></label>
+        <label>Statut de relation<select value={filters.edgeStatus} onChange={(event) => update('edgeStatus', event.target.value)}>
+          <option value="">Tous</option>
+          {statuses.map((value) => <option key={value} value={value}>{value}</option>)}
+        </select></label>
+        <label>Visibilité de relation<select value={filters.edgeVisibility} onChange={(event) => update('edgeVisibility', event.target.value)}>
+          <option value="">Toutes</option>
+          {visibilities.map((value) => <option key={value} value={value}>{value}</option>)}
+        </select></label>
+      </>}
+    </fieldset>
+    <div className="graph-filter-bottom">
+      <div className="graph-legend"><h2>Catégories</h2><div className="graph-legend-buttons">
+        {graphGroups.map((group) => <button type="button" key={group.id}
+          aria-pressed={activeGroups.has(group.id)} onClick={() => onToggleGroup(group.id)}>
+          <span className="graph-swatch" style={{ backgroundColor: group.color }} />{group.label}
+        </button>)}
+      </div></div>
+      <button type="button" className="graph-reset" onClick={onReset}>Réinitialiser les filtres</button>
+    </div>
+    </div>
+  </section>
+}

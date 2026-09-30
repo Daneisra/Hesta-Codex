@@ -39,6 +39,8 @@ export interface GraphNode {
   title: string
   kind: EntityKind
   placeKind: PlaceKind | null
+  summary: string | null
+  aliases: string[]
 }
 
 export interface GraphEdge {
