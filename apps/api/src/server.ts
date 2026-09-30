@@ -12,6 +12,7 @@ import { createDiscordOAuth } from './auth/discord.js'
 import { createPrismaAuthStore } from './auth/store.js'
 import { createPrismaClient } from './db.js'
 import { createPrismaStore } from './store.js'
+import { createPrismaGraphStore } from './graph.js'
 
 config({ path: resolve(import.meta.dirname, '../../../.env'), quiet: true })
 
@@ -23,6 +24,7 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 
 const authConfig = readAuthConfig()
 const prisma = createPrismaClient()
+const graph = createPrismaGraphStore(prisma)
 const app = createApp(createPrismaStore(prisma), {
   auth: {
     config: authConfig,
@@ -35,7 +37,8 @@ const app = createApp(createPrismaStore(prisma), {
   manualRelations: createPrismaManualRelationService(prisma),
   evidenceAdd: createPrismaEvidenceAddService(prisma),
   provenance: createPrismaProvenanceService(prisma),
-})
+  graph,
+}, graph)
 const server = app.listen(port, () => {
   console.log(`Hesta Codex API listening on http://localhost:${port}`)
 })

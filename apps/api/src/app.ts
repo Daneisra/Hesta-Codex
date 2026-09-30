@@ -10,6 +10,7 @@ import type { ManualRelationService } from './admin/manual-relations.js'
 import type { ProvenanceService } from './admin/provenance.js'
 import { createAuthRouter, requireAdmin, requireSameOrigin, type AuthDependencies } from './auth/routes.js'
 import type { CodexStore, EntityFilters } from './store.js'
+import type { GraphStore } from './graph.js'
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const entityKinds = new Set<string>(Object.values(EntityKind))
@@ -39,8 +40,8 @@ function parseEntityFilters(query: Record<string, unknown>): EntityFilters {
 export function createApp(store: CodexStore, privateServices?: {
   auth: AuthDependencies; admin: AdminStore; editorial: EditorialService;
   provenance?: ProvenanceService; manual?: ManualService; manualRelations?: ManualRelationService;
-  evidenceAdd?: EvidenceAddService
-}) {
+  evidenceAdd?: EvidenceAddService; graph?: GraphStore
+}, graph?: GraphStore) {
   const app = express()
   app.disable('x-powered-by')
 
@@ -48,7 +49,8 @@ export function createApp(store: CodexStore, privateServices?: {
     app.use('/api/auth', createAuthRouter(privateServices.auth))
     app.use('/api/admin', requireAdmin(privateServices.auth), requireSameOrigin(privateServices.auth.config.origin),
       express.json({ limit: '1mb' }), createAdminRouter(privateServices.admin, privateServices.editorial,
-        privateServices.provenance, privateServices.manual, privateServices.manualRelations, privateServices.evidenceAdd))
+        privateServices.provenance, privateServices.manual, privateServices.manualRelations,
+        privateServices.evidenceAdd, privateServices.graph))
     app.use('/api/auth', (_request, response) => {
       response.status(404).json({ error: { code: 'NOT_FOUND', message: 'Endpoint not found' } })
     })
@@ -80,6 +82,10 @@ export function createApp(store: CodexStore, privateServices?: {
 
   app.get('/api/v1/relation-types', async (_request, response) => {
     response.json(await store.listRelationTypes())
+  })
+
+  if (graph) app.get('/api/v1/graph', async (_request, response) => {
+    response.json(await graph.publicGraph())
   })
 
   app.get('/api/v1/entities', async (request, response) => {

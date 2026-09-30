@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type {
@@ -10,6 +10,7 @@ import type {
   PlaceKind,
 } from '@hesta-codex/shared'
 import { AdminApp } from './AdminApp'
+const GraphPage = lazy(() => import('./GraphPage').then((module) => ({ default: module.GraphPage })))
 
 const kindOptions: { kind: EntityKind; label: string }[] = [
   { kind: 'PERSON', label: 'Personnages' },
@@ -39,7 +40,7 @@ const placeLabels: Record<PlaceKind, string> = {
 
 const entityPathPattern = /^\/fiches\/([a-z0-9]+(?:-[a-z0-9]+)*)\/?$/
 
-type Route = { view: 'library' } | { view: 'entity'; slug: string } | { view: 'not-found' }
+type Route = { view: 'library' } | { view: 'graph' } | { view: 'entity'; slug: string } | { view: 'not-found' }
 type ApiState = 'checking' | 'online' | 'offline'
 type LoadError = { status: number | null }
 type LoadState<T> =
@@ -55,6 +56,7 @@ class HttpError extends Error {
 
 function readRoute(): Route {
   if (window.location.pathname === '/') return { view: 'library' }
+  if (window.location.pathname === '/graphe' || window.location.pathname === '/graphe/') return { view: 'graph' }
   const match = entityPathPattern.exec(window.location.pathname)
   return match ? { view: 'entity', slug: match[1] } : { view: 'not-found' }
 }
@@ -64,7 +66,7 @@ function internalPagePath(href: string | undefined): string | null {
   try {
     const url = new URL(href, window.location.href)
     if (url.origin !== window.location.origin || url.search || url.hash) return null
-    return url.pathname === '/' || entityPathPattern.test(url.pathname) ? url.pathname : null
+    return url.pathname === '/' || url.pathname === '/graphe' || entityPathPattern.test(url.pathname) ? url.pathname : null
   } catch {
     return null
   }
@@ -532,6 +534,8 @@ function PublicApp() {
           <span className="brand-wordmark"><small>HESTA <span aria-hidden="true">·</span></small><strong>Hesta Codex</strong></span>
         </InternalLink>
         <div className="header-actions">
+          <InternalLink href="/" onNavigate={onNavigate} className="hub-link">Bibliothèque</InternalLink>
+          <InternalLink href="/graphe" onNavigate={onNavigate} className="hub-link">Graphe</InternalLink>
           <a className="hub-link" href="/admin">Administration</a>
           <a className="hub-link" href="https://hesta.dannytech.fr/">Portail Hesta <span aria-hidden="true">↗</span></a>
           <span className={`api-state api-state--${apiState}`} role="status" aria-live="polite">
@@ -540,17 +544,20 @@ function PublicApp() {
         </div>
       </header>
 
-      <div className={`workspace${route.view === 'entity' ? ' workspace--detail' : ''}`}>
-        <LibraryPanel
+      <div className={`workspace${route.view === 'entity' ? ' workspace--detail' : ''}${route.view === 'graph' ? ' workspace--graph' : ''}`}>
+        {route.view !== 'graph' && <LibraryPanel
           search={search}
           selectedKind={selectedKind}
           open={filtersOpen}
           onOpenChange={setFiltersOpen}
           onSearchChange={onSearchChange}
           onKindChange={onKindChange}
-        />
+        />}
 
         <main id="main-content" className="main-panel" ref={mainRef} tabIndex={-1}>
+          {route.view === 'graph' && <Suspense fallback={<LoadingView label="Chargement du graphe…" />}>
+            <GraphPage endpoint="/api/v1/graph" onOpenNode={(slug) => navigate(`/fiches/${slug}`)} />
+          </Suspense>}
           {route.view === 'library' && (
             <>
               <div className="view-heading">

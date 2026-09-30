@@ -64,6 +64,7 @@ function mockApi(options: {
     const url = String(input)
     requests.push(url)
     if (url === '/api/auth/session') return response(options.session ?? administrator, options.sessionStatus)
+    if (url === '/api/admin/graph') return response({ nodes: [], edges: [] })
     if (url === '/api/admin/stats') return response(stats)
     if (url.startsWith('/api/admin/entities?')) return response(options.list ?? list, options.listStatus)
     if (url === '/api/admin/sources/source-1' && init?.method === 'PATCH') {
@@ -92,6 +93,19 @@ beforeEach(() => window.history.replaceState(null, '', '/admin'))
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/') })
 
 describe('administration en lecture seule', () => {
+  it('ouvre /admin/graphe seulement après la session admin, y compris par URL directe', async () => {
+    window.history.replaceState(null, '', '/admin/graphe')
+    const requests = mockApi()
+    render(<App />)
+    expect(await screen.findByText('Aucune fiche à représenter.', undefined, { timeout: 8_000 })).toBeTruthy()
+    expect(requests).toContain('/api/admin/graph')
+    cleanup()
+    const deniedRequests = mockApi({ session: denied })
+    render(<App />)
+    expect(await screen.findByRole('heading', { name: 'Accès refusé' })).toBeTruthy()
+    expect(deniedRequests).not.toContain('/api/admin/graph')
+  }, 12_000)
+
   it('présente la connexion Discord sans demander de données privées', async () => {
     const requests = mockApi({ session: anonymous })
     render(<App />)

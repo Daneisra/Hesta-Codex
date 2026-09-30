@@ -18,6 +18,7 @@ preuves et révisions restent exclues de l'API publique.
 | `GET /api/v1/relation-types` | Catalogue des types de relations trié par `code` croissant. |
 | `GET /api/v1/entities` | Jusqu’à 100 fiches de navigation, triées par titre puis slug. Paramètres facultatifs : `kind` (valeur exacte de `EntityKind`) et `q` (2 à 100 caractères, recherche insensible à la casse dans titre, résumé et slug). |
 | `GET /api/v1/entities/:slug` | Fiche avec Markdown, dates, alias et relations `outgoingRelations`/`incomingRelations`. Chaque relation contient son type et la fiche voisine. `404` si absente ou non publique. |
+| `GET /api/v1/graph` | Nœuds et arêtes publics minimaux, sans provenance ni données privées. |
 
 Les paramètres inconnus, répétés ou mal formés renvoient `400` avec
 `{ "error": { "code": "INVALID_REQUEST", "message": "..." } }`. Les erreurs internes renvoient
@@ -41,6 +42,7 @@ portent `Cache-Control: no-store`.
 | Route admin | Réponse |
 | --- | --- |
 | `GET /api/admin/stats` | Comptes par statut et visibilité, nombre de sources et relations. |
+| `GET /api/admin/graph` | Nœuds et arêtes éditoriaux minimaux ; inclut statut et visibilité, requiert un admin. |
 | `GET /api/admin/entities` | `{ items, total, page, pageSize }` ; 50 fiches par page, tous statuts et visibilités. Filtres facultatifs `status`, `visibility`, `kind`, `q` (2 à 100 caractères), `page` (1 à 9999). |
 | `POST /api/admin/entities` | Crée une fiche `PROPOSED` avec une Source existante ou nouvelle, une Evidence et une `Revision #1` dans une transaction ; retourne la fiche admin (`201`). |
 | `GET /api/admin/entities/:slug` | Fiche éditoriale complète, preuves avec Source, relations entrantes/sortantes avec preuves, historique des Revision ; `404` si absente. |

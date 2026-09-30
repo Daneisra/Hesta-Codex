@@ -39,6 +39,9 @@ La bibliothèque est accessible à `/` et chaque fiche à `/fiches/:slug`. Les l
 sont partageables ; le serveur web doit renvoyer `index.html` pour ces chemins frontend.
 La recherche démarre à deux caractères. La liste affiche au plus 100 fiches par requête,
 limite actuelle de l'API ; il n'y a pas encore de pagination ni de total global.
+La vue `/graphe` montre les fiches et relations publiques ; `/admin/graphe` montre le réseau
+éditorial aux administrateurs. Les règles de visibilité sont appliquées dans les requêtes API,
+pas dans le Canvas. Voir [docs/GRAPH.md](docs/GRAPH.md).
 
 Pour lancer l’API, utiliser les migrations ou le seed, copier `.env.example` en `.env` et remplacer les
 valeurs fictives de `DATABASE_URL` par celles d'une base PostgreSQL. Le fichier `.env` est

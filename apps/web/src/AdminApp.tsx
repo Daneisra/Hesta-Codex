@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type MouseEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type {
@@ -10,8 +10,9 @@ import { AdminCreate } from './AdminCreate'
 import { AdminCreateRelation } from './AdminCreateRelation'
 import { AdminProvenance } from './AdminProvenance'
 import './Admin.css'
+const GraphPage = lazy(() => import('./GraphPage').then((module) => ({ default: module.GraphPage })))
 
-type AdminRoute = { view: 'dashboard' } | { view: 'create' } | { view: 'relation-create'; slug: string } |
+type AdminRoute = { view: 'dashboard' } | { view: 'graph' } | { view: 'create' } | { view: 'relation-create'; slug: string } |
   { view: 'entity'; slug: string } | { view: 'not-found' }
 type Load<T> = { phase: 'loading' } | { phase: 'ready'; data: T } | { phase: 'error'; status: number | null }
 const detailPath = /^\/admin\/fiches\/([a-z0-9]+(?:-[a-z0-9]+)*)\/?$/
@@ -31,6 +32,7 @@ const visibilityLabels: Record<Visibility, string> = {
 
 function readRoute(): AdminRoute {
   if (window.location.pathname === '/admin' || window.location.pathname === '/admin/') return { view: 'dashboard' }
+  if (window.location.pathname === '/admin/graphe' || window.location.pathname === '/admin/graphe/') return { view: 'graph' }
   if (window.location.pathname === '/admin/nouvelle-fiche' || window.location.pathname === '/admin/nouvelle-fiche/') {
     return { view: 'create' }
   }
@@ -321,10 +323,7 @@ export function AdminApp() {
 
   useEffect(() => { document.title = 'Administration · Hesta Codex' }, [])
 
-  function onNavigate(event: MouseEvent<HTMLAnchorElement>, path: string) {
-    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-    event.preventDefault()
-    if (editDirty && !window.confirm('Quitter cette fiche et perdre les modifications non enregistrées ?')) return
+  function navigateTo(path: string) {
     if (window.location.pathname !== path) {
       currentPath.current = path
       setEditing(false)
@@ -339,6 +338,13 @@ export function AdminApp() {
       window.history.pushState(null, '', path)
       setRoute(readRoute())
     }
+  }
+
+  function onNavigate(event: MouseEvent<HTMLAnchorElement>, path: string) {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    event.preventDefault()
+    if (editDirty && !window.confirm('Quitter cette fiche et perdre les modifications non enregistrées ?')) return
+    navigateTo(path)
   }
 
   async function logout() {
@@ -501,9 +507,17 @@ export function AdminApp() {
         <h1>Accès refusé</h1><p>Ce compte Discord ne figure pas parmi les administrateurs du Codex.</p>
       </div>}
       {isAdmin && route.view === 'not-found' && <div className="admin-state"><h1>Page introuvable</h1><a href="/admin">Retour au tableau de bord</a></div>}
+      {isAdmin && route.view === 'graph' && <>
+        <a className="admin-back" href="/admin" onClick={(event) => onNavigate(event, '/admin')}>← Tableau de bord</a>
+        <Suspense fallback={<StateMessage>Chargement du graphe…</StateMessage>}>
+          <GraphPage endpoint="/api/admin/graph" admin onOpenNode={(slug) => navigateTo(`/admin/fiches/${slug}`)} />
+        </Suspense>
+      </>}
       {isAdmin && route.view === 'dashboard' && <>
         <div className="admin-page-heading"><p className="admin-eyebrow">Pilotage éditorial</p>
           <h1>Tableau de bord</h1><p>Explorer les fiches, leurs liens, leurs sources et leur état de publication.</p>
+          <a className="admin-primary-link" href="/admin/graphe"
+            onClick={(event) => onNavigate(event, '/admin/graphe')}>Graphe éditorial</a>{' '}
           <a className="admin-primary-link" href="/admin/nouvelle-fiche"
             onClick={(event) => onNavigate(event, '/admin/nouvelle-fiche')}>Nouvelle fiche</a></div>
         {stats.phase === 'loading' && <StateMessage>Chargement des statistiques…</StateMessage>}

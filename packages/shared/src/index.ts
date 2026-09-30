@@ -32,6 +32,30 @@ export type EntityKind =
 
 export type PlaceKind = 'CITY' | 'CONTINENT' | 'REGION' | 'SEA' | 'OCEAN' | 'OTHER'
 
+/** Projection de lecture minimale ; les identifiants restent ceux du Codex. */
+export interface GraphNode {
+  id: string
+  slug: string
+  title: string
+  kind: EntityKind
+  placeKind: PlaceKind | null
+}
+
+export interface GraphEdge {
+  id: string
+  source: string
+  target: string
+  type: string
+  label: string
+  inverseLabel: string | null
+  symmetric: boolean
+}
+
+export interface GraphResponse { nodes: GraphNode[]; edges: GraphEdge[] }
+export interface AdminGraphNode extends GraphNode { status: EditorialStatus; visibility: Visibility }
+export interface AdminGraphEdge extends GraphEdge { status: EditorialStatus; visibility: Visibility }
+export interface AdminGraphResponse { nodes: AdminGraphNode[]; edges: AdminGraphEdge[] }
+
 export interface EntityListItem {
   id: string
   slug: string

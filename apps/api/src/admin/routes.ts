@@ -12,6 +12,7 @@ import { manualRelationSchema } from './manual-relations-validation.js'
 import type { ProvenanceService } from './provenance.js'
 import { evidencePatchSchema, relationPatchSchema, relationWorkflowSchema, sourcePatchSchema } from './provenance-validation.js'
 import type { AdminStore } from './store.js'
+import type { GraphStore } from '../graph.js'
 import { patchSchema, validationMessage, workflowSchema } from './validation.js'
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
@@ -34,8 +35,12 @@ function editorLabel(response: { locals: Record<string, unknown> }): string {
 
 export function createAdminRouter(store: AdminStore, editorial: EditorialService,
   provenance?: ProvenanceService, manual?: ManualService, manualRelations?: ManualRelationService,
-  evidenceAdd?: EvidenceAddService) {
+  evidenceAdd?: EvidenceAddService, graph?: GraphStore) {
   const router = Router()
+
+  if (graph) router.get('/graph', async (_request, response) => {
+    response.json(await graph.adminGraph())
+  })
 
   router.get('/stats', async (_request, response) => {
     response.json(await store.getStats())
