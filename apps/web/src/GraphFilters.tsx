@@ -1,9 +1,14 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { EntityKind } from '@hesta-codex/shared'
-import { graphGroups, kindLabels, placeLabels, type GraphData, type GraphFilters } from './graph-model'
+import { graphGroups, kindLabels, normalizeSearch, placeLabels, searchMatchParts, type GraphData, type GraphFilters } from './graph-model'
 
 const statuses = ['DRAFT', 'PROPOSED', 'PUBLISHED', 'ARCHIVED']
 const visibilities = ['PUBLIC', 'PLAYERS', 'GM', 'SECRET']
+
+function SearchMatch({ text, query }: { text: string; query: string }) {
+  return <>{searchMatchParts(text, query).map((part, i) => part.matched
+    ? <mark key={i}>{part.text}</mark> : part.text)}</>
+}
 
 export function GraphFiltersPanel({ data, admin, filters, activeGroups, query, results, onQueryChange,
   onSelectResult, onFiltersChange, onToggleGroup, onReset }: {
@@ -20,8 +25,9 @@ export function GraphFiltersPanel({ data, admin, filters, activeGroups, query, r
   onReset: () => void
 }) {
   const [open, setOpen] = useState(() => typeof window === 'undefined' || !window.matchMedia?.('(max-width: 560px)').matches)
-  const types = [...new Map(data.edges.map((edge) => [edge.type, edge.label])).entries()]
-    .sort(([a], [b]) => a.localeCompare(b, 'fr'))
+  const types = useMemo(() => [...new Map(data.edges.map((edge) => [edge.type, edge.label])).entries()]
+    .sort(([a], [b]) => a.localeCompare(b, 'fr')), [data.edges])
+  const needle = normalizeSearch(query)
   const update = (key: keyof GraphFilters, value: string) => onFiltersChange({ ...filters, [key]: value })
 
   return <section className="graph-filters" aria-label="Recherche et filtres du graphe">
@@ -31,9 +37,15 @@ export function GraphFiltersPanel({ data, admin, filters, activeGroups, query, r
       {query.trim() && <div className="graph-search-results">
         {results.length === 0 ? <p role="status">Aucune fiche trouvée.</p> : <>
           <p role="status">{results.length} résultat{results.length > 1 ? 's' : ''}</p>
-          <ul>{results.slice(0, 12).map((node) => <li key={node.id}>
-            <button type="button" onClick={() => onSelectResult(node.id)}>{node.title} <small>/{node.slug}</small></button>
-          </li>)}</ul>
+          <ul>{results.slice(0, 12).map((node) => {
+            const alias = node.aliases.find((value) => normalizeSearch(value).includes(needle))
+            return <li key={node.id}>
+              <button type="button" onClick={() => onSelectResult(node.id)}>
+                <SearchMatch text={node.title} query={query} />{' '}<small>/<SearchMatch text={node.slug} query={query} /></small>
+                {alias && <> <small className="graph-result-alias">Alias : <SearchMatch text={alias} query={query} /></small></>}
+              </button>
+            </li>
+          })}</ul>
           {results.length > 12 && <p>12 premiers résultats affichés. Précisez la recherche.</p>}
         </>}
       </div>}

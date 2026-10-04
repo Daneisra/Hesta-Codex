@@ -3,7 +3,8 @@ import type { AdminGraphResponse, GraphResponse } from '@hesta-codex/shared'
 import { GraphCanvas } from './GraphCanvas'
 import { GraphDetails } from './GraphDetails'
 import { GraphFiltersPanel } from './GraphFilters'
-import { emptyFilters, filterGraph, graphGroups, searchGraph, type GraphData, type GraphFilters } from './graph-model'
+import { emptyFilters, filterGraph, graphGroups, indexGraph, isolateNeighborhood, neighborhoodDistances,
+  searchGraph, type GraphData, type GraphFilters, type NeighborhoodDepth } from './graph-model'
 import './Graph.css'
 
 export { visibleConnections } from './graph-model'
@@ -36,6 +37,8 @@ export function GraphPage({ endpoint, admin = false, onOpenNode }: {
   const [selectedId, setSelectedId] = useState('')
   const [selectedEdgeId, setSelectedEdgeId] = useState('')
   const [isolated, setIsolated] = useState(false)
+  const [depth, setDepth] = useState<NeighborhoodDepth>(1)
+  const [detailsFocusToken, setDetailsFocusToken] = useState(0)
   const [focusRequest, setFocusRequest] = useState<{ id: string; token: number } | null>(null)
 
   useEffect(() => {
@@ -56,15 +59,21 @@ export function GraphPage({ endpoint, admin = false, onOpenNode }: {
   }, [endpoint, retry])
 
   const data = load.phase === 'ready' ? load.data : null
+  const loadedIndex = useMemo(() => data ? indexGraph(data) : null, [data])
   const baseGraph = useMemo(() => data ? filterGraph(data, filters, activeGroups) : null,
     [data, filters, activeGroups])
+  const baseIndex = useMemo(() => baseGraph ? indexGraph(baseGraph) : null, [baseGraph])
   const results = useMemo(() => baseGraph ? searchGraph(baseGraph, query) : [], [baseGraph, query])
+  const searchMatches = useMemo(() => new Set(results.map((node) => node.id)), [results])
+  const distances = useMemo(() => baseIndex ? neighborhoodDistances(baseIndex, selectedId, depth) : new Map<string, number>(),
+    [baseIndex, selectedId, depth])
   const visibleGraph = useMemo(() => baseGraph && isolated && selectedId
-    ? filterGraph(baseGraph, emptyFilters, allGroups(), selectedId) : baseGraph,
-  [baseGraph, isolated, selectedId])
-  const byId = useMemo(() => new Map(data?.nodes.map((node) => [node.id, node]) ?? []), [data])
-  const selected = visibleGraph?.nodes.find((node) => node.id === selectedId) ?? null
-  const selectedEdge = visibleGraph?.edges.find((edge) => edge.id === selectedEdgeId) ?? null
+    ? isolateNeighborhood(baseGraph, distances) : baseGraph,
+  [baseGraph, isolated, selectedId, distances])
+  const visibleIndex = useMemo(() => visibleGraph === baseGraph ? baseIndex
+    : visibleGraph ? indexGraph(visibleGraph) : null, [visibleGraph, baseGraph, baseIndex])
+  const selected = visibleIndex?.nodes.get(selectedId) ?? null
+  const selectedEdge = visibleIndex?.edges.get(selectedEdgeId) ?? null
 
   useEffect(() => {
     if (!data) return
@@ -82,21 +91,21 @@ export function GraphPage({ endpoint, admin = false, onOpenNode }: {
   }, [data])
 
   useEffect(() => {
-    if (!selectedId || !baseGraph || baseGraph.nodes.some((node) => node.id === selectedId)) return
+    if (!selectedId || !baseIndex || baseIndex.nodes.has(selectedId)) return
     setSelectedId('')
     setSelectedEdgeId('')
     setIsolated(false)
     writeSelectedSlug(null, true)
-  }, [selectedId, baseGraph])
+  }, [selectedId, baseIndex])
 
   useEffect(() => {
-    if (selectedEdgeId && visibleGraph && !visibleGraph.edges.some((edge) => edge.id === selectedEdgeId)) {
+    if (selectedEdgeId && visibleIndex && !visibleIndex.edges.has(selectedEdgeId)) {
       setSelectedEdgeId('')
     }
-  }, [selectedEdgeId, visibleGraph])
+  }, [selectedEdgeId, visibleIndex])
 
-  const selectNode = useCallback((id: string) => {
-    const node = byId.get(id)
+  const selectNode = useCallback((id: string, recenter = true) => {
+    const node = baseIndex?.nodes.get(id)
     if (!node) {
       setSelectedId(''); setSelectedEdgeId(''); setIsolated(false); writeSelectedSlug(null)
       return
@@ -104,9 +113,13 @@ export function GraphPage({ endpoint, admin = false, onOpenNode }: {
     if (id !== selectedId) setIsolated(false)
     setSelectedId(id)
     setSelectedEdgeId('')
-    setFocusRequest((previous) => ({ id, token: (previous?.token ?? 0) + 1 }))
+    if (recenter) setFocusRequest((previous) => ({ id, token: (previous?.token ?? 0) + 1 }))
+    else setFocusRequest(null)
     writeSelectedSlug(node.slug)
-  }, [byId, selectedId])
+  }, [baseIndex, selectedId])
+
+  // Keep the hit target still between the two clicks that open a fiche.
+  const selectCanvasNode = useCallback((id: string) => selectNode(id, false), [selectNode])
 
   const clearSelection = useCallback(() => {
     setSelectedId(''); setSelectedEdgeId(''); setIsolated(false); writeSelectedSlug(null)
@@ -137,20 +150,29 @@ export function GraphPage({ endpoint, admin = false, onOpenNode }: {
       <button type="button" onClick={() => setRetry((value) => value + 1)}>Réessayer</button></div>}
     {data && data.nodes.length === 0 && <p className="graph-message">{admin ? 'Aucune fiche à représenter.'
       : 'Le graphe attend ses premières fiches publiées.'}</p>}
-    {data && data.nodes.length > 0 && visibleGraph && <>
+    {data && data.nodes.length > 0 && visibleGraph && visibleIndex && loadedIndex && <>
       <GraphFiltersPanel data={data} admin={admin} filters={filters} activeGroups={activeGroups} query={query}
-        results={results} onQueryChange={setQuery} onSelectResult={(id) => { selectNode(id); setQuery('') }}
+        results={results} onQueryChange={setQuery} onSelectResult={(id) => {
+          selectNode(id); setQuery(''); setDetailsFocusToken((value) => value + 1)
+        }}
         onFiltersChange={setFilters} onToggleGroup={toggleGroup} onReset={resetFilters} />
       {visibleGraph.nodes.length === 0 ? <div className="graph-message" role="status">
         <p>Aucune fiche ne correspond aux filtres.</p>
         <button type="button" onClick={resetFilters}>Réinitialiser les filtres</button>
       </div> : <div className="graph-layout">
         <GraphCanvas data={visibleGraph} selectedId={selectedId} selectedEdgeId={selectedEdgeId}
-          isolated={isolated} focusRequest={focusRequest} onSelectNode={selectNode} onOpenNode={onOpenNode}
+          index={visibleIndex} totalIndex={loadedIndex} distances={distances} depth={depth}
+          onDepthChange={setDepth} searchMatches={searchMatches}
+          isolated={isolated} focusRequest={focusRequest} onSelectNode={selectCanvasNode} onOpenNode={onOpenNode}
           onSelectEdge={setSelectedEdgeId} onClearSelection={clearSelection}
           onToggleIsolation={() => setIsolated((value) => !value)} />
-        <GraphDetails data={visibleGraph} selected={selected} selectedEdge={selectedEdge}
-          onSelectNode={selectNode} onOpenNode={onOpenNode}
+        <GraphDetails data={visibleGraph} index={visibleIndex} totalIndex={loadedIndex}
+          focusToken={detailsFocusToken}
+          selected={selected} selectedEdge={selectedEdge}
+          onSelectNode={(id, focusDetails = false) => {
+            selectNode(id)
+            if (focusDetails) setDetailsFocusToken((value) => value + 1)
+          }} onOpenNode={onOpenNode}
           onRecenter={() => { if (selected) setFocusRequest((previous) => ({ id: selected.id,
             token: (previous?.token ?? 0) + 1 })) }} />
       </div>}

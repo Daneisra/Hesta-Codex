@@ -1,26 +1,35 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useImperativeHandle, type Ref } from 'react'
 import type { AdminGraphResponse, GraphResponse } from '@hesta-codex/shared'
 import { GraphPage, visibleConnections } from './GraphPage'
 import { emptyFilters, filterGraph, graphGroups, searchGraph } from './graph-model'
 
-vi.mock('react-force-graph-2d', () => ({ default: ({ graphData, onNodeClick, onLinkClick,
+const interactionMock = vi.hoisted(() => ({ methods: {
+  centerAt: vi.fn(), zoom: vi.fn(() => 1.7), zoomToFit: vi.fn(),
+} }))
+
+vi.mock('react-force-graph-2d', () => ({ default: ({ ref, graphData, onNodeClick, onLinkClick,
   onNodeHover, onLinkHover, nodeLabel, linkLabel }: {
-  graphData: { nodes: Array<{ id: string; title: string; slug: string }>; links: Array<{ id: string }> }
+  ref?: Ref<typeof interactionMock.methods>
+  graphData: { nodes: Array<{ id: string; title: string; slug: string; x?: number; y?: number }>; links: Array<{ id: string }> }
   onNodeClick: (node: { id: string; slug: string }, event: MouseEvent) => void
   onLinkClick: (edge: { id: string }) => void
   onNodeHover: (node: { id: string } | null) => void
   onLinkHover: (edge: { id: string } | null) => void
   nodeLabel: (node: { id: string; title: string }) => string
   linkLabel: (edge: { id: string }) => string
-}) => <div data-testid="canvas-graph">{graphData.nodes.length} nœuds, {graphData.links.length} arêtes
+}) => {
+  useImperativeHandle(ref, () => interactionMock.methods)
+  graphData.nodes.forEach((node, i) => { node.x ??= 10 + i * 10; node.y ??= 20 + i * 10 })
+  return <div data-testid="canvas-graph">{graphData.nodes.length} nœuds, {graphData.links.length} arêtes
   <span data-testid="tooltip-content">{nodeLabel(graphData.nodes[0]!)}{linkLabel(graphData.links[0]!)}</span>
   {graphData.nodes.map((node) => <button key={node.id} onMouseEnter={() => onNodeHover(node)}
     onMouseLeave={() => onNodeHover(null)} onClick={() => onNodeClick(node, new MouseEvent('pointerup'))}>{node.title}</button>)}
   {graphData.links.map((edge) => <button key={edge.id} onMouseEnter={() => onLinkHover(edge)}
     onMouseLeave={() => onLinkHover(null)} onClick={() => onLinkClick(edge)}>{edge.id}</button>)}
-</div> }))
+</div> } }))
 
 const fixture: GraphResponse = { nodes: [
   { id: 'a', slug: 'ville', title: 'Ville', kind: 'PLACE', placeKind: 'CITY', summary: 'Une ville côtière', aliases: ['Cité du port'] },
@@ -44,6 +53,7 @@ const response = (body: unknown, status = 200) => ({ ok: status === 200, status,
 const groups = new Set<string>(graphGroups.map((group) => group.id))
 
 beforeEach(() => {
+  interactionMock.methods.centerAt.mockClear()
   window.history.replaceState(null, '', '/graphe')
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 600, height: 440 } as DOMRect)
 })
@@ -85,6 +95,7 @@ describe('exploration du graphe', () => {
     expect(screen.getByRole('button', { name: /Ville \/ville/ })).toBeTruthy()
     await user.click(screen.getByRole('button', { name: /Ville \/ville/ }))
     expect(window.location.search).toBe('?fiche=ville')
+    expect(interactionMock.methods.centerAt).toHaveBeenCalledWith(10, 20, 600)
     expect(screen.getByText('Une ville côtière')).toBeTruthy()
     await user.type(search, 'continent')
     expect(screen.getByRole('button', { name: /Continent \/continent/ })).toBeTruthy()
@@ -188,6 +199,52 @@ describe('exploration du graphe', () => {
     expect(window.location.search).toBe('')
   })
 
+  it('expands the filtered neighborhood through depths 1, 2 and 3 and immediately restores the full view', async () => {
+    const deepFixture = { ...fixture, edges: [...fixture.edges, {
+      id: 'de', source: 'd', target: 'e', type: 'member_of', label: 'membre de',
+      inverseLabel: 'compte parmi ses membres', symmetric: false,
+    }] }
+    const fetchMock = vi.fn(async () => response(deepFixture))
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<GraphPage endpoint="/api/v1/graph" onOpenNode={vi.fn()} />)
+    await screen.findByText('5 nœuds, 4 arêtes')
+    const depth = screen.getByRole('combobox', { name: 'Profondeur du voisinage' })
+    expect((depth as HTMLSelectElement).disabled).toBe(true)
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Choisir une fiche' }), 'a')
+    await user.click(screen.getByRole('button', { name: 'Connexions directes' }))
+    expect(screen.getByText('3 nœuds, 2 arêtes')).toBeTruthy()
+    await user.selectOptions(depth, '2')
+    expect(screen.getByText('4 nœuds, 3 arêtes')).toBeTruthy()
+    await user.selectOptions(depth, '3')
+    expect(screen.getByText('5 nœuds, 4 arêtes')).toBeTruthy()
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Type de relation' }), 'located_in')
+    expect(screen.getByText('2 nœuds, 1 arêtes')).toBeTruthy()
+    expect(screen.getByText('2 relations au total')).toBeTruthy()
+    expect(screen.getByText(/1 affichée avec ces filtres/)).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Vue complète' }))
+    expect(window.location.search).toBe('')
+    expect(screen.getByText('5 nœuds, 1 arêtes')).toBeTruthy()
+    expect((depth as HTMLSelectElement).disabled).toBe(true)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('highlights an accent-insensitive alias match and moves keyboard focus to the selected details', async () => {
+    const fetchMock = vi.fn(async () => response(fixture))
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<GraphPage endpoint="/api/v1/graph" onOpenNode={vi.fn()} />)
+    await screen.findByText('5 nœuds, 3 arêtes')
+    await user.type(screen.getByRole('searchbox', { name: 'Rechercher une fiche' }), 'CITE')
+    expect(document.querySelector('.graph-search-results mark')?.textContent).toBe('Cité')
+    const result = screen.getByRole('button', { name: /Ville \/ville Alias/ })
+    result.focus()
+    await user.keyboard('{Enter}')
+    expect(window.location.search).toBe('?fiche=ville')
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Ville' }))
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
   it('supports direct URL selection, unknown slugs and history navigation', async () => {
     window.history.replaceState(null, '', '/graphe?fiche=ville')
     vi.stubGlobal('fetch', vi.fn(async () => response(fixture)))
@@ -204,6 +261,38 @@ describe('exploration du graphe', () => {
     window.history.replaceState(null, '', '/graphe?fiche=secret-inconnu')
     render(<GraphPage endpoint="/api/v1/graph" onOpenNode={vi.fn()} />)
     expect(await screen.findByText('Sélectionnez un nœud avec la recherche, la liste ou le graphe.')).toBeTruthy()
+  })
+
+  it('keeps keyboard focus visible when navigating from a connection to its neighbor', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response(fixture)))
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus')
+    const user = userEvent.setup()
+    render(<GraphPage endpoint="/api/v1/graph" onOpenNode={vi.fn()} />)
+    await screen.findByText('5 nœuds, 3 arêtes')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Choisir une fiche' }), 'a')
+    screen.getByRole('button', { name: /Ville → situé dans → Continent/ }).focus()
+    await user.keyboard('{Enter}')
+    expect(window.location.search).toBe('?fiche=continent')
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Continent' }))
+    expect(focus.mock.calls.at(-1)?.[0]?.preventScroll).not.toBe(true)
+  })
+
+  it('renders HTML-looking lore as literal text in search, details and hover', async () => {
+    const title = '<img src=x onerror="alert(1)">'
+    const unsafeText: GraphResponse = { nodes: [{ ...fixture.nodes[0]!, title,
+      summary: '<script>alert(1)</script>', aliases: ['<svg onload="alert(1)">'] }], edges: [] }
+    vi.stubGlobal('fetch', vi.fn(async () => response(unsafeText)))
+    const user = userEvent.setup()
+    render(<GraphPage endpoint="/api/v1/graph" onOpenNode={vi.fn()} />)
+    await screen.findByText('1 nœuds, 0 arêtes')
+    await user.type(screen.getByRole('searchbox', { name: 'Rechercher une fiche' }), '<img')
+    expect(document.querySelector('.graph-search-results mark')?.textContent).toBe('<img')
+    await user.click(screen.getByRole('button', { name: `${title} /ville` }))
+    expect(screen.getByRole('heading', { name: title })).toBeTruthy()
+    expect(screen.getByText('<script>alert(1)</script>')).toBeTruthy()
+    await user.hover(screen.getByRole('button', { name: title }))
+    expect(document.querySelector('.graph-hover')?.textContent).toBe(title)
+    expect(document.querySelector('.graph-page img, .graph-page script, .graph-page svg')).toBeNull()
   })
 
   it('never resolves a private URL slug absent from the public graph and decodes a permitted slug once', async () => {
@@ -227,10 +316,13 @@ describe('exploration du graphe', () => {
     const open = vi.fn()
     render(<GraphPage endpoint="/api/v1/graph" onOpenNode={open} />)
     await screen.findByText('5 nœuds, 3 arêtes')
+    interactionMock.methods.centerAt.mockClear()
     await user.click(screen.getByRole('button', { name: /^Ville$/ }))
     expect(window.location.search).toBe('?fiche=ville')
+    expect(interactionMock.methods.centerAt).not.toHaveBeenCalled()
     await user.hover(screen.getByRole('button', { name: 'located' }))
     expect(document.querySelector('.graph-hover')?.textContent).toBe('Ville → situé dans → Continent')
+    expect(document.querySelector('.graph-hover')?.closest('[role="img"]')).toBeNull()
     await user.click(screen.getByRole('button', { name: 'located' }))
     expect(screen.getByText('Relation sélectionnée')).toBeTruthy()
     await user.dblClick(screen.getByRole('button', { name: /^Continent$/ }))

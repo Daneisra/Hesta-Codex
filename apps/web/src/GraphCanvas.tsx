@@ -2,14 +2,25 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ForceGraph2D from 'react-force-graph-2d'
 import type { ForceGraphMethods, NodeObject } from 'react-force-graph-2d'
 import type { GraphEdge, GraphNode, GraphResponse } from '@hesta-codex/shared'
-import { groupFor } from './graph-model'
+import { groupFor, neighborhoodDistances, nodeRadius, type GraphIndex, type NeighborhoodDepth } from './graph-model'
 
 type Node = GraphNode & NodeObject
 type FocusRequest = { id: string; token: number } | null
 
+function motionDuration(duration: number): number {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 0 : duration
+}
+
 export function GraphCanvas({ data, selectedId, selectedEdgeId, isolated, focusRequest,
+  index, totalIndex, distances, depth, onDepthChange, searchMatches,
   onSelectNode, onOpenNode, onSelectEdge, onClearSelection, onToggleIsolation }: {
   data: GraphResponse
+  index: GraphIndex
+  totalIndex: GraphIndex
+  distances: ReadonlyMap<string, number>
+  depth: NeighborhoodDepth
+  onDepthChange: (depth: NeighborhoodDepth) => void
+  searchMatches: ReadonlySet<string>
   selectedId: string
   selectedEdgeId: string
   isolated: boolean
@@ -23,31 +34,46 @@ export function GraphCanvas({ data, selectedId, selectedEdgeId, isolated, focusR
   const areaRef = useRef<HTMLDivElement>(null)
   const graphRef = useRef<ForceGraphMethods<Node, GraphEdge> | undefined>(undefined)
   const pendingFocus = useRef<string | null>(null)
+  const issuedFocusRequest = useRef<FocusRequest>(null)
   const fitted = useRef(false)
   const lastDrag = useRef(0)
   const lastClick = useRef<{ id: string; time: number } | null>(null)
+  const layoutNodes = useRef(new Map<string, Node>())
   const [size, setSize] = useState({ width: 0, height: 0 })
+  const canvasReady = size.width > 0
   const [hoveredNodeId, setHoveredNodeId] = useState('')
   const [hoveredEdgeId, setHoveredEdgeId] = useState('')
   // ForceGraph mutates coordinates and link endpoints. Keep the API response untouched.
-  const graphData = useMemo(() => ({ nodes: data.nodes.map((node) => ({ ...node })),
-    links: data.edges.map((edge) => ({ ...edge })) }), [data])
-  const byId = useMemo(() => new Map(data.nodes.map((node) => [node.id, node])), [data.nodes])
-  const edgeById = useMemo(() => new Map(data.edges.map((edge) => [edge.id, edge])), [data.edges])
-  const activeNodeId = selectedId || hoveredNodeId
-  const activeEdgeId = selectedEdgeId || hoveredEdgeId
+  const graphData = useMemo(() => ({ nodes: data.nodes.map((node) => {
+    // Keep session-local coordinates (including dragged positions) through filters and isolation.
+    const positioned = layoutNodes.current.get(node.id) ?? { ...node }
+    Object.assign(positioned, node)
+    layoutNodes.current.set(node.id, positioned)
+    return positioned
+  }), links: data.edges.map((edge) => ({ ...edge })) }), [data])
+  const positionedNodes = useMemo(() => new Map(graphData.nodes.map((node) => [node.id, node])), [graphData.nodes])
+  const labels = useMemo(() => new Map(data.nodes.map((node) => {
+    const characters = [...node.title]
+    return [node.id, characters.length > 55 ? `${characters.slice(0, 52).join('')}…` : node.title]
+  })), [data.nodes])
+  const hoverNode = index.nodes.get(hoveredNodeId)
+  const hoverEdge = index.edges.get(hoveredEdgeId)
+  const activeEdgeId = hoverEdge?.id || selectedEdgeId
+  const highlightedDistances = useMemo(() => hoverNode
+    ? neighborhoodDistances(index, hoverNode.id, 1) : distances, [hoverNode, index, distances])
   const highlighted = useMemo(() => {
-    const ids = new Set<string>()
+    const ids = new Set(highlightedDistances.keys())
     const edges = new Set<string>()
-    if (activeNodeId) ids.add(activeNodeId)
+    const hoverEdges = hoverNode ? new Set(index.incidentEdges.get(hoverNode.id)?.map((edge) => edge.id)) : null
     for (const edge of data.edges) {
-      if (edge.source === activeNodeId || edge.target === activeNodeId || edge.id === activeEdgeId) {
+      if ((hoverEdges ? hoverEdges.has(edge.id) : highlightedDistances.has(edge.source) && highlightedDistances.has(edge.target)) ||
+        edge.id === activeEdgeId) {
         ids.add(edge.source); ids.add(edge.target); edges.add(edge.id)
       }
     }
     return { ids, edges }
-  }, [data.edges, activeNodeId, activeEdgeId])
-  const hasHighlight = Boolean(activeNodeId || activeEdgeId)
+  }, [data.edges, highlightedDistances, activeEdgeId, hoverNode, index])
+  const hasHighlight = highlighted.ids.size > 0
 
   useEffect(() => {
     const area = areaRef.current
@@ -65,47 +91,65 @@ export function GraphCanvas({ data, selectedId, selectedEdgeId, isolated, focusR
   }, [])
 
   const focus = useCallback((id: string) => {
-    const node = graphData.nodes.find((candidate) => candidate.id === id) as Node | undefined
+    const node = positionedNodes.get(id)
     if (!node || !Number.isFinite(node.x) || !Number.isFinite(node.y) || !graphRef.current) return false
-    graphRef.current.centerAt(node.x, node.y, 450)
-    graphRef.current.zoom(Math.max(1.7, graphRef.current.zoom()), 450)
+    const duration = motionDuration(600)
+    graphRef.current.centerAt(node.x, node.y, duration)
+    graphRef.current.zoom(Math.min(2.2, Math.max(1.2, graphRef.current.zoom())), duration)
     pendingFocus.current = null
     return true
-  }, [graphData.nodes])
+  }, [positionedNodes])
 
   useEffect(() => {
-    if (!focusRequest || !data.nodes.some((node) => node.id === focusRequest.id)) return
+    if (!canvasReady || !focusRequest || focusRequest.id !== selectedId || !index.nodes.has(focusRequest.id)) {
+      pendingFocus.current = null
+      issuedFocusRequest.current = null
+      return
+    }
+    // A completed request must not override later manual camera movements on a data change.
+    if (issuedFocusRequest.current === focusRequest) return
+    issuedFocusRequest.current = focusRequest
     pendingFocus.current = focusRequest.id
     focus(focusRequest.id)
-  }, [focusRequest, data.nodes, focus])
+  }, [focusRequest, selectedId, index, focus, canvasReady])
 
   useEffect(() => { fitted.current = false }, [graphData])
 
-  const hoverEdge = edgeById.get(hoveredEdgeId)
-  const hoverNode = byId.get(hoveredNodeId)
-  const relationText = hoverEdge ? `${byId.get(hoverEdge.source)?.title ?? ''} ${hoverEdge.symmetric ? '↔' : '→'} ` +
-    `${hoverEdge.label} ${hoverEdge.symmetric ? '↔' : '→'} ${byId.get(hoverEdge.target)?.title ?? ''}` : ''
+  const radiusFor = useCallback((id: string) => nodeRadius(totalIndex.incidentEdges.get(id)?.length ?? 0), [totalIndex])
+  const relationText = hoverEdge ? `${index.nodes.get(hoverEdge.source)?.title ?? ''} ${hoverEdge.symmetric ? '↔' : '→'} ` +
+    `${hoverEdge.label} ${hoverEdge.symmetric ? '↔' : '→'} ${index.nodes.get(hoverEdge.target)?.title ?? ''}` : ''
 
   return <div className="graph-main">
     <div className="graph-controls" aria-label="Contrôles du graphe">
-      <button type="button" onClick={() => graphRef.current?.zoom(Math.min(8, graphRef.current.zoom() * 1.3), 300)}>Zoom +</button>
-      <button type="button" onClick={() => graphRef.current?.zoom(Math.max(.15, graphRef.current.zoom() / 1.3), 300)}>Zoom −</button>
-      <button type="button" onClick={() => graphRef.current?.centerAt(0, 0, 400)}>Recentrer</button>
-      <button type="button" onClick={() => graphRef.current?.zoomToFit(400, 48)}>Ajuster à l’écran</button>
+      <button type="button" onClick={() => graphRef.current?.zoom(Math.min(8, graphRef.current.zoom() * 1.3), motionDuration(300))}>Zoom +</button>
+      <button type="button" onClick={() => graphRef.current?.zoom(Math.max(.15, graphRef.current.zoom() / 1.3), motionDuration(300))}>Zoom −</button>
+      <button type="button" onClick={() => graphRef.current?.centerAt(0, 0, motionDuration(400))}>Recentrer</button>
+      <button type="button" onClick={() => graphRef.current?.zoomToFit(motionDuration(400), 48)}>Ajuster à l’écran</button>
+      <label className="graph-depth">Profondeur du voisinage<select value={depth} disabled={!selectedId}
+        onChange={(event) => { const value = Number(event.target.value)
+          if (value === 1 || value === 2 || value === 3) onDepthChange(value) }}>
+        <option value="1">1 · Connexions directes</option><option value="2">2 · Deux relations</option>
+        <option value="3">3 · Trois relations</option>
+      </select></label>
       <button type="button" disabled={!selectedId} aria-pressed={isolated} onClick={onToggleIsolation}>
-        {isolated ? 'Afficher tout le graphe' : 'Connexions directes'}
+        {isolated ? 'Afficher tout le graphe' : depth === 1 ? 'Connexions directes' : 'Isoler le voisinage'}
       </button>
       <button type="button" disabled={!selectedId && !selectedEdgeId} onClick={() => {
-        onClearSelection(); graphRef.current?.zoomToFit(400, 48)
+        onClearSelection(); graphRef.current?.zoomToFit(motionDuration(400), 48)
       }}>Vue complète</button>
     </div>
-    <div className="graph-canvas" ref={areaRef} role="img"
+    <div className="graph-canvas" ref={areaRef} role="group"
       aria-label="Graphe interactif. La recherche et la liste de fiches permettent la navigation au clavier.">
       {size.width > 0 && <ForceGraph2D ref={graphRef} width={size.width} height={size.height}
-        graphData={graphData} backgroundColor="#0c1525" nodeRelSize={5} minZoom={.15} maxZoom={8}
+        graphData={graphData} backgroundColor="#0c1525" nodeRelSize={4}
+        nodeVal={(node) => (radiusFor(String(node.id)) / 4) ** 2} minZoom={.15} maxZoom={8}
         showPointerCursor
-        nodeColor={(node) => hasHighlight && !highlighted.ids.has(String(node.id))
-          ? '#42516a' : groupFor(node.kind).color}
+        nodeColor={(node) => {
+          const id = String(node.id)
+          const color = groupFor(node.kind).color
+          return hasHighlight && !highlighted.ids.has(id) ? `${color}55`
+            : (highlightedDistances.get(id) ?? 0) > 1 ? `${color}bb` : color
+        }}
         // The library renders tooltip labels as HTML; all lore text stays in Canvas or React text.
         nodeLabel={() => ''} linkLabel={() => ''}
         linkColor={(edge) => hasHighlight && !highlighted.edges.has(String(edge.id))
@@ -127,36 +171,52 @@ export function GraphCanvas({ data, selectedId, selectedEdgeId, isolated, focusR
             onSelectNode(id)
           }
         }}
-        onLinkClick={(edge) => onSelectEdge(String(edge.id))}
+        onLinkClick={(edge) => { lastClick.current = null; onSelectEdge(String(edge.id)) }}
+        onBackgroundClick={() => { lastClick.current = null }}
+        onZoom={() => { lastClick.current = null }}
         onNodeDragEnd={(node) => { lastDrag.current = Date.now(); lastClick.current = null; node.fx = node.x; node.fy = node.y }}
         onEngineTick={() => { if (pendingFocus.current) focus(pendingFocus.current) }}
         onEngineStop={() => {
           if (pendingFocus.current) focus(pendingFocus.current)
           if (!fitted.current && !pendingFocus.current && !selectedId) {
-            fitted.current = true; graphRef.current?.zoomToFit(450, 50)
+            fitted.current = true; graphRef.current?.zoomToFit(motionDuration(450), 50)
           }
         }}
         nodeCanvasObjectMode={() => 'after'}
         nodeCanvasObject={(node, context, scale) => {
           const id = String(node.id)
           const active = id === selectedId || id === hoveredNodeId
-          if (active) {
+          const distance = highlightedDistances.get(id)
+          const radius = radiusFor(id)
+          context.save()
+          if (active || distance !== undefined) {
             context.beginPath()
-            context.arc(node.x ?? 0, node.y ?? 0, 9, 0, 2 * Math.PI)
-            context.strokeStyle = '#f6d99b'
-            context.lineWidth = 2 / scale
+            context.arc(node.x ?? 0, node.y ?? 0, radius + (active ? 4 : 2), 0, 2 * Math.PI)
+            context.strokeStyle = active ? '#f6d99b' : '#b8c6df'
+            context.lineWidth = (active ? 2 : 1) / scale
+            if (!active && distance !== undefined && distance > 1) context.setLineDash([3 / scale, 3 / scale])
             context.stroke()
+            context.setLineDash([])
           }
-          if (!active && data.nodes.length > 90 && scale < 1.4) return
+          if (searchMatches.has(id)) {
+            const side = radius + 6
+            context.strokeStyle = '#f6d99b'; context.lineWidth = 1.5 / scale
+            context.strokeRect((node.x ?? 0) - side, (node.y ?? 0) - side, side * 2, side * 2)
+          }
+          if (!active && !searchMatches.has(id) && data.nodes.length > 90 && scale < 1.4) { context.restore(); return }
           context.font = `${Math.max(8, 11 / scale)}px sans-serif`
           context.fillStyle = hasHighlight && !highlighted.ids.has(id) ? '#8592a8' : '#e3eaf7'
           context.textAlign = 'center'
-          context.fillText(String(node.title), node.x ?? 0, (node.y ?? 0) + 13 / scale)
+          context.fillText(labels.get(id) ?? '', node.x ?? 0, (node.y ?? 0) + radius + 11 / scale)
+          context.restore()
         }} />}
       {(hoverEdge || hoverNode) && <p className="graph-hover" role="status">
         {hoverEdge ? relationText : hoverNode?.title}
       </p>}
     </div>
+    {selectedId && <p className="graph-neighborhood-key">
+      <span>◎ Fiche sélectionnée</span><span>○ Voisins directs</span><span>◌ Voisins à 2–3 relations</span>
+    </p>}
     <p className="graph-hint">Molette ou boutons pour zoomer · glisser le fond pour déplacer · glisser un nœud pour le fixer · double clic pour ouvrir.</p>
   </div>
 }

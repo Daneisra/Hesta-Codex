@@ -4,6 +4,9 @@ import userEvent from '@testing-library/user-event'
 import type { EntityDetail, EntityListItem, EntityRelationItem } from '@hesta-codex/shared'
 import { App } from './App'
 
+// Routing tests do not need a physics engine or Canvas in JSDOM.
+vi.mock('react-force-graph-2d', () => ({ default: () => null }))
+
 const city: EntityListItem = {
   id: 'city-id', slug: 'nikaius', kind: 'PLACE', placeKind: 'CITY',
   title: 'Nikaius', summary: 'Une ville du continent.', tags: ['Empire'],

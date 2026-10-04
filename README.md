@@ -41,8 +41,10 @@ La recherche démarre à deux caractères. La liste affiche au plus 100 fiches p
 limite actuelle de l'API ; il n'y a pas encore de pagination ni de total global.
 La vue `/graphe` montre les fiches et relations publiques ; `/admin/graphe` montre le réseau
 éditorial aux administrateurs. Les règles de visibilité sont appliquées dans les requêtes API,
-pas dans le Canvas. Recherche locale, filtres combinables, voisinage direct et liens
-`?fiche=slug` facilitent l'exploration. Voir [docs/GRAPH.md](docs/GRAPH.md).
+pas dans le Canvas. Depuis v0.6c, recherche locale avec correspondances surlignées,
+filtres combinables, voisinage à profondeur 1–3, survol temporaire et liens `?fiche=slug`
+facilitent l'exploration. Les déplacements restent locaux à la vue, sans écriture en base.
+Voir [docs/GRAPH.md](docs/GRAPH.md).
 
 Pour lancer l’API, utiliser les migrations ou le seed, copier `.env.example` en `.env` et remplacer les
 valeurs fictives de `DATABASE_URL` par celles d'une base PostgreSQL. Le fichier `.env` est

@@ -4,6 +4,9 @@ import userEvent from '@testing-library/user-event'
 import type { AdminEntityDetail, AdminEntityListResponse, AdminStats, AuthSessionResponse } from '@hesta-codex/shared'
 import { App } from './App'
 
+// Keep these tests focused on session authorization and SPA navigation.
+vi.mock('react-force-graph-2d', () => ({ default: () => null }))
+
 const anonymous: AuthSessionResponse = { authenticated: false, isAdmin: false, user: null }
 const denied: AuthSessionResponse = { authenticated: true, isAdmin: false, user: { username: 'joueur', displayName: null } }
 const administrator: AuthSessionResponse = { authenticated: true, isAdmin: true, user: { username: 'mj', displayName: 'Maître du jeu' } }

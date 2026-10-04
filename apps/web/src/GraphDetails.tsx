@@ -1,22 +1,35 @@
+import { useEffect, useMemo, useRef } from 'react'
 import type { GraphEdge, GraphNode, GraphResponse } from '@hesta-codex/shared'
-import { kindLabels, placeLabels, visibleConnections } from './graph-model'
+import { kindLabels, placeLabels, visibleConnections, type GraphIndex } from './graph-model'
 
-export function GraphDetails({ data, selected, selectedEdge, onSelectNode, onOpenNode, onRecenter }: {
+export function GraphDetails({ data, index, totalIndex, focusToken, selected, selectedEdge, onSelectNode, onOpenNode, onRecenter }: {
   data: GraphResponse
+  index: GraphIndex
+  totalIndex: GraphIndex
+  focusToken: number
   selected: GraphNode | null
   selectedEdge: GraphEdge | null
-  onSelectNode: (id: string) => void
+  onSelectNode: (id: string, focusDetails?: boolean) => void
   onOpenNode: (slug: string) => void
   onRecenter: () => void
 }) {
-  const connections = selected ? visibleConnections(data, selected.id) : []
+  const selectedId = selected?.id
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const lastFocusToken = useRef(0)
+  useEffect(() => {
+    if (selectedId && focusToken !== lastFocusToken.current) {
+      headingRef.current?.focus()
+      lastFocusToken.current = focusToken
+    }
+  }, [selectedId, focusToken])
+  const connections = useMemo(() => selectedId ? visibleConnections(data, selectedId, index) : [], [data, index, selectedId])
+  const total = selectedId ? totalIndex.incidentEdges.get(selectedId)?.length ?? 0 : 0
   const outgoing = connections.filter((edge) => edge.direction === 'outgoing').length
   const incoming = connections.filter((edge) => edge.direction === 'incoming').length
   const symmetric = connections.filter((edge) => edge.direction === 'symmetric').length
   const unique = new Set(connections.map((edge) => edge.otherId)).size
-  const byId = new Map(data.nodes.map((node) => [node.id, node]))
-  const edgeFrom = selectedEdge ? byId.get(selectedEdge.source) : null
-  const edgeTo = selectedEdge ? byId.get(selectedEdge.target) : null
+  const edgeFrom = selectedEdge ? index.nodes.get(selectedEdge.source) : null
+  const edgeTo = selectedEdge ? index.nodes.get(selectedEdge.target) : null
 
   return <aside className="graph-side" aria-label="Détails du graphe">
     <label>Choisir une fiche<select value={selected?.id ?? ''} onChange={(event) => onSelectNode(event.target.value)}>
@@ -28,17 +41,20 @@ export function GraphDetails({ data, selected, selectedEdge, onSelectNode, onOpe
       <p>{edgeFrom.title} {selectedEdge.symmetric ? '↔' : '→'} {selectedEdge.label} {selectedEdge.symmetric ? '↔' : '→'} {edgeTo.title}</p>
       <small>Type : {selectedEdge.type}</small>
     </div>}
-    {selected ? <div className="graph-selected"><h2>{selected.title}</h2>
+    {selected ? <div className="graph-selected"><p className="section-eyebrow">Fiche sélectionnée</p>
+      <h2 ref={headingRef} tabIndex={-1}>{selected.title}</h2>
       <p>{kindLabels[selected.kind]}{selected.kind === 'PLACE' && selected.placeKind
         ? ` · ${placeLabels[selected.placeKind]}` : ''} · /{selected.slug}</p>
       {selected.summary && <p className="graph-summary">{selected.summary}</p>}
       {'status' in selected && 'visibility' in selected &&
         <p>Statut : {String(selected.status)} · Visibilité : {String(selected.visibility)}</p>}
+      <p><strong>{total} relation{total > 1 ? 's' : ''} au total</strong> dans le graphe chargé.
+        {total !== connections.length && ` ${connections.length} affichée${connections.length > 1 ? 's' : ''} avec ces filtres.`}</p>
       <p>{outgoing} sortante{outgoing > 1 ? 's' : ''} · {incoming} entrante{incoming > 1 ? 's' : ''}
         {symmetric > 0 && ` · ${symmetric} symétrique${symmetric > 1 ? 's' : ''}`}
         {' · '}{unique} fiche{unique > 1 ? 's' : ''} liée{unique > 1 ? 's' : ''}</p>
       {connections.length > 0 ? <ul>{connections.slice(0, 8).map((edge) => <li key={edge.id}>
-        <button type="button" onClick={() => onSelectNode(edge.otherId)}>
+        <button type="button" onClick={() => onSelectNode(edge.otherId, true)}>
           {selected.title} {edge.symmetric ? '↔' : '→'} {edge.displayLabel} {edge.symmetric ? '↔' : '→'} {edge.otherTitle}
           {edge.direction === 'incoming' && <small> · sens inverse</small>}
         </button>
