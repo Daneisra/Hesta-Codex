@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { GraphEdge, GraphNode, GraphResponse } from '@hesta-codex/shared'
 import { emptyFilters, filterGraph, graphGroups, indexGraph, isolateNeighborhood, neighborhoodDistances,
   nodeRadius, searchMatchParts, visibleConnections } from './graph-model'
+import { syntheticGraph } from './graph-synthetic'
+import { indexGraphSearch, searchGraph, searchIndexedGraph } from './graph-model'
 
 const node = (id: string): GraphNode => ({ id, slug: id, title: id, kind: 'PLACE', placeKind: 'CITY', summary: null, aliases: [] })
 const edge = (id: string, source: string, target: string, symmetric = false): GraphEdge => ({
@@ -67,5 +69,54 @@ describe('search highlighting', () => {
     expect(searchMatchParts(text, '<script>').find((part) => part.matched)?.text).toBe('<script>')
     expect(searchMatchParts(text, 'absent')).toEqual([{ text, matched: false }])
     expect(searchMatchParts(text, ' ')).toEqual([{ text, matched: false }])
+  })
+})
+
+describe('large synthetic graph', () => {
+  it('indexes 1,000 nodes / 3,000 edges and produces correct shortest neighborhoods at every depth', () => {
+    const data = syntheticGraph()
+    const index = indexGraph(data)
+    expect(index.nodes.size).toBe(1_000)
+    expect(index.edges.size).toBe(3_000)
+    expect(index.incidentEdges.get('node-0')?.length).toBe(6)
+    for (const depth of [1, 2, 3] as const) {
+      // Independent frontier calculation for the six ring/shortcut neighbors.
+      const expected = new Map<number, number>([[0, 0]])
+      let frontier = new Set([0])
+      for (let distance = 1; distance <= depth; distance++) {
+        const next = new Set<number>()
+        for (const id of frontier) for (const offset of [-10, -5, -1, 1, 5, 10]) {
+          const neighbor = (id + offset + 100) % 100
+          if (!expected.has(neighbor)) { expected.set(neighbor, distance); next.add(neighbor) }
+        }
+        frontier = next
+      }
+      const distances = neighborhoodDistances(index, 'node-0', depth)
+      expect(distances).toEqual(new Map([...expected].map(([id, distance]) => [`node-${id}`, distance])))
+      const isolated = isolateNeighborhood(data, distances)
+      expect(isolated.nodes.map(node => node.id).sort()).toEqual([...distances.keys()].sort())
+      expect(isolated.edges).toEqual(data.edges.filter(edge => distances.has(edge.source) && distances.has(edge.target)))
+      expect(new Set(isolated.edges.map(edge => edge.id)).size).toBe(isolated.edges.length)
+      expect(isolated.nodes.every(node => Number(node.id.slice(5)) < 100)).toBe(true)
+    }
+  })
+
+  it('combines filters and isolation without reversing directions or duplicating symmetric relations', () => {
+    const data = syntheticGraph()
+    const groups = new Set(graphGroups.map(group => group.id))
+    const symmetric = filterGraph(data, { ...emptyFilters, relationType: 'allied_with' }, groups)
+    expect(symmetric.edges).toHaveLength(1_000)
+    const isolated = isolateNeighborhood(symmetric, neighborhoodDistances(indexGraph(symmetric), 'node-0', 3))
+    expect(isolated.nodes.map(node => node.id).sort()).toEqual(['node-0', 'node-5', 'node-10', 'node-15', 'node-85', 'node-90', 'node-95'].sort())
+    expect(isolated.edges).toHaveLength(6)
+    const places = filterGraph(data, { ...emptyFilters, kind: 'PLACE', placeKind: 'CITY', relationType: 'located_in' }, groups)
+    expect(places.nodes).toHaveLength(500)
+    expect(places.edges).toHaveLength(500)
+    const nearby = isolateNeighborhood(places, neighborhoodDistances(indexGraph(places), 'node-0', 3))
+    expect(nearby.nodes).toHaveLength(7)
+    expect(nearby.edges).toHaveLength(6)
+    expect(nearby.edges.every(edge => !edge.symmetric && data.edges.find(original => original.id === edge.id)?.source === edge.source)).toBe(true)
+    const search = indexGraphSearch(data)
+    expect(searchIndexedGraph(places, 'ALIAS 10', search)).toEqual(searchGraph(places, 'ALIAS 10'))
   })
 })

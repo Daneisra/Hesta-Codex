@@ -4,6 +4,12 @@
 .graph-heading p { color: #b9c7dc; margin: .3rem 0; }
 .graph-count { font-size: .88rem; overflow-wrap: anywhere; }
 .graph-count small { display: block; color: #92a7c6; white-space: normal; }
+.graph-share { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin-bottom: 1rem; color: #c9d5e6; }
+.graph-share button { padding: .48rem .7rem; border: 1px solid #657a9c; border-radius: .35rem; color: #eef2fa; background: #1d2b42; }
+.graph-share button:disabled { opacity: .45; cursor: not-allowed; }
+.graph-share label { display: grid; gap: .35rem; min-width: 0; width: 100%; }
+.graph-share input { width: 100%; min-width: 0; padding: .55rem; color: #eef2fa; background: #192840; border: 1px solid #657a9c; border-radius: .35rem; }
+.graph-feedback { margin: 0; padding: .6rem .7rem; color: #c9d5e6; font-size: .85rem; }
 .graph-filters { margin-bottom: 1rem; padding: 1rem; border: 1px solid #33445e; border-radius: .7rem; background: #121e31; min-width: 0; }
 .graph-search { max-width: 32rem; }
 .graph-search label { display: block; margin-bottom: .4rem; color: #dbe4f3; }

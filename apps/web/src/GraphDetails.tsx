@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { memo, useEffect, useMemo, useRef } from 'react'
 import type { GraphEdge, GraphNode, GraphResponse } from '@hesta-codex/shared'
 import { kindLabels, placeLabels, visibleConnections, type GraphIndex } from './graph-model'
 
-export function GraphDetails({ data, index, totalIndex, focusToken, selected, selectedEdge, onSelectNode, onOpenNode, onRecenter }: {
+export const GraphDetails = memo(function GraphDetails({ data, index, totalIndex, focusToken, selected, selectedEdge, onSelectNode, onOpenNode, onRecenter }: {
   data: GraphResponse
   index: GraphIndex
   totalIndex: GraphIndex
@@ -66,4 +66,4 @@ export function GraphDetails({ data, index, totalIndex, focusToken, selected, se
       </div>
     </div> : <p className="graph-hint">Sélectionnez un nœud avec la recherche, la liste ou le graphe.</p>}
   </aside>
-}
+})

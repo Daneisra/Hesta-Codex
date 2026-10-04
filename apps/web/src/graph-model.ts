@@ -102,6 +102,23 @@ export function searchGraph(data: GraphData, query: string): GraphNode[] {
     .some((value) => normalizeSearch(value).includes(needle)))
 }
 
+export function indexGraphSearch(data: GraphData): Map<string, string[]> {
+  return new Map(data.nodes.map(node => [node.id, [node.title, node.slug, ...node.aliases].map(normalizeSearch)]))
+}
+
+export function searchIndexedGraph(data: GraphResponse, query: string, index: ReadonlyMap<string, readonly string[]>): GraphNode[] {
+  const needle = normalizeSearch(query)
+  if (!needle) return []
+  return data.nodes.filter(node => index.get(node.id)?.some(value => value.includes(needle)))
+}
+
+export function nodeMatchesFilters(node: GraphNode, filters: GraphFilters, groups: ReadonlySet<string>): boolean {
+  return groups.has(groupFor(node.kind).id) && (!filters.kind || node.kind === filters.kind) &&
+    (!filters.placeKind || node.placeKind === filters.placeKind) &&
+    (!filters.nodeStatus || ('status' in node && node.status === filters.nodeStatus)) &&
+    (!filters.nodeVisibility || ('visibility' in node && node.visibility === filters.nodeVisibility))
+}
+
 export type MatchPart = { text: string; matched: boolean }
 
 // Keep original Unicode characters while matching the same accent-insensitive text as searchGraph.
@@ -135,11 +152,7 @@ export function searchMatchParts(value: string, query: string): MatchPart[] {
 }
 
 export function filterGraph(data: GraphData, filters: GraphFilters, groups: ReadonlySet<string>): GraphResponse {
-  const nodes = data.nodes.filter((node) => groups.has(groupFor(node.kind).id) &&
-    (!filters.kind || node.kind === filters.kind) &&
-    (!filters.placeKind || node.placeKind === filters.placeKind) &&
-    (!filters.nodeStatus || ('status' in node && node.status === filters.nodeStatus)) &&
-    (!filters.nodeVisibility || ('visibility' in node && node.visibility === filters.nodeVisibility)))
+  const nodes = data.nodes.filter(node => nodeMatchesFilters(node, filters, groups))
   const ids = new Set(nodes.map((node) => node.id))
   const edges = data.edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target) &&
     (!filters.relationType || edge.type === filters.relationType) &&

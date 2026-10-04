@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useImperativeHandle, type Ref } from 'react'
 import type { AdminGraphResponse, GraphResponse } from '@hesta-codex/shared'
 import { GraphPage, visibleConnections } from './GraphPage'
 import { emptyFilters, filterGraph, graphGroups, searchGraph } from './graph-model'
 
-const interactionMock = vi.hoisted(() => ({ methods: {
+const interactionMock = vi.hoisted(() => ({ renderCount: 0, methods: {
   centerAt: vi.fn(), zoom: vi.fn(() => 1.7), zoomToFit: vi.fn(),
 } }))
 
@@ -21,6 +21,7 @@ vi.mock('react-force-graph-2d', () => ({ default: ({ ref, graphData, onNodeClick
   nodeLabel: (node: { id: string; title: string }) => string
   linkLabel: (edge: { id: string }) => string
 }) => {
+  interactionMock.renderCount++
   useImperativeHandle(ref, () => interactionMock.methods)
   graphData.nodes.forEach((node, i) => { node.x ??= 10 + i * 10; node.y ??= 20 + i * 10 })
   return <div data-testid="canvas-graph">{graphData.nodes.length} nœuds, {graphData.links.length} arêtes
@@ -53,13 +54,157 @@ const response = (body: unknown, status = 200) => ({ ok: status === 200, status,
 const groups = new Set<string>(graphGroups.map((group) => group.id))
 
 beforeEach(() => {
+  localStorage.clear()
+  interactionMock.renderCount = 0
   interactionMock.methods.centerAt.mockClear()
   window.history.replaceState(null, '', '/graphe')
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 600, height: 440 } as DOMRect)
 })
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/') })
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); localStorage.clear(); window.history.replaceState(null, '', '/') })
 
 describe('exploration du graphe', () => {
+  it('reloads a complete public URL and restores filters, categories, query, depth and isolation on popstate', async () => {
+    const first = '/graphe?fiche=ville&profondeur=2&isoler=1&q=CITE&type=PLACE&lieu=CITY&relation=located_in&sans=ideas'
+    window.history.replaceState(null, '', first)
+    const fetchMock = vi.fn(async () => response(fixture))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<GraphPage endpoint="/api/v1/graph" onOpenNode={vi.fn()} />)
+    await screen.findByRole('heading', { name: 'Ville' })
+    expect(await screen.findByText('1 nœuds, 0 arêtes')).toBeTruthy()
+    expect((screen.getByRole('searchbox') as HTMLInputElement).value).toBe('CITE')
+    expect((screen.getByRole('combobox', { name: 'Profondeur du voisinage' }) as HTMLSelectElement).value).toBe('2')
+    expect(screen.getByRole('button', { name: 'Afficher tout le graphe' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Idées et autres' }).getAttribute('aria-pressed')).toBe('false')
+    act(() => {
+      window.history.pushState(null, '', '/graphe?fiche=personnage&profondeur=3&type=PERSON&q=HEROS')
+      window.dispatchEvent(new PopStateEvent('popstate'))
+    })
+    expect(await screen.findByRole('heading', { name: 'Personnage' })).toBeTruthy()
+    expect((screen.getByRole('combobox', { name: 'Type de fiche' }) as HTMLSelectElement).value).toBe('PERSON')
+    expect((screen.getByRole('searchbox') as HTMLInputElement).value).toBe('HEROS')
+    expect(screen.getByRole('button', { name: 'Isoler le voisinage' }).getAttribute('aria-pressed')).toBe('false')
+    act(() => {
+      window.history.replaceState(null, '', first)
+      window.dispatchEvent(new PopStateEvent('popstate'))
+    })
+    expect(await screen.findByRole('heading', { name: 'Ville' })).toBeTruthy()
+    expect(screen.getByText('1 nœuds, 0 arêtes')).toBeTruthy()
+    expect((screen.getByRole('combobox', { name: 'Sous-type de lieu' }) as HTMLSelectElement).value).toBe('CITY')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('canonicalizes invalid URLs, unavailable selections and relation types without guessing private data', async () => {
+    window.history.replaceState(null, '', '/graphe?fiche=personnage&type=PLACE&profondeur=9&isoler=1&relation=unknown_type&q=%00secret&token=secret')
+    vi.stubGlobal('fetch', vi.fn(async () => response(fixture)))
+    render(<GraphPage endpoint="/api/v1/graph" onOpenNode={vi.fn()} />)
+    await screen.findByText('2 nœuds, 1 arêtes')
+    await waitFor(() => expect(window.location.search).toBe('?type=PLACE'))
+    expect((screen.getByRole('combobox', { name: 'Choisir une fiche' }) as HTMLSelectElement).value).toBe('')
+    expect(screen.queryByRole('heading', { name: 'Personnage' })).toBeNull()
+  })
+
+  it('copies the synchronized complete URL with keyboard activation and discreet feedback', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response(fixture)))
+    const user = userEvent.setup()
+    const clipboard = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue()
+    render(<GraphPage endpoint="/api/v1/graph" onOpenNode={vi.fn()} />)
+    await screen.findByText('5 nœuds, 3 arêtes')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Choisir une fiche' }), 'a')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Profondeur du voisinage' }), '3')
+    await user.click(screen.getByRole('button', { name: 'Isoler le voisinage' }))
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Type de relation' }), 'located_in')
+    await user.type(screen.getByRole('searchbox'), 'CITE')
+    const button = screen.getByRole('button', { name: 'Copier le lien' })
+    button.focus(); await user.keyboard('{Enter}')
+    expect(clipboard).toHaveBeenCalledWith(window.location.href)
+    expect(new URL(clipboard.mock.calls[0]![0]).searchParams.get('q')).toBe('CITE')
+    expect(new URL(clipboard.mock.calls[0]![0]).searchParams.get('isoler')).toBe('1')
+    expect(screen.getByText('Lien copié.')).toBeTruthy()
+    expect(document.activeElement).toBe(button)
+  })
+
+  it('provides a selectable safe URL when clipboard access is denied, including an empty filtered view', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response(fixture)))
+    const user = userEvent.setup()
+    vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(new Error('denied'))
+    render(<GraphPage endpoint="/api/v1/graph" onOpenNode={vi.fn()} />)
+    await screen.findByText('5 nœuds, 3 arêtes')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Type de fiche' }), 'DEITY')
+    await user.click(screen.getByRole('button', { name: 'Copier le lien' }))
+    const input = await screen.findByRole('textbox', { name: 'Lien du graphe' }) as HTMLInputElement
+    expect(input.value).toBe(window.location.href)
+    expect(document.activeElement).toBe(input)
+    expect(input.selectionEnd).toBe(input.value.length)
+    expect(screen.getByText('Aucune fiche ne correspond aux filtres.')).toBeTruthy()
+  })
+
+  it('groups a search typing session into one history entry and starts another after blur', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response(fixture)))
+    const user = userEvent.setup()
+    render(<GraphPage endpoint="/api/v1/graph" onOpenNode={vi.fn()} />)
+    await screen.findByText('5 nœuds, 3 arêtes')
+    const push = vi.spyOn(window.history, 'pushState')
+    const replace = vi.spyOn(window.history, 'replaceState')
+    await user.type(screen.getByRole('searchbox'), 'CITE')
+    expect(push).toHaveBeenCalledTimes(1)
+    expect(replace).toHaveBeenCalledTimes(3)
+    expect(window.location.search).toBe('?q=CITE')
+    await user.tab()
+    await user.type(screen.getByRole('searchbox'), ' PORT')
+    expect(push).toHaveBeenCalledTimes(2)
+    expect(window.location.search).toBe('?q=CITE+PORT')
+  })
+
+  it('ignores a delayed clipboard failure after the exploration changes without stealing focus', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response(fixture)))
+    const user = userEvent.setup()
+    let rejectCopy!: (error: Error) => void
+    vi.spyOn(navigator.clipboard, 'writeText').mockImplementation(() => new Promise<void>((_resolve, reject) => { rejectCopy = reject }))
+    render(<GraphPage endpoint="/api/v1/graph" onOpenNode={vi.fn()} />)
+    await screen.findByText('5 nœuds, 3 arêtes')
+    const copy = screen.getByRole('button', { name: 'Copier le lien' }) as HTMLButtonElement
+    await user.click(copy)
+    expect(copy.disabled).toBe(true)
+    const filter = screen.getByRole('combobox', { name: 'Type de fiche' })
+    await user.selectOptions(filter, 'PLACE')
+    filter.focus()
+    await act(async () => { rejectCopy(new Error('denied')); await Promise.resolve() })
+    expect(copy.disabled).toBe(false)
+    expect(screen.queryByRole('textbox', { name: 'Lien du graphe' })).toBeNull()
+    expect(document.activeElement).toBe(filter)
+    expect(window.location.search).toBe('?type=PLACE')
+  })
+
+  it('shares only admin filters/depth while keeping legacy selection and private search local', async () => {
+    window.history.replaceState(null, '', '/admin/graphe?fiche=personnage&q=secret&profondeur=2&statut=PROPOSED&visibilite=GM')
+    vi.stubGlobal('fetch', vi.fn(async () => response(adminFixture)))
+    const user = userEvent.setup()
+    const clipboard = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue()
+    render(<GraphPage endpoint="/api/admin/graph" admin onOpenNode={vi.fn()} />)
+    await screen.findByRole('heading', { name: 'Personnage' })
+    await user.type(screen.getByRole('searchbox'), 'Héros')
+    await user.click(screen.getByRole('button', { name: 'Isoler le voisinage' }))
+    await user.click(screen.getByRole('button', { name: 'Copier le lien' }))
+    expect(window.location.search).toBe('?profondeur=2&statut=PROPOSED&visibilite=GM')
+    expect(clipboard).toHaveBeenCalledWith(window.location.href)
+    expect(window.history.state).toBeNull()
+    expect((screen.getByRole('searchbox') as HTMLInputElement).value).toBe('Héros')
+    expect(screen.getByRole('button', { name: 'Afficher tout le graphe' })).toBeTruthy()
+  })
+
+  it('does not rerender the Canvas or change its data on unmatched searches or copy feedback', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response(fixture)))
+    const user = userEvent.setup()
+    vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue()
+    render(<GraphPage endpoint="/api/v1/graph" onOpenNode={vi.fn()} />)
+    await screen.findByText('5 nœuds, 3 arêtes')
+    const renders = interactionMock.renderCount
+    await user.type(screen.getByRole('searchbox'), 'zzzzzz')
+    await user.click(screen.getByRole('button', { name: 'Copier le lien' }))
+    expect(screen.getByText('Aucune fiche trouvée.')).toBeTruthy()
+    expect(interactionMock.renderCount).toBe(renders)
+  })
+
   it('shows loading and a clear empty state without a Canvas', async () => {
     let finish!: (value: unknown) => void
     vi.stubGlobal('fetch', vi.fn(() => new Promise((resolve) => { finish = resolve })))
@@ -126,7 +271,7 @@ describe('exploration du graphe', () => {
     await user.selectOptions(screen.getByRole('combobox', { name: 'Choisir une fiche' }), 'c')
     expect(window.location.search).toBe('?fiche=personnage')
     await user.selectOptions(screen.getByRole('combobox', { name: 'Type de fiche' }), 'PLACE')
-    await waitFor(() => expect(window.location.search).toBe(''))
+    await waitFor(() => expect(window.location.search).toBe('?type=PLACE'))
     expect((screen.getByRole('combobox', { name: 'Choisir une fiche' }) as HTMLSelectElement).value).toBe('')
     await user.selectOptions(screen.getByRole('combobox', { name: 'Sous-type de lieu' }), 'CITY')
     await user.selectOptions(screen.getByRole('combobox', { name: 'Type de relation' }), 'allied_with')
@@ -138,7 +283,7 @@ describe('exploration du graphe', () => {
     expect(screen.getByRole('button', { name: /Ville \/ville/ })).toBeTruthy()
     await user.click(screen.getByRole('button', { name: /Ville \/ville/ }))
     expect((screen.getByRole('combobox', { name: 'Type de fiche' }) as HTMLSelectElement).value).toBe('PLACE')
-    expect(window.location.search).toBe('?fiche=ville')
+    expect(window.location.search).toBe('?fiche=ville&type=PLACE&lieu=CITY&relation=allied_with')
   })
 
   it('clears a selected relation when a filter hides it', async () => {
@@ -223,7 +368,7 @@ describe('exploration du graphe', () => {
     expect(screen.getByText('2 relations au total')).toBeTruthy()
     expect(screen.getByText(/1 affichée avec ces filtres/)).toBeTruthy()
     await user.click(screen.getByRole('button', { name: 'Vue complète' }))
-    expect(window.location.search).toBe('')
+    expect(window.location.search).toBe('?profondeur=3&relation=located_in')
     expect(screen.getByText('5 nœuds, 1 arêtes')).toBeTruthy()
     expect((depth as HTMLSelectElement).disabled).toBe(true)
     expect(fetchMock).toHaveBeenCalledTimes(1)

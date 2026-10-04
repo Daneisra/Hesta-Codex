@@ -1,27 +1,24 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AdminGraphResponse, GraphResponse } from '@hesta-codex/shared'
 import { GraphCanvas } from './GraphCanvas'
 import { GraphDetails } from './GraphDetails'
 import { GraphFiltersPanel } from './GraphFilters'
-import { emptyFilters, filterGraph, graphGroups, indexGraph, isolateNeighborhood, neighborhoodDistances,
-  searchGraph, type GraphData, type GraphFilters, type NeighborhoodDepth } from './graph-model'
+import { emptyFilters, filterGraph, indexGraph, indexGraphSearch, isolateNeighborhood, neighborhoodDistances,
+  nodeMatchesFilters, searchIndexedGraph, type GraphData, type NeighborhoodDepth } from './graph-model'
+import { allGraphGroups, graphStateUrl, readGraphState, resolveGraphState, type GraphUrlState } from './graph-url'
 import './Graph.css'
 
 export { visibleConnections } from './graph-model'
 
 type Load = { phase: 'loading' } | { phase: 'error'; status: number | null } | { phase: 'ready'; data: GraphData }
-const allGroups = () => new Set<string>(graphGroups.map((group) => group.id))
+const noMatches: ReadonlySet<string> = new Set()
 
-function selectedSlugFromUrl(): string | null {
-  return new URLSearchParams(window.location.search).get('fiche')
-}
-
-function writeSelectedSlug(slug: string | null, replace = false) {
-  const url = new URL(window.location.href)
-  if (slug) url.searchParams.set('fiche', slug)
-  else url.searchParams.delete('fiche')
-  if (url.href === window.location.href) return
-  window.history[replace ? 'replaceState' : 'pushState'](null, '', `${url.pathname}${url.search}${url.hash}`)
+function writeGraphUrl(state: GraphUrlState, admin: boolean, replace = false): string {
+  const current = new URL(window.location.href)
+  if (current.pathname.replace(/\/$/, '') !== (admin ? '/admin/graphe' : '/graphe')) return current.href
+  const url = graphStateUrl(current, state, admin)
+  if (url.href !== current.href) window.history[replace ? 'replaceState' : 'pushState'](null, '', `${url.pathname}${url.search}`)
+  return url.href
 }
 
 export function GraphPage({ endpoint, admin = false, onOpenNode }: {
@@ -31,15 +28,18 @@ export function GraphPage({ endpoint, admin = false, onOpenNode }: {
 }) {
   const [load, setLoad] = useState<Load>({ phase: 'loading' })
   const [retry, setRetry] = useState(0)
-  const [query, setQuery] = useState('')
-  const [filters, setFilters] = useState<GraphFilters>(emptyFilters)
-  const [activeGroups, setActiveGroups] = useState<Set<string>>(allGroups)
-  const [selectedId, setSelectedId] = useState('')
+  const [exploration, setExploration] = useState(() => readGraphState(window.location.search, admin))
+  const explorationRef = useRef(exploration)
+  const editingSearch = useRef(false)
   const [selectedEdgeId, setSelectedEdgeId] = useState('')
-  const [isolated, setIsolated] = useState(false)
-  const [depth, setDepth] = useState<NeighborhoodDepth>(1)
   const [detailsFocusToken, setDetailsFocusToken] = useState(0)
   const [focusRequest, setFocusRequest] = useState<{ id: string; token: number } | null>(null)
+  const [copyState, setCopyState] = useState<'idle' | 'pending' | 'copied' | 'error'>('idle')
+  const [copyUrl, setCopyUrl] = useState('')
+  const copyInput = useRef<HTMLInputElement>(null)
+  const copyButton = useRef<HTMLButtonElement>(null)
+  const copyRequest = useRef(0)
+  const restoreCopyFocus = useRef(false)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -60,43 +60,76 @@ export function GraphPage({ endpoint, admin = false, onOpenNode }: {
 
   const data = load.phase === 'ready' ? load.data : null
   const loadedIndex = useMemo(() => data ? indexGraph(data) : null, [data])
+  const nodesBySlug = useMemo(() => new Map(data?.nodes.map(node => [node.slug, node]) ?? []), [data])
+  const searchIndex = useMemo(() => data ? indexGraphSearch(data) : new Map(), [data])
+  const relationTypes = useMemo(() => new Set(data?.edges.map(edge => edge.type)), [data])
+  const canonicalize = useCallback((state: GraphUrlState): GraphUrlState => {
+    if (!data) return state
+    const next = resolveGraphState(state, relationTypes)
+    const node = nodesBySlug.get(next.slug)
+    if (next.slug && (!node || !nodeMatchesFilters(node, next.filters, next.groups))) return { ...next, slug: '', isolated: false }
+    if (!next.slug && next.isolated) return { ...next, isolated: false }
+    return next
+  }, [data, nodesBySlug, relationTypes])
+  const state = useMemo(() => canonicalize(exploration), [canonicalize, exploration])
+  const { query, filters, groups: activeGroups, depth, isolated } = state
+  const selectedId = nodesBySlug.get(state.slug)?.id ?? ''
   const baseGraph = useMemo(() => data ? filterGraph(data, filters, activeGroups) : null,
     [data, filters, activeGroups])
-  const baseIndex = useMemo(() => baseGraph ? indexGraph(baseGraph) : null, [baseGraph])
-  const results = useMemo(() => baseGraph ? searchGraph(baseGraph, query) : [], [baseGraph, query])
-  const searchMatches = useMemo(() => new Set(results.map((node) => node.id)), [results])
+  const baseIndex = useMemo(() => baseGraph && loadedIndex && baseGraph.nodes.length === data?.nodes.length &&
+    baseGraph.edges.length === data?.edges.length ? loadedIndex : baseGraph ? indexGraph(baseGraph) : null,
+  [baseGraph, loadedIndex, data])
+  const results = useMemo(() => baseGraph ? searchIndexedGraph(baseGraph, query, searchIndex) : [], [baseGraph, query, searchIndex])
+  const searchMatches = useMemo(() => results.length ? new Set(results.map(node => node.id)) : noMatches, [results])
   const distances = useMemo(() => baseIndex ? neighborhoodDistances(baseIndex, selectedId, depth) : new Map<string, number>(),
     [baseIndex, selectedId, depth])
   const visibleGraph = useMemo(() => baseGraph && isolated && selectedId
-    ? isolateNeighborhood(baseGraph, distances) : baseGraph,
+    ? distances.size === baseGraph.nodes.length ? baseGraph : isolateNeighborhood(baseGraph, distances) : baseGraph,
   [baseGraph, isolated, selectedId, distances])
   const visibleIndex = useMemo(() => visibleGraph === baseGraph ? baseIndex
     : visibleGraph ? indexGraph(visibleGraph) : null, [visibleGraph, baseGraph, baseIndex])
   const selected = visibleIndex?.nodes.get(selectedId) ?? null
   const selectedEdge = visibleIndex?.edges.get(selectedEdgeId) ?? null
 
-  useEffect(() => {
-    if (!data) return
-    const readSelection = () => {
-      const slug = selectedSlugFromUrl()
-      const node = slug ? data.nodes.find((candidate) => candidate.slug === slug) : null
-      setSelectedId(node?.id ?? '')
-      setSelectedEdgeId('')
-      setIsolated(false)
-      if (node) setFocusRequest((previous) => ({ id: node.id, token: (previous?.token ?? 0) + 1 }))
-    }
-    readSelection()
-    window.addEventListener('popstate', readSelection)
-    return () => window.removeEventListener('popstate', readSelection)
-  }, [data])
+  const commitState = useCallback((change: (previous: GraphUrlState) => GraphUrlState, replace = false) => {
+    const next = canonicalize(change(explorationRef.current))
+    explorationRef.current = next
+    setExploration(next)
+    writeGraphUrl(next, admin, replace)
+    copyRequest.current++
+    setCopyState('idle')
+    return next
+  }, [canonicalize, admin])
 
   useEffect(() => {
-    if (!selectedId || !baseIndex || baseIndex.nodes.has(selectedId)) return
-    setSelectedId('')
-    setSelectedEdgeId('')
-    setIsolated(false)
-    writeSelectedSlug(null, true)
-  }, [selectedId, baseIndex])
+    if (!data) return
+    explorationRef.current = state
+    if (state !== exploration) setExploration(state)
+    writeGraphUrl(state, admin, true)
+    if (!state.slug) setFocusRequest(null)
+  }, [data, state, exploration, admin])
+
+  useEffect(() => {
+    if (!data) return
+    const node = nodesBySlug.get(canonicalize(explorationRef.current).slug)
+    if (node) setFocusRequest(previous => ({ id: node.id, token: (previous?.token ?? 0) + 1 }))
+  }, [data, nodesBySlug, canonicalize])
+
+  useEffect(() => {
+    const restore = () => {
+      if (window.location.pathname.replace(/\/$/, '') !== (admin ? '/admin/graphe' : '/graphe')) return
+      const parsed = readGraphState(window.location.search, admin)
+      const previous = explorationRef.current
+      const next = commitState(() => admin ? { ...parsed, slug: parsed.slug || previous.slug,
+        query: previous.query, isolated: previous.isolated } : parsed, true)
+      editingSearch.current = false
+      setSelectedEdgeId('')
+      const node = nodesBySlug.get(next.slug)
+      setFocusRequest(old => node ? { id: node.id, token: (old?.token ?? 0) + 1 } : null)
+    }
+    window.addEventListener('popstate', restore)
+    return () => window.removeEventListener('popstate', restore)
+  }, [admin, commitState, nodesBySlug])
 
   useEffect(() => {
     if (selectedEdgeId && visibleIndex && !visibleIndex.edges.has(selectedEdgeId)) {
@@ -106,35 +139,72 @@ export function GraphPage({ endpoint, admin = false, onOpenNode }: {
 
   const selectNode = useCallback((id: string, recenter = true) => {
     const node = baseIndex?.nodes.get(id)
-    if (!node) {
-      setSelectedId(''); setSelectedEdgeId(''); setIsolated(false); writeSelectedSlug(null)
-      return
-    }
-    if (id !== selectedId) setIsolated(false)
-    setSelectedId(id)
+    editingSearch.current = false
+    commitState(previous => ({ ...previous, slug: node?.slug ?? '',
+      isolated: node && node.slug === previous.slug ? previous.isolated : false }))
     setSelectedEdgeId('')
-    if (recenter) setFocusRequest((previous) => ({ id, token: (previous?.token ?? 0) + 1 }))
+    if (node && recenter) setFocusRequest((previous) => ({ id, token: (previous?.token ?? 0) + 1 }))
     else setFocusRequest(null)
-    writeSelectedSlug(node.slug)
-  }, [baseIndex, selectedId])
+  }, [baseIndex, commitState])
 
   // Keep the hit target still between the two clicks that open a fiche.
   const selectCanvasNode = useCallback((id: string) => selectNode(id, false), [selectNode])
 
   const clearSelection = useCallback(() => {
-    setSelectedId(''); setSelectedEdgeId(''); setIsolated(false); writeSelectedSlug(null)
-  }, [])
+    editingSearch.current = false
+    commitState(previous => ({ ...previous, slug: '', isolated: false }))
+    setSelectedEdgeId(''); setFocusRequest(null)
+  }, [commitState])
 
-  const toggleGroup = (id: string) => setActiveGroups((previous) => {
-    const next = new Set(previous)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    return next
-  })
+  const toggleGroup = useCallback((id: string) => {
+    editingSearch.current = false
+    commitState(previous => {
+      const groups = new Set(previous.groups)
+      if (groups.has(id)) groups.delete(id)
+      else groups.add(id)
+      return { ...previous, groups }
+    })
+  }, [commitState])
 
-  const resetFilters = () => {
-    setFilters(emptyFilters); setActiveGroups(allGroups()); setQuery(''); setIsolated(false)
+  const resetFilters = useCallback(() => {
+    editingSearch.current = false
+    commitState(previous => ({ ...previous, filters: { ...emptyFilters }, groups: allGraphGroups(), query: '', isolated: false }))
+  }, [commitState])
+  const setDepth = useCallback((depth: NeighborhoodDepth) => {
+    editingSearch.current = false
+    commitState(previous => ({ ...previous, depth }))
+  }, [commitState])
+  const toggleIsolation = useCallback(() => {
+    editingSearch.current = false
+    commitState(previous => ({ ...previous, isolated: !previous.isolated }))
+  }, [commitState])
+  const selectDetailsNode = useCallback((id: string, focusDetails = false) => {
+    selectNode(id)
+    if (focusDetails) setDetailsFocusToken(value => value + 1)
+  }, [selectNode])
+  const recenter = useCallback(() => {
+    const id = nodesBySlug.get(explorationRef.current.slug)?.id
+    if (id) setFocusRequest(previous => ({ id, token: (previous?.token ?? 0) + 1 }))
+  }, [nodesBySlug])
+
+  const copyLink = async () => {
+    const link = writeGraphUrl(canonicalize(explorationRef.current), admin, true)
+    const request = ++copyRequest.current
+    restoreCopyFocus.current = document.activeElement === copyButton.current
+    setCopyState('pending'); setCopyUrl(link)
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('unavailable')
+      await navigator.clipboard.writeText(link)
+      if (request === copyRequest.current && window.location.href === link) setCopyState('copied')
+    } catch { if (request === copyRequest.current && window.location.href === link) setCopyState('error') }
   }
+  useEffect(() => {
+    if (copyState === 'error') { copyInput.current?.focus(); copyInput.current?.select() }
+    else if (copyState === 'copied' && restoreCopyFocus.current && document.activeElement === document.body) {
+      copyButton.current?.focus({ preventScroll: true })
+    }
+  }, [copyState])
+  useEffect(() => () => { copyRequest.current++ }, [])
 
   return <section className="graph-page" aria-label={admin ? 'Graphe éditorial' : 'Graphe public'}>
     <div className="graph-heading"><div><p className="section-eyebrow">Explorer les connexions</p>
@@ -144,6 +214,13 @@ export function GraphPage({ endpoint, admin = false, onOpenNode }: {
         {visibleGraph.nodes.length} fiche{visibleGraph.nodes.length > 1 ? 's' : ''} · {visibleGraph.edges.length} relation{visibleGraph.edges.length > 1 ? 's' : ''} affichée{visibleGraph.edges.length > 1 ? 's' : ''}
         <small> sur {data.nodes.length} fiches · {data.edges.length} relations chargées</small>
       </p>}</div>
+    {data && <div className="graph-share">
+      <button ref={copyButton} type="button" disabled={copyState === 'pending'} onClick={() => { void copyLink() }}
+        title={admin ? 'Copier les filtres et la profondeur, sans sélection ni recherche éditoriale' : 'Copier le lien de cet état du graphe'}>Copier le lien</button>
+      {copyState === 'copied' && <span role="status">Lien copié.</span>}
+      {copyState === 'error' && <><span role="status">Copie indisponible. Vous pouvez copier le lien ci-dessous.</span>
+        <label>Lien du graphe<input ref={copyInput} value={copyUrl} readOnly onFocus={event => event.target.select()} /></label></>}
+    </div>}
     {load.phase === 'loading' && <p className="graph-message" role="status">Chargement du graphe…</p>}
     {load.phase === 'error' && <div className="graph-message" role="alert"><p>{load.status === 401 ? 'Session expirée. Reconnectez-vous pour voir le graphe éditorial.'
       : load.status === 403 ? 'Accès au graphe éditorial refusé.' : 'Impossible de charger le graphe.'}</p>
@@ -152,29 +229,33 @@ export function GraphPage({ endpoint, admin = false, onOpenNode }: {
       : 'Le graphe attend ses premières fiches publiées.'}</p>}
     {data && data.nodes.length > 0 && visibleGraph && visibleIndex && loadedIndex && <>
       <GraphFiltersPanel data={data} admin={admin} filters={filters} activeGroups={activeGroups} query={query}
-        results={results} onQueryChange={setQuery} onSelectResult={(id) => {
-          selectNode(id); setQuery(''); setDetailsFocusToken((value) => value + 1)
+        results={results} onQueryChange={query => {
+          const previousUrl = window.location.href
+          commitState(previous => ({ ...previous, query }), editingSearch.current)
+          // Whitespace-only edits do not serialize; the first real change still needs a new entry.
+          editingSearch.current ||= window.location.href !== previousUrl
+        }} onSearchBlur={() => { editingSearch.current = false }} onSelectResult={(id) => {
+          selectNode(id); commitState(previous => ({ ...previous, query: '' }), true)
+          setDetailsFocusToken((value) => value + 1)
         }}
-        onFiltersChange={setFilters} onToggleGroup={toggleGroup} onReset={resetFilters} />
+        onFiltersChange={filters => {
+          editingSearch.current = false
+          commitState(previous => ({ ...previous, filters }))
+        }} onToggleGroup={toggleGroup} onReset={resetFilters} />
       {visibleGraph.nodes.length === 0 ? <div className="graph-message" role="status">
         <p>Aucune fiche ne correspond aux filtres.</p>
         <button type="button" onClick={resetFilters}>Réinitialiser les filtres</button>
       </div> : <div className="graph-layout">
-        <GraphCanvas data={visibleGraph} selectedId={selectedId} selectedEdgeId={selectedEdgeId}
+        <GraphCanvas key={admin ? 'admin' : 'public'} scope={admin ? 'admin' : 'public'} data={visibleGraph} selectedId={selectedId} selectedEdgeId={selectedEdgeId}
           index={visibleIndex} totalIndex={loadedIndex} distances={distances} depth={depth}
           onDepthChange={setDepth} searchMatches={searchMatches}
           isolated={isolated} focusRequest={focusRequest} onSelectNode={selectCanvasNode} onOpenNode={onOpenNode}
           onSelectEdge={setSelectedEdgeId} onClearSelection={clearSelection}
-          onToggleIsolation={() => setIsolated((value) => !value)} />
+          onToggleIsolation={toggleIsolation} />
         <GraphDetails data={visibleGraph} index={visibleIndex} totalIndex={loadedIndex}
           focusToken={detailsFocusToken}
           selected={selected} selectedEdge={selectedEdge}
-          onSelectNode={(id, focusDetails = false) => {
-            selectNode(id)
-            if (focusDetails) setDetailsFocusToken((value) => value + 1)
-          }} onOpenNode={onOpenNode}
-          onRecenter={() => { if (selected) setFocusRequest((previous) => ({ id: selected.id,
-            token: (previous?.token ?? 0) + 1 })) }} />
+          onSelectNode={selectDetailsNode} onOpenNode={onOpenNode} onRecenter={recenter} />
       </div>}
     </>}
   </section>

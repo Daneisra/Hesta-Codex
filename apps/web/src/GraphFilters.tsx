@@ -11,7 +11,7 @@ function SearchMatch({ text, query }: { text: string; query: string }) {
 }
 
 export function GraphFiltersPanel({ data, admin, filters, activeGroups, query, results, onQueryChange,
-  onSelectResult, onFiltersChange, onToggleGroup, onReset }: {
+  onSelectResult, onFiltersChange, onToggleGroup, onReset, onSearchBlur }: {
   data: GraphData
   admin: boolean
   filters: GraphFilters
@@ -19,6 +19,7 @@ export function GraphFiltersPanel({ data, admin, filters, activeGroups, query, r
   query: string
   results: GraphData['nodes']
   onQueryChange: (value: string) => void
+  onSearchBlur: () => void
   onSelectResult: (id: string) => void
   onFiltersChange: (next: GraphFilters) => void
   onToggleGroup: (id: string) => void
@@ -32,7 +33,7 @@ export function GraphFiltersPanel({ data, admin, filters, activeGroups, query, r
 
   return <section className="graph-filters" aria-label="Recherche et filtres du graphe">
     <div className="graph-search"><label htmlFor="graph-search">Rechercher une fiche</label>
-      <input id="graph-search" type="search" value={query} onChange={(event) => onQueryChange(event.target.value)}
+      <input id="graph-search" type="search" value={query} maxLength={200} onBlur={onSearchBlur} onChange={(event) => onQueryChange(event.target.value)}
         placeholder="Titre, slug ou alias" autoComplete="off" />
       {query.trim() && <div className="graph-search-results">
         {results.length === 0 ? <p role="status">Aucune fiche trouvée.</p> : <>
