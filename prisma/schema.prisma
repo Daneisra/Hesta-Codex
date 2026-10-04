@@ -137,6 +137,7 @@ model Source {
   derivedFromSource Source?    @relation("SourceDerivation", fields: [derivedFromSourceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   derivedSources    Source[]   @relation("SourceDerivation")
   evidence          Evidence[]
+  ingestionItems    IngestionItem[]
 
   @@unique([kind, externalId])
   @@index([derivedFromSourceId])
@@ -202,4 +203,75 @@ model Session {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+enum IngestionOutcome {
+  NEW
+  UNCHANGED
+  MODIFIED
+}
+
+model IngestionBatch {
+  id            String   @id @default(uuid()) @db.Uuid
+  label         String   @db.VarChar(250)
+  formatVersion Int      @default(1)
+  receivedCount Int
+  newCount      Int
+  unchangedCount Int
+  modifiedCount Int
+  warningCount  Int      @default(0)
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+
+  items    IngestionItem[]
+  receipts IngestionReceipt[]
+
+  @@index([createdAt, id])
+}
+
+// Immutable content snapshots; a reverted content creates a new version too.
+model IngestionItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  batchId     String   @db.Uuid
+  sourceId    String   @db.Uuid
+  identityKey String   @db.Char(66)
+  externalId  String?  @db.VarChar(1024)
+  version     Int
+  contentHash String   @db.Char(64)
+  content     String   @db.Text
+  ingestedAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  batch    IngestionBatch @relation(fields: [batchId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  source   Source         @relation(fields: [sourceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  receipts IngestionReceipt[]
+
+  @@unique([sourceId, identityKey, version])
+  @@index([sourceId, externalId])
+  @@index([sourceId, contentHash])
+  @@index([contentHash])
+  @@index([batchId])
+  @@index([ingestedAt, id])
+}
+
+// One observation per input item, including unchanged content; only raw variants are repeated.
+model IngestionReceipt {
+  id           String           @id @default(uuid()) @db.Uuid
+  batchId      String           @db.Uuid
+  itemId       String           @db.Uuid
+  ordinal      Int
+  outcome      IngestionOutcome
+  title        String?          @db.VarChar(250)
+  locator      String?          @db.VarChar(1024)
+  contentType  String           @default("text/plain") @db.VarChar(100)
+  observedAt   DateTime?         @db.Timestamptz(3)
+  metadata     Json?
+  rawVariant   String?          @db.Text
+  ingestedAt   DateTime          @default(now()) @db.Timestamptz(3)
+
+  batch IngestionBatch @relation(fields: [batchId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  item  IngestionItem  @relation(fields: [itemId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([batchId, ordinal])
+  @@index([itemId])
+  @@index([outcome, ingestedAt])
+  @@index([ingestedAt, id])
 }

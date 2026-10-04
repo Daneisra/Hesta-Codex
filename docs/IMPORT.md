@@ -7,6 +7,10 @@ Ce pipeline CLI introduit des propositions éditoriales dans PostgreSQL. Il est 
 l'API publique, qui reste uniquement en lecture. Aucun connecteur externe, compte utilisateur
 ou publication automatique n'est inclus.
 
+La v0.7a ajoute une commande distincte `lore:ingest` pour les contenus bruts : elle écrit
+uniquement dans un staging admin et réutilise Source, sans créer de proposition éditoriale.
+Le format et le comportement de `lore:import` restent inchangés ; voir [INGESTION.md](INGESTION.md).
+
 ## Utilisation
 
 Préparer une copie du [template technique](../examples/lore-import.template.json) avec des

@@ -29,6 +29,9 @@ contenus réservés seront traités dans un jalon ultérieur.
 Le JSON libre `Entity.metadata` n’est pas exposé : ses futures clés publiques devront être
 définies explicitement avant d’entrer dans le contrat de l’API.
 
+Le staging d'ingestion v0.7a n'a aucune route `/api/v1` et ne participe ni à la bibliothèque,
+ni à la recherche, ni au graphe publics. Aucun contenu/metadata d'ingestion n'est projeté publiquement.
+
 ## Authentification et administration
 
 `GET /api/auth/session` retourne `{ authenticated, isAdmin, user }` sans Discord ID ni token.
@@ -41,6 +44,10 @@ portent `Cache-Control: no-store`.
 
 | Route admin | Réponse |
 | --- | --- |
+| `GET /api/admin/ingestion/batches` | Batches, comptes et Sources ; 20 par page. |
+| `GET /api/admin/ingestion/batches/:id` | Résumé privé du batch UUID. |
+| `GET /api/admin/ingestion/items` | Réceptions paginées, 20/page ; aucun contenu brut/metadata. |
+| `GET /api/admin/ingestion/items/:id` | Snapshot UUID, texte/metadata de la dernière réception ou de `receiptId` UUID, résumé des 20 dernières versions. |
 | `GET /api/admin/stats` | Comptes par statut et visibilité, nombre de sources et relations. |
 | `GET /api/admin/graph` | Nœuds et arêtes éditoriaux minimaux, avec `summary`, `aliases`, statut et visibilité ; requiert un admin. |
 | `GET /api/admin/entities` | `{ items, total, page, pageSize }` ; 50 fiches par page, tous statuts et visibilités. Filtres facultatifs `status`, `visibility`, `kind`, `q` (2 à 100 caractères), `page` (1 à 9999). |
@@ -61,7 +68,15 @@ portent `Cache-Control: no-store`.
 | `PATCH /api/admin/evidence/:id` | Corrige le contenu et les repères de l'Evidence ; retourne `{ id, updatedAt }`. |
 
 Les filtres inconnus, répétés ou invalides donnent `400`. Les champs `metadata` restent exclus
-pour éviter d'exposer un JSON dont le contenu n'a pas encore été classé.
+des projections éditoriales pour éviter d'exposer un JSON dont le contenu n'a pas encore été classé.
+Exception privée : le détail d'un item de staging expose ses metadata uniquement aux administrateurs.
+Les listes staging acceptent `sourceKind`, `sourceId`, `outcome`, `after`/`before` ISO inclusifs,
+`page` (1–1000) ; la liste d'items
+ajoute `batchId`. Les détails exigent des UUID, un intervalle inversé est refusé. Aucun endpoint
+de mutation staging n'existe. Voir [INGESTION.md](INGESTION.md) pour les projections et limites.
+La recherche privée (2–100 caractères, titre/identifiant/locator uniquement) passe par
+`X-Hesta-Ingestion-Search`, encodé avec `encodeURIComponent`, jamais par un paramètre `q` d'URL.
+L'en-tête est borné à 1 200 caractères ; un encodage invalide ou plusieurs occurrences donnent 400.
 
 Le `PATCH` exige un JSON complet contenant `title`, `summary`, `bodyMarkdown`, `kind`,
 `placeKind`, `aliases`, `tags`, `visibility`, `expectedUpdatedAt` et éventuellement

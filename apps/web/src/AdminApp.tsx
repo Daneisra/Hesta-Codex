@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState, type MouseEvent } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type MouseEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type {
@@ -9,10 +9,12 @@ import { AdminEditor } from './AdminEditor'
 import { AdminCreate } from './AdminCreate'
 import { AdminCreateRelation } from './AdminCreateRelation'
 import { AdminProvenance } from './AdminProvenance'
+import { getAdminJson as getJson, HttpError, errorStatus } from './admin-http'
 import './Admin.css'
 const GraphPage = lazy(() => import('./GraphPage').then((module) => ({ default: module.GraphPage })))
+const AdminIngestion = lazy(() => import('./AdminIngestion').then(module => ({ default: module.AdminIngestion })))
 
-type AdminRoute = { view: 'dashboard' } | { view: 'graph' } | { view: 'create' } | { view: 'relation-create'; slug: string } |
+type AdminRoute = { view: 'dashboard' } | { view: 'graph' } | { view: 'ingestion' } | { view: 'create' } | { view: 'relation-create'; slug: string } |
   { view: 'entity'; slug: string } | { view: 'not-found' }
 type Load<T> = { phase: 'loading' } | { phase: 'ready'; data: T } | { phase: 'error'; status: number | null }
 const detailPath = /^\/admin\/fiches\/([a-z0-9]+(?:-[a-z0-9]+)*)\/?$/
@@ -33,6 +35,7 @@ const visibilityLabels: Record<Visibility, string> = {
 function readRoute(): AdminRoute {
   if (window.location.pathname === '/admin' || window.location.pathname === '/admin/') return { view: 'dashboard' }
   if (window.location.pathname === '/admin/graphe' || window.location.pathname === '/admin/graphe/') return { view: 'graph' }
+  if (window.location.pathname === '/admin/ingestion' || window.location.pathname === '/admin/ingestion/') return { view: 'ingestion' }
   if (window.location.pathname === '/admin/nouvelle-fiche' || window.location.pathname === '/admin/nouvelle-fiche/') {
     return { view: 'create' }
   }
@@ -42,23 +45,10 @@ function readRoute(): AdminRoute {
   return match ? { view: 'entity', slug: match[1] } : { view: 'not-found' }
 }
 
-class HttpError extends Error {
-  constructor(readonly status: number, message = `HTTP ${status}`, readonly code?: string,
-    readonly issues?: Array<{ path: string; message: string }>) { super(message) }
-}
-
 function readIssues(value: unknown): Array<{ path: string; message: string }> | undefined {
   if (!Array.isArray(value)) return undefined
   return value.filter((item): item is { path: string; message: string } =>
     typeof item === 'object' && item !== null && typeof item.path === 'string' && typeof item.message === 'string')
-}
-
-async function getJson<T>(url: string, signal: AbortSignal): Promise<T> {
-  const response = await fetch(url, {
-    signal, credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' },
-  })
-  if (!response.ok) throw new HttpError(response.status)
-  return response.json() as Promise<T>
 }
 
 async function mutateJson<T>(url: string, method: 'PATCH' | 'POST', body: unknown): Promise<T> {
@@ -78,10 +68,6 @@ async function mutateJson<T>(url: string, method: 'PATCH' | 'POST', body: unknow
       readIssues(payload?.error?.issues))
   }
   return response.json() as Promise<T>
-}
-
-function errorStatus(error: unknown): number | null {
-  return error instanceof HttpError ? error.status : null
 }
 
 function dateLabel(value: string): string {
@@ -214,6 +200,11 @@ export function AdminApp() {
   dirtyRef.current = editDirty
 
   const isAdmin = session.phase === 'ready' && session.data.authenticated && session.data.isAdmin
+  const ingestionAccessError = useCallback((status: number) => {
+    if (status === 401) setSession({ phase: 'ready', data: { authenticated: false, isAdmin: false, user: null } })
+    else if (status === 403) setSession(current => current.phase === 'ready' && current.data.authenticated
+      ? { phase: 'ready', data: { ...current.data, isAdmin: false } } : current)
+  }, [])
   const activeSlug = route.view === 'entity' || route.view === 'relation-create' ? route.slug : null
   const listKey = JSON.stringify([status, visibility, kind, query, page])
 
@@ -513,11 +504,19 @@ export function AdminApp() {
           <GraphPage endpoint="/api/admin/graph" admin onOpenNode={(slug) => navigateTo(`/admin/fiches/${slug}`)} />
         </Suspense>
       </>}
+      {isAdmin && route.view === 'ingestion' && <>
+        <a className="admin-back" href="/admin" onClick={event => onNavigate(event, '/admin')}>← Tableau de bord</a>
+        <Suspense fallback={<StateMessage>Chargement de l’ingestion…</StateMessage>}>
+          <AdminIngestion onAccessError={ingestionAccessError} />
+        </Suspense>
+      </>}
       {isAdmin && route.view === 'dashboard' && <>
         <div className="admin-page-heading"><p className="admin-eyebrow">Pilotage éditorial</p>
           <h1>Tableau de bord</h1><p>Explorer les fiches, leurs liens, leurs sources et leur état de publication.</p>
           <a className="admin-primary-link" href="/admin/graphe"
             onClick={(event) => onNavigate(event, '/admin/graphe')}>Graphe éditorial</a>{' '}
+          <a className="admin-primary-link" href="/admin/ingestion"
+            onClick={(event) => onNavigate(event, '/admin/ingestion')}>Ingestion</a>{' '}
           <a className="admin-primary-link" href="/admin/nouvelle-fiche"
             onClick={(event) => onNavigate(event, '/admin/nouvelle-fiche')}>Nouvelle fiche</a></div>
         {stats.phase === 'loading' && <StateMessage>Chargement des statistiques…</StateMessage>}

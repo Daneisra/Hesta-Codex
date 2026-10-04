@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "batch": { "label": "EXEMPLE TECHNIQUE FICTIF — aucun lore Hesta canonique" },
+  "items": [
+    {
+      "source": { "kind": "OBSIDIAN", "label": "Coffre fictif de test", "externalId": "example-vault" },
+      "externalId": "notes/exemple.md",
+      "title": "Note artificielle",
+      "locator": "notes/exemple.md#fragment-1",
+      "content": "Ceci est un contenu artificiel, sans rapport avec le Monde d’Hesta.\nAucune fiche ne doit en être créée automatiquement.",
+      "contentType": "text/markdown",
+      "observedAt": "2026-10-04T00:00:00Z",
+      "metadata": { "fictional": true, "tags": ["test", "non-canonique"] }
+    },
+    {
+      "source": { "kind": "MANUAL", "label": "Origine technique fictive", "externalId": "example-manual", "url": "https://example.invalid/ingestion" },
+      "title": "Fragment sans identifiant externe",
+      "locator": "fragment technique 2",
+      "content": "Un deuxième texte fictif destiné uniquement à illustrer la déduplication par hash.",
+      "metadata": { "fictional": true, "sequence": 2 }
+    },
+    {
+      "source": { "kind": "OBSIDIAN", "label": "Coffre fictif de test", "externalId": "example-vault" },
+      "externalId": "notes/exemple.md",
+      "title": "Réception identique de démonstration",
+      "content": "Ceci est un contenu artificiel, sans rapport avec le Monde d’Hesta.\nAucune fiche ne doit en être créée automatiquement."
+    }
+  ]
+}

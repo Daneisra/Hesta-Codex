@@ -1,0 +1,21 @@
+.ingestion-page { width: 100%; min-width: 0; overflow-wrap: anywhere; }
+.ingestion-page h1 { color: #eed9ab; font: 400 clamp(1.8rem, 4vw, 2.7rem) Georgia, serif; }
+.ingestion-page h1:focus-visible { outline: 2px solid #dcc18e; outline-offset: 4px; }
+.ingestion-page button { white-space: normal; max-width: 100%; overflow-wrap: anywhere; padding: .55rem .8rem; border: 1px solid #657a9c; border-radius: .4rem; color: #eef2fa; background: #1d2b42; }
+.ingestion-page button:hover { background: #304260; }
+.ingestion-page :focus-visible { outline: 2px solid #dcc18e; outline-offset: 3px; }
+.ingestion-page button:disabled { opacity: .55; }
+.ingestion-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); gap: .8rem; margin: 1.2rem 0; }
+.ingestion-filters label { display: grid; gap: .4rem; min-width: 0; }
+.ingestion-filters input, .ingestion-filters select { width: 100%; min-width: 0; color: #eef2fa; background: #192840; border: 1px solid #657a9c; border-radius: .35rem; padding: .6rem; }
+.ingestion-list { padding: 0; list-style: none; display: grid; gap: 1rem; }
+.ingestion-list > li, .ingestion-detail { min-width: 0; padding: 1rem; background: #121e31; border: 1px solid #33445e; border-radius: .7rem; }
+.ingestion-list ul { padding-left: 1.2rem; }
+.ingestion-detail dl { display: grid; grid-template-columns: minmax(8rem, .35fr) minmax(0, 1fr); gap: .5rem 1rem; }
+.ingestion-detail dt { color: #eed9ab; }
+.ingestion-detail dd { margin: 0; min-width: 0; }
+.ingestion-page pre { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; overflow: auto; background: #0c1525; color: #e3eaf7; padding: 1rem; border-radius: .35rem; }
+.ingestion-raw { max-height: 36rem; }
+.ingestion-detail details pre { max-height: 24rem; }
+.ingestion-id { color: #b8c6db; }
+@media (max-width: 560px) { .ingestion-detail dl { grid-template-columns: minmax(0, 1fr); } .ingestion-detail dd { margin-bottom: .7rem; } }

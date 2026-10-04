@@ -14,6 +14,7 @@ import { evidencePatchSchema, relationPatchSchema, relationWorkflowSchema, sourc
 import type { AdminStore } from './store.js'
 import type { GraphStore } from '../graph.js'
 import { patchSchema, validationMessage, workflowSchema } from './validation.js'
+import { createIngestionAdminRouter, type IngestionAdminStore } from '../ingestion/admin.js'
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const filtersSchema = z.strictObject({
@@ -35,8 +36,9 @@ function editorLabel(response: { locals: Record<string, unknown> }): string {
 
 export function createAdminRouter(store: AdminStore, editorial: EditorialService,
   provenance?: ProvenanceService, manual?: ManualService, manualRelations?: ManualRelationService,
-  evidenceAdd?: EvidenceAddService, graph?: GraphStore) {
+  evidenceAdd?: EvidenceAddService, graph?: GraphStore, ingestion?: IngestionAdminStore) {
   const router = Router()
+  if (ingestion) router.use('/ingestion', createIngestionAdminRouter(ingestion))
 
   if (graph) router.get('/graph', async (_request, response) => {
     response.json(await graph.adminGraph())

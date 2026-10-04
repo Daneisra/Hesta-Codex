@@ -113,6 +113,14 @@ et les garanties du pipeline sont détaillés dans [docs/IMPORT.md](docs/IMPORT.
 
 ## Administration éditoriale
 
+v0.7a ajoute un staging privé de contenus externes et sa consultation en lecture seule à
+`/admin/ingestion`. `npm run lore:ingest -- fichier.json --dry-run` compare le lot à une base
+configurée sans écrire ; sans `--dry-run`, une transaction conserve Sources, batch, snapshots
+immuables et réceptions. Aucun connecteur, matching, appel IA, Entity/Relation/Evidence/Revision
+ou publication automatique n'est ajouté. `lore:import` conserve son comportement éditorial.
+Le [template fictif](examples/lore-ingestion.template.json) n'est jamais ingéré automatiquement.
+Format, idempotence, confidentialité et roadmap v0.7 : [docs/INGESTION.md](docs/INGESTION.md).
+
 Depuis `/admin`, « Nouvelle fiche » ouvre la création manuelle v0.5a. Chaque création impose
 une Source existante ou nouvelle et une Evidence initiale. L'Entity, l'Evidence, la Source
 éventuelle et la `Revision #1` sont écrites dans une seule transaction. La fiche reste
@@ -152,11 +160,11 @@ et preuves est détaillée dans [docs/PROVENANCE-WORKFLOW.md](docs/PROVENANCE-WO
 
 ```text
 apps/web/         Bibliothèque publique, fiches et tests d'interface
-apps/api/         API Express, client Prisma, import CLI et tests
+apps/api/         API Express, client Prisma, import/ingestion CLI et tests
 packages/shared/  Contrats TypeScript communs
 prisma/           Schéma PostgreSQL, migration initiale et seed RelationType
 docs/             Décisions et contraintes du modèle de données
-examples/         Modèle JSON technique d'import, jamais importé automatiquement
+examples/         Modèles JSON techniques d'import/ingestion, jamais chargés automatiquement
 scripts/          Emplacement pour les futurs scripts nécessaires
 ```
 

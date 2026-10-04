@@ -273,3 +273,21 @@ export interface AdminStats {
   sources: number
   relations: number
 }
+
+export type IngestionOutcome = 'NEW' | 'UNCHANGED' | 'MODIFIED'
+export interface IngestionPage<T> { items: T[]; total: number; page: number; pageSize: number }
+export interface IngestionSourceSummary { id: string; kind: SourceKind; label: string }
+export interface AdminIngestionBatch {
+  id: string; label: string; formatVersion: number; receivedCount: number; newCount: number;
+  unchangedCount: number; modifiedCount: number; warningCount: number; createdAt: string;
+  sourceCount: number; sourceKinds: SourceKind[]; sources: IngestionSourceSummary[];
+}
+export interface AdminIngestionItem {
+  id: string; itemId: string; batchId: string; ordinal: number; outcome: IngestionOutcome;
+  title: string | null; locator: string | null; contentType: string; externalId: string | null;
+  observedAt: string | null; ingestedAt: string; version: number; contentHash: string; source: IngestionSourceSummary;
+}
+export interface AdminIngestionItemDetail extends AdminIngestionItem {
+  content: string; metadata: unknown; originBatchId: string; snapshotIngestedAt: string;
+  versions: Array<{ id: string; version: number; contentHash: string; ingestedAt: string }>;
+}

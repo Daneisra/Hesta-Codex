@@ -35,6 +35,9 @@ d'armure restent dans Système PA.
 | `Revision` | Historique d'une fiche | Numéro par `Entity`, snapshot, message et attribution textuelle facultative. |
 | `User` | Identité Discord minimale pour l'administration | Discord ID unique, username, display name facultatif ; aucun rôle persistant. |
 | `Session` | Session serveur révocable | Hash unique du token de cookie, utilisateur, création et expiration ; aucun jeton OAuth Discord conservé. |
+| `IngestionBatch` | Opération de staging réussie | UUID, format v1, libellé, comptes reçus/nouveaux/inchangés/modifiés, avertissements et date ; aucune publication. |
+| `IngestionItem` | Snapshot brut immuable | UUID, Source et batch d'origine, identité externe/hash, version, SHA-256, texte exact et date ; unicité Source/identité/version. |
+| `IngestionReceipt` | Observation dans un batch | Ordinal unique par batch, snapshot, NEW/UNCHANGED/MODIFIED, titre, locator, type MIME, date externe, metadata et variante brute éventuelle. |
 
 La création admin v0.5b résout `inverseCode` vers le type canonique en échangeant les UUID.
 Pour un type symétrique, elle ordonne les UUID avant insertion ; une seule arête est stockée.
@@ -97,6 +100,13 @@ du calendrier d'Hesta, recherche plein texte, extraction des `[[wikilinks]]` et 
 graphe affiché. Les UUID, index, alias, Markdown et relations orientées en préparent la base.
 
 Référence : `Hesta-Hub/docs/HESTA-CODEX-ARCHITECTURE.md` dans le dépôt voisin.
+
+La migration additive `20261004000000_ingestion_staging` ajoute le staging v0.7a, ses clés
+étrangères RESTRICT, index Source/externalId/hash/batch/date et CHECK propres aux nouvelles tables.
+Les modèles historiques et leurs données restent inchangés. Les trois modèles de staging sont
+réservés à l'administration, sans lien automatique vers Entity/Relation/Evidence/Revision.
+Chaque opération conserve ses réceptions ; seuls les changements de contenu identifié créent
+un nouveau snapshot. Voir [INGESTION.md](INGESTION.md) pour le format, les bornes et l'historique.
 
 L'import JSON contrôlé de v0.3 est décrit dans [IMPORT.md](IMPORT.md). Il crée uniquement
 des propositions et une `Revision` initiale pour chaque nouvelle `Entity` ; les révisions
