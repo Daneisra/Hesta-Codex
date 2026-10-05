@@ -507,7 +507,7 @@ export function AdminApp() {
       {isAdmin && route.view === 'ingestion' && <>
         <a className="admin-back" href="/admin" onClick={event => onNavigate(event, '/admin')}>← Tableau de bord</a>
         <Suspense fallback={<StateMessage>Chargement de l’ingestion…</StateMessage>}>
-          <AdminIngestion onAccessError={ingestionAccessError} />
+          <AdminIngestion onAccessError={ingestionAccessError} onNavigate={onNavigate} />
         </Suspense>
       </>}
       {isAdmin && route.view === 'dashboard' && <>

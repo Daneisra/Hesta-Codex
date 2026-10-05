@@ -116,10 +116,18 @@ et les garanties du pipeline sont détaillés dans [docs/IMPORT.md](docs/IMPORT.
 v0.7a ajoute un staging privé de contenus externes et sa consultation en lecture seule à
 `/admin/ingestion`. `npm run lore:ingest -- fichier.json --dry-run` compare le lot à une base
 configurée sans écrire ; sans `--dry-run`, une transaction conserve Sources, batch, snapshots
-immuables et réceptions. Aucun connecteur, matching, appel IA, Entity/Relation/Evidence/Revision
+immuables et réceptions. Aucun connecteur, appel IA, Entity/Relation/Evidence/Revision
 ou publication automatique n'est ajouté. `lore:import` conserve son comportement éditorial.
 Le [template fictif](examples/lore-ingestion.template.json) n'est jamais ingéré automatiquement.
 Format, idempotence, confidentialité et roadmap v0.7 : [docs/INGESTION.md](docs/INGESTION.md).
+
+v0.7b ajoute la détection déterministe des fiches existantes dans le détail d’ingestion :
+provenance exacte, titre/alias, slug et similarité conservatrice. Les résultats sont calculés
+à la demande, bornés et explicables, tous statuts/visibilités inclus ; les fiches archivées et
+les recherches tronquées sont signalées. Aucun rattachement, écriture ou nouvelle migration.
+Les cinq signaux exacts sont recherchés en base avant toute limite ; seuls les candidats
+approximatifs supplémentaires sont plafonnés à 200. Les comptes d’identité forts restent complets.
+L’interface permet seulement d’ouvrir la fiche admin. Règles et limites : [docs/MATCHING.md](docs/MATCHING.md).
 
 Depuis `/admin`, « Nouvelle fiche » ouvre la création manuelle v0.5a. Chaque création impose
 une Source existante ou nouvelle et une Evidence initiale. L'Entity, l'Evidence, la Source

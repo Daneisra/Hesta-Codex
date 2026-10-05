@@ -18,4 +18,12 @@
 .ingestion-raw { max-height: 36rem; }
 .ingestion-detail details pre { max-height: 24rem; }
 .ingestion-id { color: #b8c6db; }
+.ingestion-matches { min-width: 0; margin: 1.2rem 0; }
+.ingestion-match-list { list-style: none; padding: 0; display: grid; gap: .8rem; }
+.ingestion-match-list > li { min-width: 0; padding: 1rem; border: 1px solid #657a9c; border-radius: .4rem; }
+.ingestion-match-list h4 { font-size: 1.1rem; margin: 0; }
+.ingestion-match-list ul { padding-left: 1.2rem; }
+.ingestion-match-list > .ingestion-match-archived { border: 2px solid #dcc18e; }
+.ingestion-match-warning { color: #f0d5a3; }
+.ingestion-match-list a { display: inline-block; max-width: 100%; margin-top: .5rem; padding: .6rem; border: 1px solid #657a9c; border-radius: .4rem; }
 @media (max-width: 560px) { .ingestion-detail dl { grid-template-columns: minmax(0, 1fr); } .ingestion-detail dd { margin-bottom: .7rem; } }

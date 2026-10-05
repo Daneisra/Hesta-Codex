@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
-import type { AdminIngestionBatch, AdminIngestionItem, AdminIngestionItemDetail, IngestionOutcome, IngestionPage, SourceKind } from '@hesta-codex/shared'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import type { AdminIngestionBatch, AdminIngestionItem, AdminIngestionItemDetail, IngestionOutcome, IngestionPage, IngestionMatches, SourceKind } from '@hesta-codex/shared'
 import { errorStatus, getAdminJson } from './admin-http'
+import { IngestionMatchesPanel } from './IngestionMatchesPanel'
 import './Ingestion.css'
 
 type Load<T> = { phase: 'loading'; key: string } | { phase: 'error'; key: string; status: number | null } | { phase: 'ready'; key: string; data: T }
@@ -12,7 +13,7 @@ const date = (value: string) => new Intl.DateTimeFormat('fr-FR', { dateStyle: 'm
 
 function useRead<T>(url: string | null, refresh: number, onAccessError: (status: number) => void, query = ''): Load<T> {
   const [load, setLoad] = useState<Load<T>>({ phase: 'loading', key: '' })
-  const key = JSON.stringify([url, query])
+  const key = JSON.stringify([url, query, refresh])
   useEffect(() => {
     if (!url) { setLoad({ phase: 'loading', key: '' }); return }
     const controller = new AbortController()
@@ -46,7 +47,8 @@ function BatchSummary({ batch }: { batch: AdminIngestionBatch }) {
     <ul>{batch.sources.map(source => <li key={source.id}>{source.label} · {source.kind} <small>{source.id}</small></li>)}</ul>
     {batch.sourceCount > batch.sources.length && <p>20 Sources affichées ; les autres restent accessibles dans les items.</p>}</>
 }
-export function AdminIngestion({ onAccessError }: { onAccessError: (status: number) => void }) {
+export function AdminIngestion({ onAccessError, onNavigate }: { onAccessError: (status: number) => void;
+  onNavigate?: (event: MouseEvent<HTMLAnchorElement>, path: string) => void }) {
   const [view, setView] = useState<View>({ kind: 'batches' })
   const [page, setPage] = useState(1)
   const [sourceKind, setSourceKind] = useState('')
@@ -57,6 +59,7 @@ export function AdminIngestion({ onAccessError }: { onAccessError: (status: numb
   const [after, setAfter] = useState('')
   const [before, setBefore] = useState('')
   const [refresh, setRefresh] = useState(0)
+  const [matchesRefresh, setMatchesRefresh] = useState(0)
   const heading = useRef<HTMLHeadingElement>(null)
   const focusRequested = useRef(false)
   const navigation = useRef(new Map<string, NavigationEntry>())
@@ -109,6 +112,10 @@ export function AdminIngestion({ onAccessError }: { onAccessError: (status: numb
   const list = useRead<IngestionPage<AdminIngestionBatch> | IngestionPage<AdminIngestionItem>>(listUrl, refresh, onAccessError, query)
   const batch = useRead<AdminIngestionBatch>(batchUrl, refresh, onAccessError)
   const item = useRead<AdminIngestionItemDetail>(itemUrl, refresh, onAccessError)
+  // Pin matching to the receipt actually displayed, including latest-receipt version navigation.
+  const matchesUrl = view.kind === 'item' && item.phase === 'ready'
+    ? `/api/admin/ingestion/items/${item.data.itemId}/matches?receiptId=${item.data.id}` : null
+  const matches = useRead<IngestionMatches>(matchesUrl, refresh + matchesRefresh, onAccessError)
   const navigate = (next: View) => {
     navigation.current.set(currentEntry.current, { view, page, sourceKind, sourceId, outcome, search, query, after, before })
     const marker = crypto.randomUUID()
@@ -153,6 +160,7 @@ export function AdminIngestion({ onAccessError }: { onAccessError: (status: numb
     </>}</>}
     {view.kind === 'item' && <><Status load={item} onRetry={retry} />{item.phase === 'ready' && <article className="ingestion-detail">
       <h2>{item.data.title ?? 'Item sans titre'}</h2><p>{outcomes[item.data.outcome]} · version {item.data.version}</p>
+      <IngestionMatchesPanel load={matches} onRetry={() => setMatchesRefresh(value => value + 1)} onNavigate={onNavigate} />
       <dl><dt>UUID de l’item</dt><dd>{item.data.itemId}</dd><dt>UUID de réception</dt><dd>{item.data.id}</dd>
         <dt>Source</dt><dd>{item.data.source.label} · {item.data.source.kind} · {item.data.source.id}</dd>
         <dt>Identifiant externe</dt><dd>{item.data.externalId ?? 'Absent'}</dd><dt>Locator</dt><dd>{item.data.locator ?? 'Absent'}</dd>

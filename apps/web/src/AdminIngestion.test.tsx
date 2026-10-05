@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { AdminIngestionBatch, AdminIngestionItem, AdminIngestionItemDetail } from '@hesta-codex/shared'
+import type { AdminIngestionBatch, AdminIngestionItem, AdminIngestionItemDetail, IngestionMatches } from '@hesta-codex/shared'
 import { AdminIngestion } from './AdminIngestion'
 import { App } from './App'
 
@@ -15,6 +15,9 @@ const detail: AdminIngestionItemDetail = { ...item, content: '<script>alert(1)</
   metadata: { fictional: true, description: 'm'.repeat(4000) }, originBatchId: id, snapshotIngestedAt: batch.createdAt,
   versions: [{ id, version: 2, contentHash: item.contentHash, ingestedAt: item.ingestedAt }, { id: previousId, version: 1, contentHash: 'b'.repeat(64), ingestedAt: item.ingestedAt }] }
 const response = (data: unknown, status = 200) => ({ ok: status === 200, status, json: async () => data }) as Response
+const matched = (title: string): IngestionMatches => ({ status: 'EXACT', searchTruncated: false, candidatesTruncated: false,
+  evaluatedCount: 1, exactCandidateCount: 1, strongCandidateCount: 1, approximateEvaluatedCount: 0, searchLimit: 200, candidateLimit: 10,
+  candidates: [{ id, slug: 'fiche-fictive', title, kind: 'OTHER', placeKind: null, aliases: [], status: 'DRAFT', visibility: 'SECRET', score: 90, reasons: ['EXACT_TITLE'] }] })
 function api(options: { status?: number; empty?: boolean; session?: 'admin' | 'anonymous' | 'denied' } = {}) {
   const calls: Array<{ url: string; init?: RequestInit }> = []
   vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -25,6 +28,7 @@ function api(options: { status?: number; empty?: boolean; session?: 'admin' | 'a
     if (url.includes('/api/admin/ingestion')) {
       if (options.status) return response({}, options.status)
       const parsed = new URL(url, 'http://localhost')
+      if (parsed.pathname.endsWith('/matches')) return response({ status: 'NONE', candidates: [], searchTruncated: false, candidatesTruncated: false, evaluatedCount: 0, searchLimit: 200, candidateLimit: 10 })
       if (parsed.pathname === '/api/admin/ingestion/batches') return response({ items: options.empty ? [] : [batch], total: options.empty ? 0 : 25, page: Number(parsed.searchParams.get('page') ?? 1), pageSize: 20 })
       if (parsed.pathname === `/api/admin/ingestion/batches/${id}`) return response(batch)
       if (parsed.pathname === '/api/admin/ingestion/items') return response({ items: [item], total: 1, page: 1, pageSize: 20 })
@@ -39,6 +43,96 @@ beforeEach(() => window.history.replaceState(null, '', '/admin/ingestion'))
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/') })
 
 describe('consultation privée du staging', () => {
+  it('never displays stale matches when switching receipts for the same snapshot, even when the aborted response resolves last', async () => {
+    api(); const originalFetch = fetch, user = userEvent.setup(), access = vi.fn()
+    const pending: Array<{ url: string; init?: RequestInit; complete: (value: Response) => void }> = []
+    const otherReceipt = { ...item, id: previousId, title: 'Autre réception fictive', ordinal: 1 }
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const parsed = new URL(url, 'http://localhost')
+      if (parsed.pathname.endsWith('/matches')) return new Promise<Response>(complete => pending.push({ url, init, complete }))
+      if (parsed.pathname === '/api/admin/ingestion/items') return Promise.resolve(response({ items: [item, otherReceipt], page: 1, pageSize: 20, total: 2 }))
+      if (parsed.pathname === `/api/admin/ingestion/items/${id}` && parsed.searchParams.get('receiptId') === previousId)
+        return Promise.resolve(response({ ...detail, ...otherReceipt }))
+      return originalFetch(url, init)
+    }))
+    render(<AdminIngestion onAccessError={access} />)
+    await user.click(await screen.findByRole('button', { name: batch.label }))
+    await user.click(await screen.findByRole('button', { name: item.title! }))
+    await waitFor(() => expect(pending).toHaveLength(1))
+    await user.click(screen.getByRole('button', { name: '← Retour au batch' }))
+    await user.click(await screen.findByRole('button', { name: otherReceipt.title! }))
+    await waitFor(() => expect(pending).toHaveLength(2))
+    expect(pending[0]!.init!.signal!.aborted).toBe(true)
+    expect(pending[1]!.url).toBe(`/api/admin/ingestion/items/${id}/matches?receiptId=${previousId}`)
+    await act(async () => { pending[1]!.complete(response(matched('Candidat de la nouvelle réception'))) })
+    await screen.findByRole('heading', { name: 'Candidat de la nouvelle réception' })
+    await act(async () => { pending[0]!.complete(response(matched('Candidat obsolète interdit'))) })
+    expect(screen.queryByText('Candidat obsolète interdit')).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Candidat de la nouvelle réception' })).toBeTruthy()
+    expect(access).not.toHaveBeenCalled()
+  })
+  it('clears the previous item matches during a version request and ignores an obsolete 401 response', async () => {
+    api(); const originalFetch = fetch, user = userEvent.setup(), access = vi.fn()
+    const pending: Array<{ url: string; init?: RequestInit; complete: (value: Response) => void }> = []
+    let finishDetail!: (value: Response) => void
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://localhost').pathname
+      if (path.endsWith('/matches')) return new Promise<Response>(complete => pending.push({ url, init, complete }))
+      if (path === `/api/admin/ingestion/items/${previousId}`) return new Promise<Response>(complete => { finishDetail = complete })
+      return originalFetch(url, init)
+    }))
+    render(<AdminIngestion onAccessError={access} />)
+    await user.click(await screen.findByRole('button', { name: batch.label }))
+    await user.click(await screen.findByRole('button', { name: item.title! }))
+    await waitFor(() => expect(pending).toHaveLength(1))
+    await act(async () => { pending[0]!.complete(response(matched('Candidat de version deux'))) })
+    await screen.findByRole('heading', { name: 'Candidat de version deux' })
+    await user.click(screen.getByRole('button', { name: /^Version 1/ }))
+    expect(screen.queryByText('Candidat de version deux')).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Correspondances dans le Codex' })).toBeNull()
+    await act(async () => { finishDetail(response({ ...detail, id: previousId, itemId: previousId, version: 1 })) })
+    await waitFor(() => expect(pending).toHaveLength(2))
+    expect(pending[1]!.url).toBe(`/api/admin/ingestion/items/${previousId}/matches?receiptId=${previousId}`)
+    await user.click(screen.getByRole('button', { name: '← Retour au batch' }))
+    await user.click(await screen.findByRole('button', { name: item.title! }))
+    await waitFor(() => expect(pending).toHaveLength(3))
+    await act(async () => { pending[2]!.complete(response(matched('Candidat final fictif'))) })
+    await screen.findByRole('heading', { name: 'Candidat final fictif' })
+    await act(async () => { pending[1]!.complete(response({}, 401)) })
+    expect(access).not.toHaveBeenCalled(); expect(screen.getByRole('heading', { name: 'Candidat final fictif' })).toBeTruthy()
+  })
+  it('loads matches for the receipt actually displayed with admin no-store requests and clears them on return', async () => {
+    const calls = api(), user = userEvent.setup()
+    render(<AdminIngestion onAccessError={vi.fn()} />)
+    await user.click(await screen.findByRole('button', { name: batch.label }))
+    await user.click(await screen.findByRole('button', { name: item.title! }))
+    expect(await screen.findByText('Aucune fiche correspondante détectée')).toBeTruthy()
+    expect(calls.find(call => call.url.includes('/matches'))?.url).toBe(`/api/admin/ingestion/items/${id}/matches?receiptId=${id}`)
+    await user.click(screen.getByRole('button', { name: '← Retour au batch' }))
+    expect(screen.queryByRole('region', { name: 'Correspondances dans le Codex' })).toBeNull()
+    expect(window.location.search).toBe(''); expect(localStorage.length).toBe(0); expect(sessionStorage.length).toBe(0)
+  })
+  it('retries a matching failure independently of raw detail and reports matching-only access errors', async () => {
+    const calls = api(), originalFetch = fetch, access = vi.fn(), user = userEvent.setup()
+    let status = 500
+    const matchingCalls: RequestInit[] = []
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/matches')) { matchingCalls.push(init!); return Promise.resolve(response({}, status)) }
+      return originalFetch(url, init)
+    }))
+    render(<AdminIngestion onAccessError={access} />)
+    await user.click(await screen.findByRole('button', { name: batch.label }))
+    await user.click(await screen.findByRole('button', { name: item.title! }))
+    expect(await screen.findByText('Impossible de charger les correspondances.')).toBeTruthy()
+    const detailReads = calls.filter(call => call.url.startsWith(`/api/admin/ingestion/items/${id}?`)).length
+    for (status of [401, 403]) {
+      await user.click(screen.getByRole('button', { name: 'Réessayer les correspondances' }))
+      await waitFor(() => expect(access).toHaveBeenCalledWith(status))
+      expect(screen.getByRole('region', { name: 'Contenu brut reçu' }).textContent).toBe(detail.content)
+    }
+    expect(calls.filter(call => call.url.startsWith(`/api/admin/ingestion/items/${id}?`))).toHaveLength(detailReads)
+    expect(matchingCalls.every(init => !init.method && init.cache === 'no-store' && init.credentials === 'same-origin')).toBe(true)
+  })
   it('lists batches, opens a batch/item and versions with keyboard focus and no editorial mutations', async () => {
     const calls = api(), user = userEvent.setup()
     render(<AdminIngestion onAccessError={vi.fn()} />)
@@ -152,7 +246,7 @@ describe('consultation privée du staging', () => {
     const originalFetch = fetch
     let complete!: (value: Response) => void
     const pending = new Promise<Response>(resolve => { complete = resolve })
-    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => url.startsWith(`/api/admin/ingestion/items/${id}`) ? pending : originalFetch(url, init)))
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => new URL(url, 'http://localhost').pathname === `/api/admin/ingestion/items/${id}` ? pending : originalFetch(url, init)))
     let staleContentInserted = false
     const observer = new MutationObserver(records => {
       if (records.some(record => [...record.addedNodes].some(node => node instanceof Element && (node.matches('.ingestion-raw') || node.querySelector('.ingestion-raw'))))) staleContentInserted = true

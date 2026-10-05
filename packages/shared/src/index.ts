@@ -291,3 +291,18 @@ export interface AdminIngestionItemDetail extends AdminIngestionItem {
   content: string; metadata: unknown; originBatchId: string; snapshotIngestedAt: string;
   versions: Array<{ id: string; version: number; contentHash: string; ingestedAt: string }>;
 }
+
+export type IngestionMatchStatus = 'EXACT' | 'AMBIGUOUS' | 'POSSIBLE' | 'NONE'
+export type IngestionMatchReason = 'SAME_SOURCE_AND_LOCATOR' | 'EXACT_TITLE' | 'EXACT_ALIAS' |
+  'TITLE_TO_SLUG' | 'EXTERNAL_ID_TO_SLUG' | 'SIMILAR_TITLE' | 'SIMILAR_ALIAS'
+export interface IngestionMatchCandidate {
+  id: string; slug: string; title: string; kind: EntityKind; placeKind: PlaceKind | null;
+  aliases: string[]; status: EditorialStatus; visibility: Visibility;
+  score: number; reasons: IngestionMatchReason[];
+}
+export interface IngestionMatches {
+  status: IngestionMatchStatus; candidates: IngestionMatchCandidate[];
+  searchTruncated: boolean; candidatesTruncated: boolean; evaluatedCount: number;
+  searchLimit: number; candidateLimit: number;
+  exactCandidateCount: number; strongCandidateCount: number; approximateEvaluatedCount: number;
+}

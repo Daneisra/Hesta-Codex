@@ -1,7 +1,8 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import type { AdminIngestionBatch, AdminIngestionItem, AdminIngestionItemDetail, IngestionPage } from '@hesta-codex/shared'
+import type { AdminIngestionBatch, AdminIngestionItem, AdminIngestionItemDetail, IngestionPage, IngestionMatches } from '@hesta-codex/shared'
 import { Prisma, type PrismaClient, SourceKind, IngestionOutcome } from '../prisma-client/client.ts'
+import { createPrismaIngestionMatcher } from './matching.js'
 
 const timestamp = z.iso.datetime({ offset: true }).refine(value => Number(value.slice(0, 4)) >= 1)
 const baseFilters = z.strictObject({
@@ -21,6 +22,7 @@ export interface IngestionAdminStore {
   getBatch(id: string): Promise<AdminIngestionBatch | null>
   listItems(filters: ItemFilters): Promise<IngestionPage<AdminIngestionItem>>
   getItem(id: string, receiptId?: string): Promise<AdminIngestionItemDetail | null>
+  getMatches(id: string, receiptId?: string): Promise<IngestionMatches | null>
 }
 const pageSize = 20
 const sourceSelect = { id: true, kind: true, label: true } satisfies Prisma.SourceSelect
@@ -57,6 +59,7 @@ export function createPrismaIngestionAdminStore(prisma: PrismaClient): Ingestion
     })
   }
   return {
+    getMatches: createPrismaIngestionMatcher(prisma),
     async listBatches(filters) {
       const needsReceipts = filters.sourceKind || filters.sourceId || filters.q || filters.outcome
       const where: Prisma.IngestionBatchWhereInput = {
@@ -127,6 +130,13 @@ export function createIngestionAdminRouter(store: IngestionAdminStore) {
     const item = await store.getItem(request.params.id, query.data.receiptId)
     if (!item) { missing(response); return }
     response.json(item)
+  })
+  router.get('/items/:id/matches', async (request, response) => {
+    const query = z.strictObject({ receiptId: z.uuid().optional() }).safeParse(request.query)
+    if (!z.uuid().safeParse(request.params.id).success || !query.success) { bad(response); return }
+    const matches = await store.getMatches(request.params.id, query.data.receiptId)
+    if (!matches) { missing(response); return }
+    response.json(matches)
   })
   return router
 }

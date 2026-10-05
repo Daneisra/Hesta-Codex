@@ -1,4 +1,4 @@
-# Ingestion générique et staging — v0.7a
+# Ingestion générique, staging et détection — v0.7a/v0.7b
 
 Le staging conserve du contenu externe **privé admin**, avant toute interprétation éditoriale.
 La commande ne détecte ni fiche ni relation et n'appelle aucune IA ou application externe.
@@ -161,6 +161,7 @@ existants ; 401 sans session, 403 hors whitelist. Aucune mutation staging HTTP n
 | `GET /api/admin/ingestion/batches/:id` | Résumé du batch ; items obtenus séparément avec `batchId` |
 | `GET /api/admin/ingestion/items` | Réceptions paginées, 20/page, sans contenu brut, variante ou metadata |
 | `GET /api/admin/ingestion/items/:id` | Détail du snapshot avec sa réception la plus récente ; texte exact et metadata |
+| `GET /api/admin/ingestion/items/:id/matches` | Détection informative à la demande, contexte `receiptId` facultatif, candidats minimaux bornés |
 
 Filtres de liste : `sourceKind`, `sourceId` UUID, `outcome` NEW/UNCHANGED/MODIFIED, `after`/`before`
 ISO inclusifs et `page` 1–1000. La recherche de 2 à 100 caractères (titre/externalId/locator
@@ -191,9 +192,31 @@ Une expiration/refus de session démonte la vue privée. Les erreurs proposent d
 Les lectures devenues inactives effacent leur détail ; un retour vers un item attend une nouvelle
 réponse admin et ne réaffiche pas brièvement l'ancien contenu brut.
 
+### Détection v0.7b
+
+Le détail présente « Correspondances dans le Codex » : correspondance forte, ambiguïté,
+possibilités ou aucune fiche détectée. Il charge le matching pour la réception effectivement
+affichée, y compris lors de la navigation entre versions. Une erreur propose une relance
+indépendante sans perdre le détail. Les fiches archivées sont signalées par texte et bordure ;
+les troncatures de recherche et d’affichage sont distinctes. Chaque candidat indique type,
+slug, statut, visibilité, signal et raisons, avec un lien « Ouvrir la fiche » exclusivement
+vers `/admin/fiches/:slug`, selon la navigation admin existante. Aucun contenu de réception
+ni recherche ne rejoint cette URL. Aucun bouton d’association/création/publication.
+La recherche exacte est ciblée et comptée avant toute limite ; le plafond de 200 s’applique
+uniquement aux candidats approximatifs supplémentaires. Une troncature de cette réserve
+ne transforme pas un match exact unique déjà prouvé en ambiguïté. Les résultats d’un item,
+receipt ou chargement précédent sont masqués immédiatement lors du changement de contexte ;
+les réponses annulées arrivant tard sont ignorées, y compris leurs erreurs d’accès.
+
+Le calcul utilise uniquement l’identité Source/externalId, le titre/repère de réception et
+les noms/slugs/alias/provenances existants, jamais le contenu narratif ou les metadata.
+Il ne modifie aucun snapshot ni modèle éditorial et ne persiste aucun résultat : une nouvelle
+lecture reflète les données du Codex à cet instant. Aucune migration v0.7b.
+Algorithme exact, scores, normalisation, cas ambigus et plafonds : [MATCHING.md](MATCHING.md).
+
 ## Limites et étapes suivantes
 
-Pas de streaming, pièces jointes/binaires, extraction, matching, propositions, revue éditoriale,
+Pas de streaming, pièces jointes/binaires, extraction, propositions, revue éditoriale,
 connecteurs, synchronisation, suppression/rétention ou pagination de l'historique au-delà des 20 versions.
 Les Sources/snapshots sont résolus séquentiellement pour borner la charge. Les recherches sont
 relationnelles bornées, sans moteur plein texte ; la volumétrie de staging reste à mesurer.

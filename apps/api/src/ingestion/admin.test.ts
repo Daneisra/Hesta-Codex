@@ -25,6 +25,8 @@ const ingestion: IngestionAdminStore = {
   async getBatch(requested) { reads++; return requested === id ? batch : null },
   async listItems(filters) { reads++; filtersReceived.push(filters); return { items: [item], total: 1, page: filters.page, pageSize: 20 } },
   async getItem(requested) { reads++; return requested === id ? detail : null },
+  async getMatches(requested, receiptId) { reads++; filtersReceived.push({ requested, receiptId });
+    return requested === id && (!receiptId || receiptId === id) ? { status: 'NONE', candidates: [], searchTruncated: false, candidatesTruncated: false, evaluatedCount: 0, searchLimit: 200, candidateLimit: 10, exactCandidateCount: 0, strongCandidateCount: 0, approximateEvaluatedCount: 0 } : null },
 }
 const config = readAuthConfig({ DISCORD_CLIENT_ID: '111111111111111111', DISCORD_CLIENT_SECRET: 'fake',
   DISCORD_REDIRECT_URI: 'http://localhost:5173/api/auth/discord/callback', DISCORD_ADMIN_IDS: '222222222222222222',
@@ -46,7 +48,7 @@ before(async () => {
 after(async () => { await new Promise<void>(resolve => server.close(() => resolve())) })
 
 test('all ingestion reads enforce session/whitelist/no-store before consulting staging', async () => {
-  for (const path of ['/batches', `/batches/${id}`, '/items', `/items/${id}`]) {
+  for (const path of ['/batches', `/batches/${id}`, '/items', `/items/${id}`, `/items/${id}/matches`]) {
     const initialReads = reads
     const anonymous = await fetch(`${base}/api/admin/ingestion${path}`)
     assert.equal(anonymous.status, 401); assert.equal(anonymous.headers.get('cache-control'), 'no-store')
@@ -58,7 +60,7 @@ test('all ingestion reads enforce session/whitelist/no-store before consulting s
 })
 
 test('public routes have no staging counterpart, and public entities/search/graph remain untouched', async () => {
-  for (const path of ['/api/v1/ingestion/batches', `/api/v1/ingestion/items/${id}`, '/api/v1/ingestion/items']) {
+  for (const path of ['/api/v1/ingestion/batches', `/api/v1/ingestion/items/${id}`, `/api/v1/ingestion/items/${id}/matches`, '/api/v1/ingestion/items']) {
     const response = await fetch(`${base}${path}`); assert.equal(response.status, 404)
     assert.equal((await response.text()).includes(detail.content), false)
   }
@@ -66,6 +68,20 @@ test('public routes have no staging counterpart, and public entities/search/grap
     const response = await fetch(`${base}${path}`); assert.equal(response.status, 200)
     assert.equal((await response.text()).includes('private-note'), false)
   }
+})
+
+test('matching receipt parameters are strict; missing items or receipts belonging elsewhere return 404', async () => {
+  const path = `${base}/api/admin/ingestion/items/${id}/matches`
+  const valid = await fetch(`${path}?receiptId=${id}`, { headers: adminHeaders })
+  assert.equal(valid.status, 200); assert.deepEqual(filtersReceived.at(-1), { requested: id, receiptId: id })
+  assert.doesNotMatch(JSON.stringify(await valid.json()), /content|metadata|source|Evidence|Revision|auth/)
+  for (const query of ['receiptId=bad', `receiptId=${id}&receiptId=${id}`, 'q=private', 'page=1'])
+    assert.equal((await fetch(`${path}?${query}`, { headers: adminHeaders })).status, 400)
+  for (const url of [`${path}?receiptId=22222222-2222-4222-8222-222222222222`, `${base}/api/admin/ingestion/items/22222222-2222-4222-8222-222222222222/matches`])
+    assert.equal((await fetch(url, { headers: adminHeaders })).status, 404)
+  assert.equal((await fetch(`${base}/api/admin/ingestion/items/invalid/matches`, { headers: adminHeaders })).status, 400)
+  const crossOrigin = await fetch(path, { method: 'POST', headers: { ...adminHeaders, Origin: 'https://example.invalid' } })
+  assert.equal(crossOrigin.status, 403)
 })
 
 test('admin ingestion filters are strict, paginated, range checked and never search raw text', async () => {
@@ -104,15 +120,19 @@ test('staging mutations do not exist and the existing Origin protection still re
 })
 
 test('admin staging failures preserve no-store and hide private database details in responses and logs', async context => {
-  const original = ingestion.listBatches, logged: unknown[][] = []
+  const original = ingestion.listBatches, originalMatches = ingestion.getMatches, logged: unknown[][] = []
   context.mock.method(console, 'error', (...values: unknown[]) => { logged.push(values) })
   ingestion.listBatches = async () => { throw new Error('fictional private database detail') }
+  ingestion.getMatches = async () => { throw new Error('fictional private matching locator') }
   try {
-    const response = await fetch(`${base}/api/admin/ingestion/batches`, { headers: adminHeaders })
-    assert.equal(response.status, 500); assert.equal(response.headers.get('cache-control'), 'no-store')
-    assert.equal((await response.text()).includes('fictional private'), false)
-    assert.deepEqual(logged, [['Hesta Codex API request failed']])
-  } finally { ingestion.listBatches = original }
+    for (const path of ['/batches', `/items/${id}/matches`]) {
+      logged.length = 0
+      const response = await fetch(`${base}/api/admin/ingestion${path}`, { headers: adminHeaders })
+      assert.equal(response.status, 500); assert.equal(response.headers.get('cache-control'), 'no-store')
+      assert.equal((await response.text()).includes('fictional private'), false)
+      assert.deepEqual(logged, [['Hesta Codex API request failed']])
+    }
+  } finally { ingestion.listBatches = original; ingestion.getMatches = originalMatches }
 })
 
 test('Prisma list projections are bounded and exclude raw content, variants and metadata', async () => {

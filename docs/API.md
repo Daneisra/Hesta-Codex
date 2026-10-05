@@ -48,6 +48,7 @@ portent `Cache-Control: no-store`.
 | `GET /api/admin/ingestion/batches/:id` | Résumé privé du batch UUID. |
 | `GET /api/admin/ingestion/items` | Réceptions paginées, 20/page ; aucun contenu brut/metadata. |
 | `GET /api/admin/ingestion/items/:id` | Snapshot UUID, texte/metadata de la dernière réception ou de `receiptId` UUID, résumé des 20 dernières versions. |
+| `GET /api/admin/ingestion/items/:id/matches` | Détection v0.7b à la demande : statut EXACT/AMBIGUOUS/POSSIBLE/NONE, jusqu’à 10 candidats minimaux, raisons et indicateurs de troncature. |
 | `GET /api/admin/stats` | Comptes par statut et visibilité, nombre de sources et relations. |
 | `GET /api/admin/graph` | Nœuds et arêtes éditoriaux minimaux, avec `summary`, `aliases`, statut et visibilité ; requiert un admin. |
 | `GET /api/admin/entities` | `{ items, total, page, pageSize }` ; 50 fiches par page, tous statuts et visibilités. Filtres facultatifs `status`, `visibility`, `kind`, `q` (2 à 100 caractères), `page` (1 à 9999). |
@@ -77,6 +78,21 @@ de mutation staging n'existe. Voir [INGESTION.md](INGESTION.md) pour les project
 La recherche privée (2–100 caractères, titre/identifiant/locator uniquement) passe par
 `X-Hesta-Ingestion-Search`, encodé avec `encodeURIComponent`, jamais par un paramètre `q` d'URL.
 L'en-tête est borné à 1 200 caractères ; un encodage invalide ou plusieurs occurrences donnent 400.
+
+Le matching accepte uniquement `receiptId` UUID facultatif, avec le même ordre de dernière
+réception que le détail. La réception doit appartenir à l’item : sinon 404, comme pour un item
+absent. Paramètres inconnus/répétés, UUID invalide : 400 ; accès : 401/403 ; erreur interne : 500
+générique. Il réutilise le middleware Origin admin existant (vérification des mutations,
+lectures GET exemptées) et `no-store`, sans ajouter de CORS. La projection de chaque candidat contient uniquement id, slug, titre,
+type/sous-type, jusqu’à cinq alias rapprochés, statut, visibilité, score et codes de raisons.
+Aucun contenu brut, metadata, corps de fiche, Source, Evidence ou Revision n’est renvoyé.
+Le serveur ne reçoit aucun titre de recherche dans l’URL : il résout la réception en interne.
+Les comptes `exactCandidateCount` et `strongCandidateCount` couvrent toutes les identités
+exactes en base, avant limite d’affichage. `searchTruncated` concerne seulement la réserve
+approximative de 200 fiches ; il peut coexister avec EXACT. `approximateEvaluatedCount` est
+borné à 200 ; `evaluatedCount` inclut jusqu’à 12 projections exactes supplémentaires (≤212).
+Voir [MATCHING.md](MATCHING.md) pour les scores, plafonds et limites. Aucune route publique,
+persistance, mutation ou association de matching.
 
 Le `PATCH` exige un JSON complet contenant `title`, `summary`, `bodyMarkdown`, `kind`,
 `placeKind`, `aliases`, `tags`, `visibility`, `expectedUpdatedAt` et éventuellement
