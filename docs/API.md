@@ -54,6 +54,8 @@ portent `Cache-Control: no-store`.
 | `POST /api/admin/ingestion/items/:id/association/reject` | Rejette une Entity pour cette identité seulement. |
 | `POST /api/admin/ingestion/items/:id/association/reset` | Retire uniquement la confirmation ; rejets et révision demeurent. |
 | `POST /api/admin/ingestion/entities/search` | Recherche privée titre/slug/alias, JSON `{ q }`, 2–100 caractères, 20 résultats non archivés + indicateur de troncature. |
+| `GET /api/admin/ingestion/items/:id/proposal` | Préparation privée v0.7d, `receiptId` UUID obligatoire, sans écriture ; champs préremplis, Source minimale et expectedRevision. |
+| `POST /api/admin/ingestion/items/:id/proposal` | Création humaine atomique Entity PROPOSED/Evidence/Revision #1/confirmation MANUAL ; Source existante réutilisée ; 201 Entity minimale. |
 | `GET /api/admin/stats` | Comptes par statut et visibilité, nombre de sources et relations. |
 | `GET /api/admin/graph` | Nœuds et arêtes éditoriaux minimaux, avec `summary`, `aliases`, statut et visibilité ; requiert un admin. |
 | `GET /api/admin/entities` | `{ items, total, page, pageSize }` ; 50 fiches par page, tous statuts et visibilités. Filtres facultatifs `status`, `visibility`, `kind`, `q` (2 à 100 caractères), `page` (1 à 9999). |
@@ -119,6 +121,13 @@ ou session. La recherche se fait dans un corps POST et utilise `strpos` paramét
 et apostrophes restent littéraux. Aucun titre ni recherche privée dans une nouvelle URL.
 La répétition d’une décision déjà identique ne change pas son auteur/date/révision ; une
 modification obsolète différente retourne 409. Voir [ASSOCIATION.md](ASSOCIATION.md).
+
+Le POST proposal reçoit strictement `{ receiptId, expectedRevision, entity, evidence }` ; Entity
+réutilise les champs de création manuelle et Evidence accepte seulement claimText/sourceExcerpt/locator.
+Source, statut, publication, attribution et dates sont serveur. 409 ENTITY_CONFLICT pour slug occupé,
+ASSOCIATION_CONFLICT pour confirmation existante, STALE_INGESTION_STATE pour révision/concurrence ;
+404 INGESTION_ITEM_NOT_FOUND ou SOURCE_NOT_FOUND. 400 renvoie des erreurs par champ sans valeurs privées,
+500 reste générique. Aucun retry de création automatique. Voir [STAGING-CREATION.md](STAGING-CREATION.md).
 
 Le `PATCH` exige un JSON complet contenant `title`, `summary`, `bodyMarkdown`, `kind`,
 `placeKind`, `aliases`, `tags`, `visibility`, `expectedUpdatedAt` et éventuellement

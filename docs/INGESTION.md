@@ -238,7 +238,12 @@ La migration et les règles de concurrence sont détaillées dans [ASSOCIATION.m
 
 ## Limites et étapes suivantes
 
-Pas de streaming, pièces jointes/binaires, extraction, propositions, file de revue éditoriale,
+v0.7d propose une création humaine distincte depuis un item sans confirmation. Elle ouvre
+une préparation privée, demande type et provenance, puis crée atomiquement une Entity PROPOSED,
+une Evidence, une Revision #1 et l’association. Source réutilisée et staging immuable ; aucune
+publication ou mise à jour automatique. Voir [STAGING-CREATION.md](STAGING-CREATION.md).
+
+Pas de streaming, pièces jointes/binaires, extraction/génération de propositions, file de revue éditoriale,
 connecteurs, synchronisation, suppression/rétention ou pagination de l'historique au-delà des 20 versions.
 Les Sources/snapshots sont résolus séquentiellement pour borner la charge. Les recherches sont
 relationnelles bornées, sans moteur plein texte ; la volumétrie de staging reste à mesurer.
@@ -249,7 +254,8 @@ des données techniques fictives ; Firefox/Safari, tactile et lecteurs d'écran 
 - v0.7a : staging générique.
 - v0.7b : matching/détection des fiches existantes.
 - v0.7c : décisions humaines et associations persistantes.
-- v0.7d : file de revue et validation humaine.
+- v0.7d : création humaine d’une fiche proposée depuis le staging.
 
 Les connecteurs réels Carte Hesta, Obsidian, Discord et YouTube/transcriptions viennent après ce socle.
-La génération de propositions reste reportée ; v0.7c n’interprète ni n’importe le texte narratif.
+La génération automatique de propositions et la file de revue restent reportées ; seule une
+action explicite v0.7d peut transférer le contenu préparé vers une nouvelle fiche proposée.

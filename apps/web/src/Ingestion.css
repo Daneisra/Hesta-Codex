@@ -31,5 +31,9 @@
 .ingestion-association a { display: inline-block; max-width: 100%; padding: .6rem; border: 1px solid #657a9c; border-radius: .4rem; }
 .ingestion-picker label { display: grid; gap: .5rem; min-width: 0; margin: 1rem 0; }
 .ingestion-picker input { width: 100%; min-width: 0; color: #eef2fa; background: #192840; border: 1px solid #657a9c; border-radius: .35rem; padding: .6rem; }
+.ingestion-proposal, .ingestion-proposal fieldset { min-width: 0; }
+.ingestion-proposal pre { max-height: 24rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ingestion-proposal-terms input { flex: 1; min-width: 0; }
+.ingestion-proposal fieldset { border: 1px solid #657a9c; padding: .8rem; margin: 1rem 0; }
 .ingestion-match-list a { display: inline-block; max-width: 100%; margin-top: .5rem; padding: .6rem; border: 1px solid #657a9c; border-radius: .4rem; }
 @media (max-width: 560px) { .ingestion-detail dl { grid-template-columns: minmax(0, 1fr); } .ingestion-detail dd { margin-bottom: .7rem; } }

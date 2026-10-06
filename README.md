@@ -137,6 +137,12 @@ protègent les décisions concurrentes. La migration additive `20261006000000_in
 crée uniquement les tables dédiées. Association ≠ import éditorial, preuve ou publication :
 aucune Entity/Relation/Evidence/Revision n’est écrite. Voir [docs/ASSOCIATION.md](docs/ASSOCIATION.md).
 
+v0.7d ajoute une action humaine distincte « Créer une fiche dans le Codex » pour un item sans
+confirmation : préparation, correction et récapitulatif avant création atomique d’une Entity
+PROPOSED, Evidence, Revision #1 et association MANUAL. La Source est réutilisée, le staging
+reste immuable et aucune publication n’a lieu. Aucune migration supplémentaire.
+Voir [docs/STAGING-CREATION.md](docs/STAGING-CREATION.md).
+
 Depuis `/admin`, « Nouvelle fiche » ouvre la création manuelle v0.5a. Chaque création impose
 une Source existante ou nouvelle et une Evidence initiale. L'Entity, l'Evidence, la Source
 éventuelle et la `Revision #1` sont écrites dans une seule transaction. La fiche reste

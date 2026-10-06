@@ -14,7 +14,7 @@ const item: AdminIngestionItem = { id, itemId: id, batchId: id, ordinal: 0, titl
 const detail: AdminIngestionItemDetail = { ...item, content: '<script>alert(1)</script>\nTexte fictif ' + 'contenu-long'.repeat(2000),
   metadata: { fictional: true, description: 'm'.repeat(4000) }, originBatchId: id, snapshotIngestedAt: batch.createdAt,
   versions: [{ id, version: 2, contentHash: item.contentHash, ingestedAt: item.ingestedAt }, { id: previousId, version: 1, contentHash: 'b'.repeat(64), ingestedAt: item.ingestedAt }] }
-const response = (data: unknown, status = 200) => ({ ok: status === 200, status, json: async () => data }) as Response
+const response = (data: unknown, status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => data }) as Response
 const matched = (title: string): IngestionMatches => ({ status: 'EXACT', searchTruncated: false, candidatesTruncated: false,
   evaluatedCount: 1, exactCandidateCount: 1, strongCandidateCount: 1, approximateEvaluatedCount: 0, searchLimit: 200, candidateLimit: 10,
   candidates: [{ id, slug: 'fiche-fictive', title, kind: 'OTHER', placeKind: null, aliases: [], status: 'DRAFT', visibility: 'SECRET', score: 90, reasons: ['EXACT_TITLE'] }] })
@@ -44,6 +44,48 @@ beforeEach(() => window.history.replaceState(null, '', '/admin/ingestion'))
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/') })
 
 describe('consultation privée du staging', () => {
+  it('prepares without writing, then creates explicitly and returns to the unchanged staging with a confirmed association', async () => {
+    const calls = api(), original = fetch, user = userEvent.setup()
+    const entity = { id, slug: 'fiche-technique', title: 'Fiche technique proposée', kind: 'OTHER', placeKind: null, status: 'PROPOSED', visibility: 'GM' }
+    let confirmed = false
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('/proposal')) {
+        calls.push({ url, init })
+        if (init?.method) { confirmed = true; return response({ entity }, 201) }
+        return response({ receiptId: id, expectedRevision: 0, title: entity.title, bodyMarkdown: detail.content, tags: [], sourceExcerpt: '', locator: null, warnings: [], source: { label: 'Origine artificielle', kind: 'OBSIDIAN', visibility: 'GM' } })
+      }
+      if (url.includes('/association') && confirmed) return response({ revision: 1, scope: 'EXTERNAL_ID', confirmed: { entity, origin: 'MANUAL', authorLabel: 'Admin fictif', decidedAt: batch.createdAt }, invalid: false, rejectedCandidateIds: [], rejectedCount: 0, recentRejections: [] })
+      return original(url, init)
+    }))
+    render(<AdminIngestion onAccessError={vi.fn()} />)
+    await user.click(await screen.findByRole('button', { name: batch.label })); await user.click(await screen.findByRole('button', { name: item.title! }))
+    const marker = window.history.state.ingestionNavigation
+    await user.click(await screen.findByRole('button', { name: 'Créer une fiche dans le Codex' }))
+    await screen.findByRole('heading', { name: 'Préparer une fiche depuis le staging' })
+    expect(calls.filter(call => call.init?.method)).toHaveLength(0)
+    await user.selectOptions(screen.getByLabelText('Type de fiche'), 'OTHER'); await user.type(screen.getByLabelText('Énoncé de provenance'), 'Énoncé technique')
+    await user.click(screen.getByRole('button', { name: 'Vérifier la création' })); await user.click(screen.getByRole('button', { name: 'Créer la fiche proposée' }))
+    await screen.findByRole('heading', { name: 'Fiche créée dans le Codex' }); await screen.findByRole('heading', { name: 'Association confirmée' })
+    expect(screen.queryByRole('button', { name: 'Créer une fiche dans le Codex' })).toBeNull()
+    expect(screen.getByRole('region', { name: 'Contenu brut reçu' }).textContent).toBe(detail.content)
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Ingestion' }))
+    expect(calls.filter(call => call.init?.method)).toHaveLength(1); expect(window.history.state.ingestionNavigation).toBe(marker)
+    expect(window.location.pathname).toBe('/admin/ingestion'); expect(window.location.search).toBe('')
+  })
+  it('browser back closes preparation without a write and browser forward reloads the item without a private draft in history', async () => {
+    const calls = api(), original = fetch, user = userEvent.setup()
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => url.includes('/proposal') ? response({ receiptId: id, expectedRevision: 0,
+      title: 'Préparation fictive', bodyMarkdown: 'Fictif', tags: [], sourceExcerpt: '', locator: null, warnings: [], source: { label: 'Source fictive', kind: 'MANUAL', visibility: 'GM' } }) : original(url, init)))
+    render(<AdminIngestion onAccessError={vi.fn()} />)
+    await user.click(await screen.findByRole('button', { name: batch.label })); await user.click(await screen.findByRole('button', { name: item.title! }))
+    await user.click(await screen.findByRole('button', { name: 'Créer une fiche dans le Codex' })); await screen.findByLabelText('Titre')
+    await user.type(screen.getByLabelText('Énoncé de provenance'), 'Saisie privée fictive')
+    await act(async () => { window.history.back(); await new Promise(resolve => setTimeout(resolve, 40)) })
+    await screen.findByRole('button', { name: item.title! }); expect(screen.queryByLabelText('Énoncé de provenance')).toBeNull()
+    await act(async () => { window.history.forward(); await new Promise(resolve => setTimeout(resolve, 40)) })
+    await screen.findByRole('button', { name: 'Créer une fiche dans le Codex' }); expect(screen.queryByLabelText('Énoncé de provenance')).toBeNull()
+    expect(calls.filter(call => call.init?.method)).toHaveLength(0); expect(JSON.stringify(window.history.state)).not.toContain('Saisie privée')
+  })
   it('never displays stale matches when switching receipts for the same snapshot, even when the aborted response resolves last', async () => {
     api(); const originalFetch = fetch, user = userEvent.setup(), access = vi.fn()
     const pending: Array<{ url: string; init?: RequestInit; complete: (value: Response) => void }> = []

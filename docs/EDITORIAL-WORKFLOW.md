@@ -37,7 +37,8 @@ Chaque modification réelle, publication ou retrait écrit l'Entity et une Revis
 transaction PostgreSQL. Une sauvegarde sans changement ne crée pas de Revision. Le numéro est le maximum existant + 1 ; le snapshot
 `{ version: 1, entity: { ... } }` contient l'état complet **après** l'action, sans Source,
 Evidence, Relation ou `metadata`. La première révision importée conserve son bloc `import`
-de provenance. L'attribution textuelle prend le display name Discord, puis le username.
+de provenance ; celle créée depuis le staging v0.7d conserve son bloc `ingestion` privé.
+L'attribution textuelle prend le display name Discord, puis le username.
 
 ## Actions explicites
 
@@ -60,6 +61,13 @@ preuves est décrite dans [PROVENANCE-WORKFLOW.md](PROVENANCE-WORKFLOW.md) ; ell
 `Revision` Entity.
 
 ## Création manuelle
+
+Depuis v0.7d, le staging dispose aussi d’un parcours explicite de préparation puis création
+humaine. La Source existante est conservée ; Entity PROPOSED, Evidence, Revision #1 et
+association CONFIRMED/MANUAL sont écrites dans une seule transaction Serializable, sans
+Relation ni publication. La première révision trace le snapshot/receipt et leurs dates.
+Les versions suivantes héritent de l’association sans modifier la fiche.
+Voir [STAGING-CREATION.md](STAGING-CREATION.md).
 
 Depuis v0.5a, un administrateur peut créer une fiche avec une Source et une Evidence initiale.
 La fiche reçoit `PROPOSED`, `publishedAt = null` et `GM` par défaut. Une `Revision #1` est

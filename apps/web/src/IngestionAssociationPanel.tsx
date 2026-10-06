@@ -11,9 +11,10 @@ type Load = { key: string; phase: 'loading' } | { key: string; phase: 'error'; s
 type Pending = { action: 'confirm' | 'reject'; entity: IngestionAssociationEntity; origin: 'MATCH' | 'MANUAL' } | { action: 'reset' }
 type PreparedDecision = Pending & { expectedRevision: number }
 const date = (value: string) => new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
-export function IngestionAssociationPanel({ itemId, receiptId, matches, onRetryMatches, onAccessError, onNavigate }: {
+export function IngestionAssociationPanel({ itemId, receiptId, matches, onRetryMatches, onAccessError, onNavigate, onPrepare }: {
   itemId: string; receiptId: string; matches: MatchesLoad; onRetryMatches: () => void;
   onAccessError: (status: number) => void; onNavigate?: (event: MouseEvent<HTMLAnchorElement>, path: string) => void
+  onPrepare?: () => void
 }) {
   const [load, setLoad] = useState<Load>({ key: '', phase: 'loading' })
   const [refresh, setRefresh] = useState(0)
@@ -114,7 +115,7 @@ export function IngestionAssociationPanel({ itemId, receiptId, matches, onRetryM
   return <>
     <section className="ingestion-association" aria-labelledby="ingestion-association-heading" aria-busy={busy}>
       <h3 id="ingestion-association-heading" ref={heading} tabIndex={-1}>Association au Codex</h3>
-      <p>Décision humaine uniquement : aucune fiche, preuve ou publication n’est modifiée.</p>
+      <p>L’association seule ne modifie aucune fiche, preuve ou publication.</p>
       {feedback && <p role="status">{feedback}</p>}
       {failure && <div role="alert"><p>{failure}</p><button type="button" disabled={busy} onClick={() => { setFailure(null); setRefresh(value => value + 1) }}>Recharger les associations</button></div>}
       {current.phase === 'loading' && <p role="status">Chargement de l’association…</p>}
@@ -128,9 +129,11 @@ export function IngestionAssociationPanel({ itemId, receiptId, matches, onRetryM
           <p>Confirmée par {confirmed.authorLabel} le {date(confirmed.decidedAt)}.</p>
           {current.data.invalid && <p role="alert">Association devenue invalide : la fiche est archivée. Changez ou retirez l’association.</p>}
           {entityLink(confirmed.entity)}
+          {onPrepare && <p>Cette identité possède déjà une fiche dans le Codex. La création depuis cet item est indisponible.</p>}
           <div className="ingestion-association-actions"><button type="button" disabled={busy || !!pending || !!failure} onClick={() => setPicker(value => !value)}>Changer l’association</button>
             <button type="button" disabled={busy || !!pending || !!failure} onClick={() => requestDecision({ action: 'reset' })}>Retirer l’association</button></div>
-        </div> : <><p>Aucune association confirmée.</p><button type="button" disabled={busy || !!pending || !!failure} onClick={() => setPicker(value => !value)}>Choisir une autre fiche</button></>}
+        </div> : <><p>Aucune association confirmée.</p><button type="button" disabled={busy || !!pending || !!failure} onClick={() => setPicker(value => !value)}>Choisir une autre fiche</button>
+          {onPrepare && <button type="button" disabled={busy || !!pending || !!failure} onClick={onPrepare}>Créer une fiche dans le Codex</button>}</>}
         {current.data.rejectedCount > 0 && <details><summary>Suggestions rejetées ({current.data.rejectedCount})</summary>
           <p>Les 20 décisions les plus récentes sont affichées. Tous les candidats actuels sont vérifiés séparément.</p>
           <ul>{current.data.recentRejections.map(rejection => <li key={rejection.entity.id}>{rejection.entity.title} · rejetée par {rejection.authorLabel} le {date(rejection.decidedAt)}.</li>)}</ul>

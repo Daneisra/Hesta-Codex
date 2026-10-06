@@ -9,6 +9,11 @@ rejeter, changer ou retirer une association. Aucun texte reçu n’est injecté 
 Le service ne crée ni ne modifie Entity, Relation, Evidence ou Revision ; il ne change aucun
 statut, visibilité ou timestamp éditorial. Le matcher et l’ingestion historiques restent inchangés.
 
+Depuis v0.7d, un parcours distinct de **création humaine explicite** peut créer une nouvelle
+Entity PROPOSED avec Evidence/Revision et confirmer cette association dans la même transaction.
+Les opérations d’association v0.7c ci-dessous restent sans mutation éditoriale. Il n’existe
+aucun import par score, rejet ou chargement. Voir [STAGING-CREATION.md](STAGING-CREATION.md).
+
 ## Identité et versions
 
 Le staging v0.7a possède déjà `(sourceId, identityKey, version)`. `identityKey` vaut

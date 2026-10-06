@@ -16,6 +16,20 @@ function isUniqueConflict(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
 }
 
+export async function createProposedEntity(tx: Prisma.TransactionClient, fields: ManualCreateInput['entity']) {
+  try {
+    return await tx.entity.create({ data: {
+      slug: fields.slug, kind: fields.kind, placeKind: fields.placeKind,
+      title: fields.title, summary: fields.summary, bodyMarkdown: fields.bodyMarkdown,
+      aliases: fields.aliases, tags: fields.tags, visibility: fields.visibility,
+      status: 'PROPOSED', publishedAt: null,
+    } })
+  } catch (error) {
+    if (isUniqueConflict(error)) throw new EditorialError(409, 'ENTITY_CONFLICT', 'Ce slug est déjà utilisé par une fiche.')
+    throw error
+  }
+}
+
 export function createPrismaManualService(prisma: PrismaClient): ManualService {
   return {
     async listSources({ q, page }) {
@@ -39,19 +53,7 @@ export function createPrismaManualService(prisma: PrismaClient): ManualService {
 
         const sourceId = await resolveCreationSource(tx, input.source)
 
-        const fields = input.entity
-        let entity
-        try {
-          entity = await tx.entity.create({ data: {
-            slug: fields.slug, kind: fields.kind, placeKind: fields.placeKind,
-            title: fields.title, summary: fields.summary, bodyMarkdown: fields.bodyMarkdown,
-            aliases: fields.aliases, tags: fields.tags, visibility: fields.visibility,
-            status: 'PROPOSED', publishedAt: null,
-          } })
-        } catch (error) {
-          if (isUniqueConflict(error)) throw new EditorialError(409, 'ENTITY_CONFLICT', 'Ce slug est déjà utilisé par une fiche.')
-          throw error
-        }
+        const entity = await createProposedEntity(tx, input.entity)
 
         await createInitialEvidence(tx, sourceId, { entityId: entity.id, relationId: null },
           input.evidence, input.source.mode === 'existing')

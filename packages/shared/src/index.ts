@@ -324,3 +324,16 @@ export interface IngestionAssociationRequest {
 }
 export interface IngestionAssociationResetRequest { receiptId: string; expectedRevision: number }
 export interface IngestionAssociationSearch { items: IngestionAssociationEntity[]; truncated: boolean; limit: number }
+
+export interface IngestionProposalRequest {
+  receiptId: string; expectedRevision: number;
+  entity: AdminManualCreateRequest['entity'];
+  evidence: Pick<AdminManualCreateRequest['evidence'], 'claimText' | 'sourceExcerpt' | 'locator'>;
+}
+export interface IngestionProposalPreparation {
+  receiptId: string; expectedRevision: number;
+  source: { label: string; kind: SourceKind; visibility: Visibility };
+  title: string; bodyMarkdown: string; tags: string[];
+  sourceExcerpt: string; locator: string | null; warnings: string[];
+}
+export interface IngestionProposalCreated { entity: IngestionAssociationEntity }

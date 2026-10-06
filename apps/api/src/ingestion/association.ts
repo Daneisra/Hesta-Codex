@@ -27,6 +27,19 @@ const mapEntity = (row: IngestionAssociationEntity): IngestionAssociationEntity 
   title: row.title, kind: row.kind, placeKind: row.placeKind, status: row.status, visibility: row.visibility })
 const mapDecision = (row: Decision) => ({ entity: mapEntity(row.entity), origin: row.origin, authorLabel: row.authorLabel, decidedAt: row.decidedAt.toISOString() })
 
+export { identity as readIngestionIdentity, association as readIngestionAssociation, mapEntity as associationEntity }
+export function associationActorFields(actor: AssociationActor) {
+  return { authorDiscordId: actor.discordId, authorLabel: Array.from(actor.label.replace(/[\r\n]/g, ' ')).slice(0, 200).join(''), decidedAt: new Date() }
+}
+export async function advanceIngestionAssociation(tx: Prisma.TransactionClient, item: Identity, row: Association | null, expectedRevision: number): Promise<Association> {
+  if ((row?.revision ?? 0) !== expectedRevision) throw conflict()
+  if (!row) return tx.ingestionAssociation.create({ data: { sourceId: item.sourceId, identityKey: item.identityKey,
+    externalId: item.externalId, itemId: item.id, revision: 1 }, select: associationSelect })
+  const changed = await tx.ingestionAssociation.updateMany({ where: { id: row.id, revision: expectedRevision }, data: { revision: { increment: 1 } } })
+  if (changed.count !== 1) throw conflict()
+  return { ...row, revision: row.revision + 1 }
+}
+
 async function identity(tx: Prisma.TransactionClient, itemId: string, receiptId?: string): Promise<Identity> {
   const receipt = await tx.ingestionReceipt.findFirst({ where: { itemId, ...(receiptId ? { id: receiptId } : {}) },
     orderBy: [{ ingestedAt: 'desc' }, { ordinal: 'desc' }, { id: 'desc' }],
@@ -84,20 +97,12 @@ export function createPrismaIngestionAssociationService(prisma: PrismaClient): I
             (action === 'RESET' && !current)) return state(tx, item, row, entityId ? [entityId] : [])
           if ((row?.revision ?? 0) !== input.expectedRevision) throw conflict()
           if (action === 'REJECTED' && current?.entityId === entityId) throw new EditorialError(409, 'ALREADY_CONFIRMED', 'Retirez ou changez d’abord cette association confirmée.')
-          if (!row) {
-            row = await tx.ingestionAssociation.create({ data: { sourceId: item.sourceId, identityKey: item.identityKey,
-              externalId: item.externalId, itemId: item.id, revision: 1 }, select: associationSelect })
-          } else {
-            const changed = await tx.ingestionAssociation.updateMany({ where: { id: row.id, revision: input.expectedRevision }, data: { revision: { increment: 1 } } })
-            if (changed.count !== 1) throw conflict()
-            row = { ...row, revision: row.revision + 1 }
-          }
+          row = await advanceIngestionAssociation(tx, item, row, input.expectedRevision)
           if (action === 'RESET' || action === 'CONFIRMED') {
             await tx.ingestionAssociationDecision.deleteMany({ where: { associationId: row.id, decision: 'CONFIRMED' } })
           }
           if (action !== 'RESET' && 'entityId' in input && actor) {
-            const data = { decision: action, origin: input.origin, authorDiscordId: actor.discordId,
-              authorLabel: Array.from(actor.label.replace(/[\r\n]/g, ' ')).slice(0, 200).join(''), decidedAt: new Date() }
+            const data = { decision: action, origin: input.origin, ...associationActorFields(actor) }
             await tx.ingestionAssociationDecision.upsert({ where: { associationId_entityId: { associationId: row.id, entityId: input.entityId } },
               create: { ...data, associationId: row.id, entityId: input.entityId }, update: data })
           }

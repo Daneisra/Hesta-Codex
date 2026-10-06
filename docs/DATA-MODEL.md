@@ -120,6 +120,12 @@ rejets récents. Les CHECK bornent révision, identité, identifiant externe et 
 La révision demeure après retrait pour empêcher un client obsolète de réutiliser l’état zéro.
 Seules ces tables sont écrites par le nouveau service. Voir [ASSOCIATION.md](ASSOCIATION.md).
 
+v0.7d n’ajoute aucun modèle/migration : l’action de création explicite utilise ces associations
+et le cœur éditorial existant. Revision #1 garde le snapshot Entity standard et un bloc JSON
+`ingestion` (snapshot/receipt/Source/Evidence UUID, version/hash, locator et dates). La Source et
+le staging ne sont pas écrits. La trace JSON n’ajoute pas de FK. Entity/Evidence/Revision et
+confirmation sont atomiques, sans Relation ni publication. Voir [STAGING-CREATION.md](STAGING-CREATION.md).
+
 L'import JSON contrôlé de v0.3 est décrit dans [IMPORT.md](IMPORT.md). Il crée uniquement
 des propositions et une `Revision` initiale pour chaque nouvelle `Entity` ; les révisions
 des `Source` et `Relation` restent reportées conformément au schéma actuel.
