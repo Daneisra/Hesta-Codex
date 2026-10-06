@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import type { AdminIngestionBatch, AdminIngestionItem, AdminIngestionItemDetail, IngestionOutcome, IngestionPage, IngestionMatches, SourceKind } from '@hesta-codex/shared'
 import { errorStatus, getAdminJson } from './admin-http'
-import { IngestionMatchesPanel } from './IngestionMatchesPanel'
+import { IngestionAssociationPanel } from './IngestionAssociationPanel'
 import './Ingestion.css'
 
 type Load<T> = { phase: 'loading'; key: string } | { phase: 'error'; key: string; status: number | null } | { phase: 'ready'; key: string; data: T }
@@ -128,7 +128,7 @@ export function AdminIngestion({ onAccessError, onNavigate }: { onAccessError: (
   const retry = () => setRefresh(value => value + 1)
   return <section className="ingestion-page" aria-label="Staging d’ingestion">
     <h1 ref={heading} tabIndex={-1}>Ingestion</h1>
-    <p>Staging privé · consultation uniquement. Aucun contenu n’est transformé ou publié automatiquement.</p>
+    <p>Staging privé · associations humaines. Aucun contenu n’est transformé ou publié automatiquement.</p>
     {view.kind !== 'batches' && <button type="button" onClick={() => navigate(view.kind === 'item' ? { kind: 'batch', id: view.batchId } : { kind: 'batches' })}>
       {view.kind === 'item' ? '← Retour au batch' : '← Tous les batches'}</button>}
     {view.kind !== 'item' && <form className="ingestion-filters" onSubmit={event => event.preventDefault()}>
@@ -160,7 +160,8 @@ export function AdminIngestion({ onAccessError, onNavigate }: { onAccessError: (
     </>}</>}
     {view.kind === 'item' && <><Status load={item} onRetry={retry} />{item.phase === 'ready' && <article className="ingestion-detail">
       <h2>{item.data.title ?? 'Item sans titre'}</h2><p>{outcomes[item.data.outcome]} · version {item.data.version}</p>
-      <IngestionMatchesPanel load={matches} onRetry={() => setMatchesRefresh(value => value + 1)} onNavigate={onNavigate} />
+      <IngestionAssociationPanel key={`${item.data.itemId}:${item.data.id}`} itemId={item.data.itemId} receiptId={item.data.id}
+        matches={matches} onRetryMatches={() => setMatchesRefresh(value => value + 1)} onAccessError={onAccessError} onNavigate={onNavigate} />
       <dl><dt>UUID de l’item</dt><dd>{item.data.itemId}</dd><dt>UUID de réception</dt><dd>{item.data.id}</dd>
         <dt>Source</dt><dd>{item.data.source.label} · {item.data.source.kind} · {item.data.source.id}</dd>
         <dt>Identifiant externe</dt><dd>{item.data.externalId ?? 'Absent'}</dd><dt>Locator</dt><dd>{item.data.locator ?? 'Absent'}</dd>

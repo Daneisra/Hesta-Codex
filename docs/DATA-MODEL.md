@@ -38,6 +38,8 @@ d'armure restent dans Système PA.
 | `IngestionBatch` | Opération de staging réussie | UUID, format v1, libellé, comptes reçus/nouveaux/inchangés/modifiés, avertissements et date ; aucune publication. |
 | `IngestionItem` | Snapshot brut immuable | UUID, Source et batch d'origine, identité externe/hash, version, SHA-256, texte exact et date ; unicité Source/identité/version. |
 | `IngestionReceipt` | Observation dans un batch | Ordinal unique par batch, snapshot, NEW/UNCHANGED/MODIFIED, titre, locator, type MIME, date externe, metadata et variante brute éventuelle. |
+| `IngestionAssociation` | Identité portant une décision humaine | Source + identityKey uniques, externalId exact, snapshot d’ancrage, révision optimiste et date ; aucun contenu narratif. |
+| `IngestionAssociationDecision` | Décision actuelle sur une identité et une fiche | Couple association/Entity unique, CONFIRMED ou REJECTED, origine MATCH/MANUAL, auteur Discord serveur, libellé et date serveur. |
 
 La création admin v0.5b résout `inverseCode` vers le type canonique en échangeant les UUID.
 Pour un type symétrique, elle ordonne les UUID avant insertion ; une seule arête est stockée.
@@ -107,6 +109,16 @@ Les modèles historiques et leurs données restent inchangés. Les trois modèle
 réservés à l'administration, sans lien automatique vers Entity/Relation/Evidence/Revision.
 Chaque opération conserve ses réceptions ; seuls les changements de contenu identifié créent
 un nouveau snapshot. Voir [INGESTION.md](INGESTION.md) pour le format, les bornes et l'historique.
+
+La migration additive v0.7c `20261006000000_ingestion_associations` crée deux tables et deux enums,
+sans modifier les colonnes ou données existantes. Les liens vers Source, snapshot et Entity
+sont RESTRICT. Un index unique partiel sur associationId, `WHERE decision = 'CONFIRMED'`,
+garantit au plus une confirmation active ; le couple associationId/entityId interdit les
+décisions contradictoires sur une même paire. Cet index et les CHECK sont explicitement
+conservés dans le SQL de migration, en complément du schéma Prisma. Un index couvre les
+rejets récents. Les CHECK bornent révision, identité, identifiant externe et attribution.
+La révision demeure après retrait pour empêcher un client obsolète de réutiliser l’état zéro.
+Seules ces tables sont écrites par le nouveau service. Voir [ASSOCIATION.md](ASSOCIATION.md).
 
 L'import JSON contrôlé de v0.3 est décrit dans [IMPORT.md](IMPORT.md). Il crée uniquement
 des propositions et une `Revision` initiale pour chaque nouvelle `Entity` ; les révisions

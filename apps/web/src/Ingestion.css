@@ -25,5 +25,11 @@
 .ingestion-match-list ul { padding-left: 1.2rem; }
 .ingestion-match-list > .ingestion-match-archived { border: 2px solid #dcc18e; }
 .ingestion-match-warning { color: #f0d5a3; }
+.ingestion-association { min-width: 0; margin: 1.2rem 0; }
+.ingestion-confirmed, .ingestion-decision-confirmation { min-width: 0; border: 1px solid #dcc18e; border-radius: .4rem; padding: 1rem; margin: 1rem 0; }
+.ingestion-association-actions { display: flex; flex-wrap: wrap; gap: .6rem; margin: .8rem 0; }
+.ingestion-association a { display: inline-block; max-width: 100%; padding: .6rem; border: 1px solid #657a9c; border-radius: .4rem; }
+.ingestion-picker label { display: grid; gap: .5rem; min-width: 0; margin: 1rem 0; }
+.ingestion-picker input { width: 100%; min-width: 0; color: #eef2fa; background: #192840; border: 1px solid #657a9c; border-radius: .35rem; padding: .6rem; }
 .ingestion-match-list a { display: inline-block; max-width: 100%; margin-top: .5rem; padding: .6rem; border: 1px solid #657a9c; border-radius: .4rem; }
 @media (max-width: 560px) { .ingestion-detail dl { grid-template-columns: minmax(0, 1fr); } .ingestion-detail dd { margin-bottom: .7rem; } }

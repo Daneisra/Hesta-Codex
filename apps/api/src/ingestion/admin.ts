@@ -3,6 +3,8 @@ import { z } from 'zod'
 import type { AdminIngestionBatch, AdminIngestionItem, AdminIngestionItemDetail, IngestionPage, IngestionMatches } from '@hesta-codex/shared'
 import { Prisma, type PrismaClient, SourceKind, IngestionOutcome } from '../prisma-client/client.ts'
 import { createPrismaIngestionMatcher } from './matching.js'
+import { createPrismaIngestionAssociationService, type IngestionAssociationService } from './association.js'
+import { createIngestionAssociationRouter } from './association-routes.js'
 
 const timestamp = z.iso.datetime({ offset: true }).refine(value => Number(value.slice(0, 4)) >= 1)
 const baseFilters = z.strictObject({
@@ -18,6 +20,7 @@ export const ingestionItemFilters = baseFilters.extend({ batchId: z.uuid().optio
 export type BatchFilters = z.infer<typeof ingestionBatchFilters>
 export type ItemFilters = z.infer<typeof ingestionItemFilters>
 export interface IngestionAdminStore {
+  associations?: IngestionAssociationService
   listBatches(filters: BatchFilters): Promise<IngestionPage<AdminIngestionBatch>>
   getBatch(id: string): Promise<AdminIngestionBatch | null>
   listItems(filters: ItemFilters): Promise<IngestionPage<AdminIngestionItem>>
@@ -59,6 +62,7 @@ export function createPrismaIngestionAdminStore(prisma: PrismaClient): Ingestion
     })
   }
   return {
+    associations: createPrismaIngestionAssociationService(prisma),
     getMatches: createPrismaIngestionMatcher(prisma),
     async listBatches(filters) {
       const needsReceipts = filters.sourceKind || filters.sourceId || filters.q || filters.outcome
@@ -98,6 +102,7 @@ export function createPrismaIngestionAdminStore(prisma: PrismaClient): Ingestion
 
 export function createIngestionAdminRouter(store: IngestionAdminStore) {
   const router = Router()
+  if (store.associations) router.use(createIngestionAssociationRouter(store.associations))
   const bad = (response: import('express').Response) => response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'Paramètres d’ingestion invalides.' } })
   const missing = (response: import('express').Response) => response.status(404).json({ error: { code: 'NOT_FOUND', message: 'Élément d’ingestion introuvable.' } })
   const listFilters = (request: import('express').Request) => {

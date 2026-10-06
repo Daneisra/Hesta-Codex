@@ -49,6 +49,11 @@ portent `Cache-Control: no-store`.
 | `GET /api/admin/ingestion/items` | Réceptions paginées, 20/page ; aucun contenu brut/metadata. |
 | `GET /api/admin/ingestion/items/:id` | Snapshot UUID, texte/metadata de la dernière réception ou de `receiptId` UUID, résumé des 20 dernières versions. |
 | `GET /api/admin/ingestion/items/:id/matches` | Détection v0.7b à la demande : statut EXACT/AMBIGUOUS/POSSIBLE/NONE, jusqu’à 10 candidats minimaux, raisons et indicateurs de troncature. |
+| `GET /api/admin/ingestion/items/:id/association` | État humain courant : révision, portée, confirmation, invalidité, compte et 20 rejets récents ; `receiptId` UUID facultatif. |
+| `POST /api/admin/ingestion/items/:id/association/confirm` | Confirme ou remplace explicitement une association ; aucune mutation éditoriale. |
+| `POST /api/admin/ingestion/items/:id/association/reject` | Rejette une Entity pour cette identité seulement. |
+| `POST /api/admin/ingestion/items/:id/association/reset` | Retire uniquement la confirmation ; rejets et révision demeurent. |
+| `POST /api/admin/ingestion/entities/search` | Recherche privée titre/slug/alias, JSON `{ q }`, 2–100 caractères, 20 résultats non archivés + indicateur de troncature. |
 | `GET /api/admin/stats` | Comptes par statut et visibilité, nombre de sources et relations. |
 | `GET /api/admin/graph` | Nœuds et arêtes éditoriaux minimaux, avec `summary`, `aliases`, statut et visibilité ; requiert un admin. |
 | `GET /api/admin/entities` | `{ items, total, page, pageSize }` ; 50 fiches par page, tous statuts et visibilités. Filtres facultatifs `status`, `visibility`, `kind`, `q` (2 à 100 caractères), `page` (1 à 9999). |
@@ -74,7 +79,8 @@ Exception privée : le détail d'un item de staging expose ses metadata uniqueme
 Les listes staging acceptent `sourceKind`, `sourceId`, `outcome`, `after`/`before` ISO inclusifs,
 `page` (1–1000) ; la liste d'items
 ajoute `batchId`. Les détails exigent des UUID, un intervalle inversé est refusé. Aucun endpoint
-de mutation staging n'existe. Voir [INGESTION.md](INGESTION.md) pour les projections et limites.
+d’édition du contenu staging n'existe. Les décisions v0.7c utilisent les routes séparées ci-dessus.
+Voir [INGESTION.md](INGESTION.md) pour les projections et limites.
 La recherche privée (2–100 caractères, titre/identifiant/locator uniquement) passe par
 `X-Hesta-Ingestion-Search`, encodé avec `encodeURIComponent`, jamais par un paramètre `q` d'URL.
 L'en-tête est borné à 1 200 caractères ; un encodage invalide ou plusieurs occurrences donnent 400.
@@ -93,6 +99,26 @@ approximative de 200 fiches ; il peut coexister avec EXACT. `approximateEvaluate
 borné à 200 ; `evaluatedCount` inclut jusqu’à 12 projections exactes supplémentaires (≤212).
 Voir [MATCHING.md](MATCHING.md) pour les scores, plafonds et limites. Aucune route publique,
 persistance, mutation ou association de matching.
+
+Les confirmations/rejets acceptent strictement `{ receiptId, expectedRevision, entityId, origin }`
+avec UUID valides, révision entière non négative et origine `MATCH` ou `MANUAL`. Le retrait
+accepte seulement `{ receiptId, expectedRevision }`. Aucun auteur, timestamp, Source, statut,
+visibilité ou champ éditorial fourni par le client n’est accepté. Auteur/date sont serveur.
+La réception doit appartenir au snapshot. Les écritures et la recherche POST exigent une
+Origin exactement configurée, y compris si la session est valide. Toutes les réponses sont
+`no-store` : 400 validation, 401 session, 403 whitelist/Origin, 404 contexte/cible absents,
+409 concurrence/fiche archivée/identité incompatible, 500 générique sans détails privés.
+Le GET garde l’exemption Origin des lectures admin existantes, sans CORS supplémentaire.
+
+Le GET accepte l’en-tête `X-Hesta-Association-Candidates` : tableau JSON de zéro à dix UUID,
+500 caractères au plus, une seule occurrence. Il retourne `rejectedCandidateIds` pour ces
+candidats, indépendamment de la limite des 20 rejets récents. Le DTO de décision contient
+uniquement une Entity minimale (id/slug/titre/type/sous-type/statut/visibilité), l’origine,
+le libellé d’auteur et la date ; aucun Discord ID, snapshot, Source, preuve, révision éditoriale
+ou session. La recherche se fait dans un corps POST et utilise `strpos` paramétré : `%`, `_`
+et apostrophes restent littéraux. Aucun titre ni recherche privée dans une nouvelle URL.
+La répétition d’une décision déjà identique ne change pas son auteur/date/révision ; une
+modification obsolète différente retourne 409. Voir [ASSOCIATION.md](ASSOCIATION.md).
 
 Le `PATCH` exige un JSON complet contenant `title`, `summary`, `bodyMarkdown`, `kind`,
 `placeKind`, `aliases`, `tags`, `visibility`, `expectedUpdatedAt` et éventuellement

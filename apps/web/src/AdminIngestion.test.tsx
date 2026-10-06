@@ -29,6 +29,7 @@ function api(options: { status?: number; empty?: boolean; session?: 'admin' | 'a
       if (options.status) return response({}, options.status)
       const parsed = new URL(url, 'http://localhost')
       if (parsed.pathname.endsWith('/matches')) return response({ status: 'NONE', candidates: [], searchTruncated: false, candidatesTruncated: false, evaluatedCount: 0, searchLimit: 200, candidateLimit: 10 })
+      if (parsed.pathname.endsWith('/association')) return response({ revision: 0, scope: 'EXTERNAL_ID', confirmed: null, invalid: false, rejectedCandidateIds: [], rejectedCount: 0, recentRejections: [] })
       if (parsed.pathname === '/api/admin/ingestion/batches') return response({ items: options.empty ? [] : [batch], total: options.empty ? 0 : 25, page: Number(parsed.searchParams.get('page') ?? 1), pageSize: 20 })
       if (parsed.pathname === `/api/admin/ingestion/batches/${id}`) return response(batch)
       if (parsed.pathname === '/api/admin/ingestion/items') return response({ items: [item], total: 1, page: 1, pageSize: 20 })

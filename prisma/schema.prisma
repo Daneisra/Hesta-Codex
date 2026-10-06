@@ -79,6 +79,7 @@ model Entity {
   incomingRelations Relation[] @relation("RelationTo")
   evidence          Evidence[]
   revisions         Revision[]
+  ingestionDecisions IngestionAssociationDecision[]
 
   @@index([kind, placeKind])
   @@index([status, visibility])
@@ -138,6 +139,7 @@ model Source {
   derivedSources    Source[]   @relation("SourceDerivation")
   evidence          Evidence[]
   ingestionItems    IngestionItem[]
+  ingestionAssociations IngestionAssociation[]
 
   @@unique([kind, externalId])
   @@index([derivedFromSourceId])
@@ -243,6 +245,7 @@ model IngestionItem {
   batch    IngestionBatch @relation(fields: [batchId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   source   Source         @relation(fields: [sourceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   receipts IngestionReceipt[]
+  associations IngestionAssociation[]
 
   @@unique([sourceId, identityKey, version])
   @@index([sourceId, externalId])
@@ -274,4 +277,51 @@ model IngestionReceipt {
   @@index([itemId])
   @@index([outcome, ingestedAt])
   @@index([ingestedAt, id])
+}
+
+enum IngestionDecision {
+  CONFIRMED
+  REJECTED
+}
+
+enum IngestionDecisionOrigin {
+  MATCH
+  MANUAL
+}
+
+// Human decisions, separate from immutable snapshots and editorial provenance.
+model IngestionAssociation {
+  id          String   @id @default(uuid()) @db.Uuid
+  sourceId    String   @db.Uuid
+  identityKey String   @db.Char(66)
+  externalId  String?  @db.VarChar(1024)
+  itemId      String   @db.Uuid
+  revision    Int      @default(0)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  source    Source @relation(fields: [sourceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  item      IngestionItem @relation(fields: [itemId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  decisions IngestionAssociationDecision[]
+
+  @@unique([sourceId, identityKey])
+  @@index([itemId])
+}
+
+model IngestionAssociationDecision {
+  id             String   @id @default(uuid()) @db.Uuid
+  associationId  String   @db.Uuid
+  entityId       String   @db.Uuid
+  decision       IngestionDecision
+  origin         IngestionDecisionOrigin
+  authorDiscordId String  @db.VarChar(32)
+  authorLabel    String   @db.VarChar(200)
+  decidedAt      DateTime @default(now()) @db.Timestamptz(3)
+
+  association IngestionAssociation @relation(fields: [associationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  entity      Entity @relation(fields: [entityId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([associationId, entityId])
+  @@index([entityId])
+  @@index([associationId, decision, decidedAt, id], map: "IngestionAssociationDecision_recent_idx")
+  // SQL migration also enforces one CONFIRMED decision per association (partial unique index).
 }

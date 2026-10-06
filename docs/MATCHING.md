@@ -139,8 +139,14 @@ relationnel **7,57 ms**, scoring séparé de 201 projections **14,84 ms**. Ces n
 avec la machine et ne mesurent pas PostgreSQL, ses scans ni ses index. Le calcul Levenshtein
 est vérifié face à une matrice indépendante, seuil inclusif à 85 %, bornes 5/250 et Unicode.
 
-Roadmap : v0.7a staging ; v0.7b détection ; v0.7c génération de propositions de fiches/relations/
-provenance ; v0.7d file de revue et validation humaine. Rien n’est accepté ou rattaché en v0.7b.
+Roadmap actuelle : v0.7a staging ; v0.7b détection ; v0.7c associations humaines ; v0.7d file
+de revue et validation humaine. La génération de propositions reste reportée. Le matcher
+v0.7b ne persiste rien : v0.7c ajoute un service séparé de décisions, sans changer les scores,
+le classement, les seuils ou la réserve. Voir [ASSOCIATION.md](ASSOCIATION.md).
+Un rejet est annoté dans l’interface pour cette identité/Entity seulement ; il ne filtre pas
+le matcher global. Une association confirmée est présentée au-dessus des suggestions,
+qui restent secondaires. Des suggestions fortes différentes ou ambiguës exigent une vérification
+humaine ; aucun score ne confirme, remplace ou retire la décision enregistrée.
 
 Après futur déploiement, sur une **base de test** et avec des données techniques fictives :
 ingérer un titre et créer séparément une fiche technique via le workflow admin existant.

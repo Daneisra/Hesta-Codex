@@ -1,4 +1,4 @@
-# Ingestion générique, staging et détection — v0.7a/v0.7b
+# Ingestion générique, staging, détection et associations — v0.7a/v0.7b/v0.7c
 
 Le staging conserve du contenu externe **privé admin**, avant toute interprétation éditoriale.
 La commande ne détecte ni fiche ni relation et n'appelle aucune IA ou application externe.
@@ -153,7 +153,8 @@ supplémentaire ; il n'y a pas de clé d'idempotence de l'opération entière.
 ## API et interface admin
 
 Toutes les routes suivantes utilisent la session Discord/whitelist et `Cache-Control: no-store`
-existants ; 401 sans session, 403 hors whitelist. Aucune mutation staging HTTP ni route publique.
+existants ; 401 sans session, 403 hors whitelist. Les snapshots/réceptions restent immuables,
+sans route publique. v0.7c ajoute des décisions séparées, sans éditer le contenu reçu.
 
 | Route | Réponse |
 | --- | --- |
@@ -201,7 +202,7 @@ indépendante sans perdre le détail. Les fiches archivées sont signalées par 
 les troncatures de recherche et d’affichage sont distinctes. Chaque candidat indique type,
 slug, statut, visibilité, signal et raisons, avec un lien « Ouvrir la fiche » exclusivement
 vers `/admin/fiches/:slug`, selon la navigation admin existante. Aucun contenu de réception
-ni recherche ne rejoint cette URL. Aucun bouton d’association/création/publication.
+ni recherche ne rejoint cette URL. Le matching n’effectue aucune création ou publication.
 La recherche exacte est ciblée et comptée avant toute limite ; le plafond de 200 s’applique
 uniquement aux candidats approximatifs supplémentaires. Une troncature de cette réserve
 ne transforme pas un match exact unique déjà prouvé en ambiguïté. Les résultats d’un item,
@@ -214,9 +215,30 @@ Il ne modifie aucun snapshot ni modèle éditorial et ne persiste aucun résulta
 lecture reflète les données du Codex à cet instant. Aucune migration v0.7b.
 Algorithme exact, scores, normalisation, cas ambigus et plafonds : [MATCHING.md](MATCHING.md).
 
+### Décisions humaines v0.7c
+
+Le détail présente « Association au Codex » avant le matching. L’administrateur confirme une
+suggestion ou choisit une autre fiche par titre/slug/alias, après confirmation explicite.
+Il peut rejeter un candidat, changer ou retirer une confirmation. Un score 100 reste une
+suggestion. Les fiches archivées ne peuvent recevoir de nouvelle décision ; une confirmation
+devenue archivée est signalée comme invalide et peut être retirée ou remplacée.
+
+La décision porte sur `(Source UUID, identityKey)` existant et conserve externalId strict :
+les réceptions identiques et nouvelles versions du même identifiant retrouvent la décision.
+Aucune propagation par titre, locator, slug ou matching. Sans identifiant externe, le snapshot
+d’ancrage doit être exactement celui consulté ; un autre contenu n’hérite pas. Les incohérences
+de clé/identifiant/snapshot sont refusées. Une réutilisation sémantique d’un externalId demeure
+à vérifier humainement ; des suggestions fortes différentes ou ambiguës déclenchent un avertissement.
+
+Les rejets sont conservés par identité et UUID Entity, jamais globalement. Les 20 plus récents
+sont listés ; les dix candidats actuels sont contrôlés indépendamment, même pour un rejet ancien.
+La recherche manuelle est bornée à 20 résultats, avec debounce et annulation ; son texte voyage
+dans un corps POST privé, jamais dans l’URL. Les liens ouvrent uniquement les fiches admin.
+La migration et les règles de concurrence sont détaillées dans [ASSOCIATION.md](ASSOCIATION.md).
+
 ## Limites et étapes suivantes
 
-Pas de streaming, pièces jointes/binaires, extraction, propositions, revue éditoriale,
+Pas de streaming, pièces jointes/binaires, extraction, propositions, file de revue éditoriale,
 connecteurs, synchronisation, suppression/rétention ou pagination de l'historique au-delà des 20 versions.
 Les Sources/snapshots sont résolus séquentiellement pour borner la charge. Les recherches sont
 relationnelles bornées, sans moteur plein texte ; la volumétrie de staging reste à mesurer.
@@ -226,7 +248,8 @@ des données techniques fictives ; Firefox/Safari, tactile et lecteurs d'écran 
 
 - v0.7a : staging générique.
 - v0.7b : matching/détection des fiches existantes.
-- v0.7c : génération de propositions de fiches/relations/provenance.
+- v0.7c : décisions humaines et associations persistantes.
 - v0.7d : file de revue et validation humaine.
 
 Les connecteurs réels Carte Hesta, Obsidian, Discord et YouTube/transcriptions viennent après ce socle.
+La génération de propositions reste reportée ; v0.7c n’interprète ni n’importe le texte narratif.

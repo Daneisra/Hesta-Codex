@@ -306,3 +306,21 @@ export interface IngestionMatches {
   searchLimit: number; candidateLimit: number;
   exactCandidateCount: number; strongCandidateCount: number; approximateEvaluatedCount: number;
 }
+
+export interface IngestionAssociationEntity {
+  id: string; slug: string; title: string; kind: EntityKind; placeKind: PlaceKind | null;
+  status: EditorialStatus; visibility: Visibility;
+}
+export interface IngestionAssociationDecision {
+  entity: IngestionAssociationEntity; origin: 'MATCH' | 'MANUAL'; authorLabel: string; decidedAt: string;
+}
+export interface IngestionAssociationState {
+  revision: number; scope: 'EXTERNAL_ID' | 'SNAPSHOT'; confirmed: IngestionAssociationDecision | null;
+  invalid: boolean; rejectedCandidateIds: string[]; rejectedCount: number;
+  recentRejections: IngestionAssociationDecision[];
+}
+export interface IngestionAssociationRequest {
+  receiptId: string; expectedRevision: number; entityId: string; origin: 'MATCH' | 'MANUAL';
+}
+export interface IngestionAssociationResetRequest { receiptId: string; expectedRevision: number }
+export interface IngestionAssociationSearch { items: IngestionAssociationEntity[]; truncated: boolean; limit: number }

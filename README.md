@@ -127,7 +127,15 @@ provenance exacte, titre/alias, slug et similarité conservatrice. Les résultat
 les recherches tronquées sont signalées. Aucun rattachement, écriture ou nouvelle migration.
 Les cinq signaux exacts sont recherchés en base avant toute limite ; seuls les candidats
 approximatifs supplémentaires sont plafonnés à 200. Les comptes d’identité forts restent complets.
-L’interface permet seulement d’ouvrir la fiche admin. Règles et limites : [docs/MATCHING.md](docs/MATCHING.md).
+Le calcul reste informatif. Règles et limites : [docs/MATCHING.md](docs/MATCHING.md).
+
+v0.7c ajoute les associations humaines persistantes dans `/admin/ingestion` : confirmer une
+suggestion, choisir une autre fiche, rejeter un candidat, remplacer ou retirer une confirmation.
+Les décisions suivent Source + identité externe entre versions ; sans externalId elles restent
+limitées au snapshot. Auteur/date serveur, révision optimiste, transaction et unicité SQL
+protègent les décisions concurrentes. La migration additive `20261006000000_ingestion_associations`
+crée uniquement les tables dédiées. Association ≠ import éditorial, preuve ou publication :
+aucune Entity/Relation/Evidence/Revision n’est écrite. Voir [docs/ASSOCIATION.md](docs/ASSOCIATION.md).
 
 Depuis `/admin`, « Nouvelle fiche » ouvre la création manuelle v0.5a. Chaque création impose
 une Source existante ou nouvelle et une Evidence initiale. L'Entity, l'Evidence, la Source

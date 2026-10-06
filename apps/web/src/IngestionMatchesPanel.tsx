@@ -1,5 +1,5 @@
 import type { MouseEvent } from 'react'
-import type { IngestionMatchReason, IngestionMatches } from '@hesta-codex/shared'
+import type { IngestionAssociationEntity, IngestionMatchReason, IngestionMatches } from '@hesta-codex/shared'
 import { kindLabels, placeLabels } from './graph-model'
 
 const labels = { EXACT: 'Correspondance forte', AMBIGUOUS: 'Plusieurs correspondances possibles',
@@ -13,12 +13,15 @@ const reasons: Record<IngestionMatchReason, string> = {
 const statuses = { DRAFT: 'Brouillon', PROPOSED: 'Proposition', PUBLISHED: 'Publiée', ARCHIVED: 'Archivée' }
 const visibilities = { PUBLIC: 'Public', PLAYERS: 'Joueurs', GM: 'MJ', SECRET: 'Secret' }
 type Load = { phase: 'loading' } | { phase: 'error'; status: number | null } | { phase: 'ready'; data: IngestionMatches }
-export function IngestionMatchesPanel({ load, onRetry, onNavigate }: {
+export function IngestionMatchesPanel({ load, onRetry, onNavigate, associationActions }: {
   load: Load; onRetry: () => void; onNavigate?: (event: MouseEvent<HTMLAnchorElement>, path: string) => void
+  associationActions?: { disabled: boolean; decisionsReady: boolean; confirmedId?: string; rejectedIds: string[];
+    onConfirm: (entity: IngestionAssociationEntity) => void; onReject: (entity: IngestionAssociationEntity) => void }
 }) {
   return <section className="ingestion-matches" aria-labelledby="ingestion-matches-heading">
     <h3 id="ingestion-matches-heading">Correspondances dans le Codex</h3>
-    <p>Détection informative · aucune association enregistrée. Le score exprime un signal, pas une probabilité.</p>
+    <p>Détection informative · le score exprime un signal, pas une probabilité. Seule une décision humaine enregistre une association.</p>
+    {associationActions && !associationActions.decisionsReady && <p>Décisions antérieures non vérifiées : les actions restent indisponibles jusqu’au chargement de l’association.</p>}
     {load.phase === 'loading' && <p role="status">Recherche des correspondances…</p>}
     {load.phase === 'error' && <div role="alert"><p>{load.status === 404 ? 'Item ou réception introuvable.' : 'Impossible de charger les correspondances.'}</p>
       <button type="button" onClick={onRetry}>Réessayer les correspondances</button></div>}
@@ -39,6 +42,13 @@ export function IngestionMatchesPanel({ load, onRetry, onNavigate }: {
           {candidate.aliases.length > 0 && <p>Alias rapprochés : {candidate.aliases.join(' · ')}</p>}
           <ul>{candidate.reasons.map(reason => <li key={reason}>{reasons[reason]}</li>)}</ul>
           <a href={path} onClick={event => onNavigate?.(event, path)} aria-label={`Ouvrir la fiche : ${candidate.title}`}>Ouvrir la fiche</a>
+          {associationActions && <>
+            {associationActions.rejectedIds.includes(candidate.id) && <p className="ingestion-match-warning">Rejetée précédemment pour cette identité.</p>}
+            {associationActions.confirmedId === candidate.id ? <p>Cette fiche est déjà associée.</p> : candidate.status !== 'ARCHIVED' && <div className="ingestion-association-actions">
+              <button type="button" disabled={associationActions.disabled} onClick={() => associationActions.onConfirm(candidate)}>Confirmer cette fiche</button>
+              <button type="button" disabled={associationActions.disabled || associationActions.rejectedIds.includes(candidate.id)} onClick={() => associationActions.onReject(candidate)}>Ce n’est pas cette fiche</button>
+            </div>}
+          </>}
         </li>
       })}</ul>
     </>}
