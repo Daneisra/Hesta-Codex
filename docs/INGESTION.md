@@ -1,5 +1,11 @@
 # Ingestion générique, staging, détection et associations — v0.7a/v0.7b/v0.7c
 
+Depuis v0.7e, un parcours admin distinct permet une [mise à jour humaine](STAGING-UPDATE.md)
+d’une fiche DRAFT/PROPOSED ayant une association CONFIRMED. L’ingestion reste sans mutation
+éditoriale ; la comparaison conserve les champs actuels et seuls les boutons explicites
+reprennent le staging. Après récapitulatif, une application réelle ajoute Evidence/Revision
+et modifie la fiche, sans toucher au staging, à la Source ou à l’association. Aucune publication.
+
 Le staging conserve du contenu externe **privé admin**, avant toute interprétation éditoriale.
 La commande ne détecte ni fiche ni relation et n'appelle aucune IA ou application externe.
 Elle ne crée aucune Entity, Relation, Evidence ou Revision et ne publie rien.
@@ -255,7 +261,9 @@ des données techniques fictives ; Firefox/Safari, tactile et lecteurs d'écran 
 - v0.7b : matching/détection des fiches existantes.
 - v0.7c : décisions humaines et associations persistantes.
 - v0.7d : création humaine d’une fiche proposée depuis le staging.
+- v0.7e : mise à jour humaine d’une fiche DRAFT/PROPOSED confirmée, après comparaison.
 
 Les connecteurs réels Carte Hesta, Obsidian, Discord et YouTube/transcriptions viennent après ce socle.
 La génération automatique de propositions et la file de revue restent reportées ; seule une
-action explicite v0.7d peut transférer le contenu préparé vers une nouvelle fiche proposée.
+action explicite v0.7d peut transférer le contenu préparé vers une nouvelle fiche proposée,
+ou v0.7e vers une fiche DRAFT/PROPOSED ayant une association confirmée.

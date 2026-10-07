@@ -124,6 +124,27 @@ test('proposal preparation is read-only, conservative about metadata/formats and
   const unsupported = await db.service.prepare(itemId, receiptId)
   assert.equal(unsupported.bodyMarkdown, ''); assert.deepEqual(unsupported.tags, [])
 })
+test('shared receipt helpers preserve the complete v0.7d preparation contract and legacy Evidence trimming', async () => {
+  const formatWarning = 'Ce format n’est pas repris automatiquement : le contenu éditorial reste vide. Saisissez-le manuellement.'
+  const cases = [
+    { receipt: { title: null, contentType: 'TEXT/PLAIN', rawVariant: ' épreuve œ\r\n ', locator: ' repère ', metadata: { tags: [' épreuve ', 'test, intact'], ignored: 'fictif' } },
+      expected: { title: '', bodyMarkdown: ' épreuve œ\r\n ', sourceExcerpt: ' épreuve œ\r\n ', locator: ' repère ', tags: ['épreuve', 'test, intact'], warnings: [] } },
+    { receipt: { contentType: 'application/json', metadata: null }, expected: { title: 'Station Épreuve', bodyMarkdown: '', sourceExcerpt: '', locator: 'fixture.md', tags: [], warnings: [formatWarning] } },
+    { receipt: { title: 'x'.repeat(201), locator: 'x'.repeat(251), rawVariant: 'œ'.repeat(100_001), metadata: { tags: ['a', 'A'] } },
+      expected: { title: 'x'.repeat(201), bodyMarkdown: 'œ'.repeat(100_001), sourceExcerpt: '', locator: null, tags: [], warnings: [
+        'Les tags de metadata sont invalides et n’ont pas été repris.', 'Le titre dépasse 200 caractères : corrigez-le avant création.',
+        'Le contenu dépasse 100 000 caractères : adaptez-le sans modifier le staging.', 'Le repère dépasse 250 caractères : choisissez un repère court. Le repère original reste dans la Revision.' ] } },
+    { receipt: { rawVariant: '', metadata: {} }, expected: { title: 'Station Épreuve', bodyMarkdown: '', sourceExcerpt: '', locator: 'fixture.md', tags: [], warnings: [] } },
+  ]
+  for (const fixture of cases) {
+    const db = database(); db.change(state => { Object.assign(state.receipt[0]!, fixture.receipt) }); const before = db.state()
+    assert.deepEqual(await db.service.prepare(itemId, receiptId), { receiptId, expectedRevision: 0,
+      source: { label: 'Source fictive', kind: 'OBSIDIAN', visibility: 'SECRET' }, ...fixture.expected })
+    assert.deepEqual(db.state(), before); assert.deepEqual(db.operations, [])
+  }
+  const legacy = ingestionProposalSchema.parse({ ...body(), evidence: { claimText: ' énoncé ', sourceExcerpt: ' extrait\r\n ', locator: ' repère ' } })
+  assert.deepEqual(legacy.evidence, { claimText: 'énoncé', sourceExcerpt: 'extrait', locator: 'repère' })
+})
 test('explicit proposal atomically creates PROPOSED Entity/Evidence/Revision/CONFIRMED using the existing Source and session actor', async () => {
   const db = database(), before = db.state()
   const created = await db.service.create(itemId, ingestionProposalSchema.parse(body()), actor), state = db.state()
@@ -139,6 +160,7 @@ test('explicit proposal atomically creates PROPOSED Entity/Evidence/Revision/CON
   assert.doesNotMatch(JSON.stringify(snapshot.entity), /sourceId|receiptId|contentHash|locator|observedAt|metadata/)
   assert.equal(snapshot.ingestion.itemId, itemId); assert.equal(snapshot.ingestion.receiptId, receiptId); assert.equal(snapshot.ingestion.evidenceId, state.evidence[0]?.id)
   assert.equal(snapshot.ingestion.observedAt, now.toISOString())
+  assert.equal(Object.hasOwn(snapshot.ingestion, 'action'), false)
   assert.equal(state.decision[0]?.entityId, created.entity.id); assert.equal(state.decision[0]?.decision, 'CONFIRMED'); assert.equal(state.decision[0]?.origin, 'MANUAL')
   assert.equal(state.decision[0]?.authorDiscordId, actor.discordId); assert.deepEqual(db.levels, ['Serializable'])
   assert.doesNotMatch(JSON.stringify(created), /sourceId|receiptId|bodyMarkdown|contentHash|metadata|authorDiscordId/)

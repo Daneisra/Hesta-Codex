@@ -1,5 +1,13 @@
 # Modèle de données initial
 
+v0.7e ne change aucun schéma ni migration. Une application humaine de staging met à jour
+l’Entity confirmée (huit champs + updatedAt), ajoute une Evidence et une Revision max+1.
+La Revision conserve le snapshot standard après modification et un bloc privé `ingestion`
+avec `action: "UPDATE"` et l’origine serveur exacte. Ce JSON permet de refuser une seconde
+application du même receipt à la même Entity ; il n’introduit ni table de brouillon ni clé
+étrangère nouvelle. Source/staging/relations et association sont inchangés, y compris auteur,
+date et révision de confirmation. [Détails et concurrence](STAGING-UPDATE.md).
+
 Le schéma est dans [`prisma/schema.prisma`](../prisma/schema.prisma). La première migration
 PostgreSQL est dans `prisma/migrations/20260928000000_initial_lore_model/`. Le Codex garde
 le lore durable ; les coordonnées et le rendu restent dans Carte Hesta, et les règles

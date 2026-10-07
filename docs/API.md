@@ -1,5 +1,16 @@
 # API publique et administration éditoriale
 
+## Mise à jour privée depuis le staging — v0.7e
+
+`GET /api/admin/ingestion/items/:id/update-proposal?receiptId=UUID` prépare sans écriture
+la comparaison de la cible CONFIRMED (DRAFT/PROPOSED, PUBLISHED en consultation).
+`POST /api/admin/ingestion/items/:id/update-proposal` applique en Serializable sur cette
+cible avec expectedAssociationRevision, targetEntityId et expectedEntityUpdatedAt : huit
+champs éditoriaux, une Evidence sur la Source existante, une Revision UPDATE. Association,
+slug et publication inchangés. Aucun changement : 422/aucune écriture. Receipt déjà appliqué
+ou préparation obsolète : 409 sûr. Session/whitelist, Origin POST exacte, no-store et schéma
+strict ; aucun endpoint public. Contrat, corps et erreurs : [STAGING-UPDATE.md](STAGING-UPDATE.md).
+
 L’API Express utilise un seul client Prisma par processus. Les routes publiques restent en
 lecture seule ; l'administration peut modifier et publier des `Entity` et `Relation`, ainsi que
 corriger des `Source` et `Evidence`, après authentification.

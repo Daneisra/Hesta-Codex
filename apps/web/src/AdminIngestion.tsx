@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
-import type { AdminIngestionBatch, AdminIngestionItem, AdminIngestionItemDetail, IngestionOutcome, IngestionPage, IngestionMatches, IngestionProposalCreated, SourceKind } from '@hesta-codex/shared'
+import type { AdminIngestionBatch, AdminIngestionItem, AdminIngestionItemDetail, IngestionOutcome, IngestionPage, IngestionMatches, IngestionProposalCreated, IngestionUpdateApplied, SourceKind } from '@hesta-codex/shared'
 import { errorStatus, getAdminJson } from './admin-http'
 import { IngestionAssociationPanel } from './IngestionAssociationPanel'
 import { IngestionProposalForm } from './IngestionProposalForm'
+import { IngestionUpdateForm } from './IngestionUpdateForm'
 import './Ingestion.css'
 
 type Load<T> = { phase: 'loading'; key: string } | { phase: 'error'; key: string; status: number | null } | { phase: 'ready'; key: string; data: T }
@@ -62,6 +63,8 @@ export function AdminIngestion({ onAccessError, onNavigate }: { onAccessError: (
   const [refresh, setRefresh] = useState(0)
   const [matchesRefresh, setMatchesRefresh] = useState(0)
   const [proposal, setProposal] = useState<string | null>(null)
+  const [update, setUpdate] = useState<string | null>(null)
+  const [updated, setUpdated] = useState<{ key: string; data: IngestionUpdateApplied } | null>(null)
   const [created, setCreated] = useState<{ key: string; data: IngestionProposalCreated } | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
   const focusRequested = useRef(false)
@@ -80,7 +83,7 @@ export function AdminIngestion({ onAccessError, onNavigate }: { onAccessError: (
       const entry = typeof marker === 'string' ? entries.get(marker) : undefined
       if (!entry) return
       currentEntry.current = marker
-      setProposal(null); setCreated(null)
+      setProposal(null); setCreated(null); setUpdate(null); setUpdated(null)
       focusRequested.current = true
       setView(entry.view); setPage(entry.page)
       setSourceKind(entry.sourceKind); setSourceId(entry.sourceId); setOutcome(entry.outcome)
@@ -121,7 +124,7 @@ export function AdminIngestion({ onAccessError, onNavigate }: { onAccessError: (
     ? `/api/admin/ingestion/items/${item.data.itemId}/matches?receiptId=${item.data.id}` : null
   const matches = useRead<IngestionMatches>(matchesUrl, refresh + matchesRefresh, onAccessError)
   const navigate = (next: View) => {
-    setProposal(null); setCreated(null)
+    setProposal(null); setCreated(null); setUpdate(null); setUpdated(null)
     navigation.current.set(currentEntry.current, { view, page, sourceKind, sourceId, outcome, search, query, after, before })
     const marker = crypto.randomUUID()
     currentEntry.current = marker
@@ -167,12 +170,19 @@ export function AdminIngestion({ onAccessError, onNavigate }: { onAccessError: (
       <h2>{item.data.title ?? 'Item sans titre'}</h2><p>{outcomes[item.data.outcome]} · version {item.data.version}</p>
       {created?.key === `${item.data.itemId}:${item.data.id}` && <div role="status"><h3>Fiche créée dans le Codex</h3>
         <p>{created.data.entity.title} · {created.data.entity.kind} · {created.data.entity.slug} · {created.data.entity.status} · {created.data.entity.visibility}</p></div>}
+      {updated?.key === `${item.data.itemId}:${item.data.id}` && <div role="status"><h3>Fiche mise à jour depuis le staging</h3>
+        <p>{updated.data.entity.title} · {updated.data.entity.kind} · {updated.data.entity.slug} · {updated.data.entity.status} · {updated.data.entity.visibility} · Révision #{updated.data.revisionNumber}</p></div>}
       {proposal === `${item.data.itemId}:${item.data.id}` ? <IngestionProposalForm key={proposal} itemId={item.data.itemId} receiptId={item.data.id}
         onCancel={() => { setProposal(null); setMatchesRefresh(value => value + 1); heading.current?.focus() }} onCreated={result => {
-          setCreated({ key: `${item.data.itemId}:${item.data.id}`, data: result }); setProposal(null); setMatchesRefresh(value => value + 1); heading.current?.focus()
-        }} onAccessError={onAccessError} /> : <IngestionAssociationPanel key={`${item.data.itemId}:${item.data.id}`} itemId={item.data.itemId} receiptId={item.data.id}
+          setUpdated(null); setCreated({ key: `${item.data.itemId}:${item.data.id}`, data: result }); setProposal(null); setMatchesRefresh(value => value + 1); heading.current?.focus()
+        }} onAccessError={onAccessError} /> : update === `${item.data.itemId}:${item.data.id}` ?
+        <IngestionUpdateForm key={update} itemId={item.data.itemId} receiptId={item.data.id} onAccessError={onAccessError}
+          onCancel={() => { setUpdate(null); setMatchesRefresh(value => value + 1); heading.current?.focus() }}
+          onApplied={result => { setCreated(null); setUpdated({ key: `${item.data.itemId}:${item.data.id}`, data: result }); setUpdate(null); setMatchesRefresh(value => value + 1); heading.current?.focus() }} /> :
+        <IngestionAssociationPanel key={`${item.data.itemId}:${item.data.id}`} itemId={item.data.itemId} receiptId={item.data.id}
         matches={matches} onRetryMatches={() => setMatchesRefresh(value => value + 1)} onAccessError={onAccessError} onNavigate={onNavigate}
-        onPrepare={() => setProposal(`${item.data.itemId}:${item.data.id}`)} />}
+        onPrepare={() => { setCreated(null); setUpdated(null); setProposal(`${item.data.itemId}:${item.data.id}`) }}
+        onPrepareUpdate={() => { setCreated(null); setUpdated(null); setUpdate(`${item.data.itemId}:${item.data.id}`) }} />}
       <dl><dt>UUID de l’item</dt><dd>{item.data.itemId}</dd><dt>UUID de réception</dt><dd>{item.data.id}</dd>
         <dt>Source</dt><dd>{item.data.source.label} · {item.data.source.kind} · {item.data.source.id}</dd>
         <dt>Identifiant externe</dt><dd>{item.data.externalId ?? 'Absent'}</dd><dt>Locator</dt><dd>{item.data.locator ?? 'Absent'}</dd>

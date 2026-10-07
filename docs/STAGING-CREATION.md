@@ -1,5 +1,10 @@
 # Création humaine d’une fiche depuis le staging — v0.7d
 
+Le parcours v0.7d reste inchangé. Depuis v0.7e, une identité déjà CONFIRMED propose plutôt
+« Préparer une mise à jour » pour sa fiche non archivée : champs actuels initiaux,
+reprise explicite du staging, récapitulatif et application sur DRAFT/PROPOSED seulement.
+Cette [mise à jour](STAGING-UPDATE.md) ne crée pas de nouvelle fiche ni décision d’association.
+
 Staging → matching → décision humaine → création d’une Entity PROPOSED → revue éditoriale
 → publication humaine distincte. Aucun chargement, matching, rejet ou ingestion ne crée une fiche.
 

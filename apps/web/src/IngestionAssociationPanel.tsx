@@ -11,10 +11,11 @@ type Load = { key: string; phase: 'loading' } | { key: string; phase: 'error'; s
 type Pending = { action: 'confirm' | 'reject'; entity: IngestionAssociationEntity; origin: 'MATCH' | 'MANUAL' } | { action: 'reset' }
 type PreparedDecision = Pending & { expectedRevision: number }
 const date = (value: string) => new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
-export function IngestionAssociationPanel({ itemId, receiptId, matches, onRetryMatches, onAccessError, onNavigate, onPrepare }: {
+export function IngestionAssociationPanel({ itemId, receiptId, matches, onRetryMatches, onAccessError, onNavigate, onPrepare, onPrepareUpdate }: {
   itemId: string; receiptId: string; matches: MatchesLoad; onRetryMatches: () => void;
   onAccessError: (status: number) => void; onNavigate?: (event: MouseEvent<HTMLAnchorElement>, path: string) => void
   onPrepare?: () => void
+  onPrepareUpdate?: () => void
 }) {
   const [load, setLoad] = useState<Load>({ key: '', phase: 'loading' })
   const [refresh, setRefresh] = useState(0)
@@ -129,6 +130,8 @@ export function IngestionAssociationPanel({ itemId, receiptId, matches, onRetryM
           <p>Confirmée par {confirmed.authorLabel} le {date(confirmed.decidedAt)}.</p>
           {current.data.invalid && <p role="alert">Association devenue invalide : la fiche est archivée. Changez ou retirez l’association.</p>}
           {entityLink(confirmed.entity)}
+          {onPrepareUpdate && !current.data.invalid && confirmed.entity.status !== 'ARCHIVED' &&
+            <button type="button" disabled={busy || !!pending || !!failure} onClick={onPrepareUpdate}>Préparer une mise à jour</button>}
           {onPrepare && <p>Cette identité possède déjà une fiche dans le Codex. La création depuis cet item est indisponible.</p>}
           <div className="ingestion-association-actions"><button type="button" disabled={busy || !!pending || !!failure} onClick={() => setPicker(value => !value)}>Changer l’association</button>
             <button type="button" disabled={busy || !!pending || !!failure} onClick={() => requestDecision({ action: 'reset' })}>Retirer l’association</button></div>

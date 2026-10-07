@@ -8,6 +8,13 @@
 
 # Hesta Codex
 
+v0.7e ajoute la **mise à jour humaine depuis une association confirmée** : les valeurs finales
+partent de la fiche actuelle ; le staging est repris champ par champ, puis un récapitulatif
+Avant/Après précède l’application atomique (Entity + une Evidence + une Revision).
+DRAFT/PROPOSED uniquement ; PUBLISHED reste comparable mais bloquée, ARCHIVED refusée.
+Slug/publication et association restent inchangés, sans nouveau schéma ni migration.
+Voir [docs/STAGING-UPDATE.md](docs/STAGING-UPDATE.md), notamment l’idempotence et la validation PostgreSQL future.
+
 Base de connaissance structurée du Monde d’Hesta. À terme, le Codex sera la source de vérité
 du lore durable et exposera des données sourcées aux autres applications. Le dépôt contient
 le socle web/API et le premier modèle PostgreSQL ; aucune fiche lore n'est créée automatiquement.

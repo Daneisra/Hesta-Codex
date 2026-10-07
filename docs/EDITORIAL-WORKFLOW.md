@@ -1,5 +1,13 @@
 # Workflow éditorial
 
+La [mise à jour issue du staging v0.7e](STAGING-UPDATE.md) est un parcours humain distinct,
+limité à DRAFT/PROPOSED et à une cible CONFIRMED. Elle bloque toujours PUBLISHED, même si
+l’éditeur manuel historique permet son édition. Retirer d’abord sa publication via le workflow
+existant, puis préparer à nouveau. Slug, statut et publishedAt restent inchangés pendant une
+application de staging ; une modification réelle ajoute exactement une Evidence et une Revision
+avec ingestion.action UPDATE. Aucun changement n’écrit rien. Une préparation obsolète ou un
+receipt déjà appliqué est refusé. Perte d’accès : ce brouillon de staging et ses erreurs sont effacés.
+
 L'administration `/admin` permet aux Discord IDs autorisés de modifier une `Entity`, de la
 publier et de retirer sa publication. Le slug et `metadata` restent en lecture seule.
 Les relations, sources et preuves suivent leur workflow dédié ; aucune suppression n'est proposée.

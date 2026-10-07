@@ -337,3 +337,21 @@ export interface IngestionProposalPreparation {
   sourceExcerpt: string; locator: string | null; warnings: string[];
 }
 export interface IngestionProposalCreated { entity: IngestionAssociationEntity }
+
+export type IngestionUpdateFields = Pick<AdminEntityPatch, 'title' | 'kind' | 'placeKind' | 'summary' | 'bodyMarkdown' | 'aliases' | 'tags' | 'visibility'>
+export interface IngestionUpdatePreparation {
+  receiptId: string; version: number; contentHash: string;
+  expectedAssociationRevision: number; expectedEntityUpdatedAt: string; alreadyApplied: boolean;
+  entity: IngestionUpdateFields & IngestionAssociationEntity & { publishedAt: string | null };
+  source: { id: string; label: string; kind: SourceKind; visibility: Visibility };
+  staging: { title: string | null; content: string; contentType: string; contentSupported: boolean;
+    tags: string[]; tagsAvailable: boolean; locator: string | null; observedAt: string | null };
+  evidence: Pick<AdminManualCreateRequest['evidence'], 'claimText' | 'sourceExcerpt' | 'locator'>;
+  warnings: string[];
+}
+export interface IngestionUpdateRequest {
+  receiptId: string; targetEntityId: string; expectedAssociationRevision: number; expectedEntityUpdatedAt: string;
+  entity: IngestionUpdateFields;
+  evidence: Pick<AdminManualCreateRequest['evidence'], 'claimText' | 'sourceExcerpt' | 'locator'>;
+}
+export interface IngestionUpdateApplied { entity: IngestionAssociationEntity; updatedAt: string; revisionNumber: number }

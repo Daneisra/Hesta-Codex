@@ -1,5 +1,11 @@
 # Associations humaines du staging — v0.7c
 
+v0.7e utilise une confirmation humaine comme autorité de ciblage d’une
+[mise à jour éditoriale distincte](STAGING-UPDATE.md). Ce parcours exige la révision de
+racine et la cible attendues, puis protège la racine par un verrou de lecture pendant
+l’application Serializable. Il ne change aucune association/décision, révision, auteur ou date.
+Une fiche archivée n’offre pas ce parcours ; une fiche publiée reste seulement comparable.
+
 Source externe → ingestion → snapshot/version → matching déterministe → suggestion
 → décision humaine → association persistante.
 

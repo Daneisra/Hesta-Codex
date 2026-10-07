@@ -13,7 +13,7 @@ export interface EditorialService {
   unpublish(slug: string, input: AdminWorkflowRequest, editorLabel: string): Promise<AdminEntityDetail>
 }
 
-const editorialSelect = {
+export const editorialSelect = {
   id: true, slug: true, kind: true, placeKind: true, title: true, summary: true,
   bodyMarkdown: true, aliases: true, tags: true, status: true, visibility: true,
   publishedAt: true, updatedAt: true,
@@ -33,7 +33,7 @@ export function entitySnapshot(entity: EditorialRow): Prisma.InputJsonValue {
   }
 }
 
-function sameFields(entity: EditorialRow, input: AdminEntityPatch): boolean {
+export function sameFields(entity: EditorialRow, input: Omit<AdminEntityPatch, 'expectedUpdatedAt' | 'revisionMessage'>): boolean {
   return entity.title === input.title && entity.summary === input.summary &&
     entity.bodyMarkdown === input.bodyMarkdown && entity.kind === input.kind &&
     entity.placeKind === input.placeKind && entity.visibility === input.visibility &&
@@ -47,18 +47,21 @@ function checkExpected(entity: EditorialRow, expected: string): void {
   }
 }
 
-function nextUpdatedAt(previous: Date): Date {
+export function nextUpdatedAt(previous: Date): Date {
   return new Date(Math.max(Date.now(), previous.getTime() + 1))
 }
 
-async function addRevision(
+export async function addRevision(
   tx: Prisma.TransactionClient, entity: EditorialRow, editorLabel: string, message: string | null,
-): Promise<void> {
+  ingestion?: Prisma.InputJsonObject,
+): Promise<number> {
   const latest = await tx.revision.aggregate({ where: { entityId: entity.id }, _max: { number: true } })
+  const number = (latest._max.number ?? 0) + 1
   await tx.revision.create({ data: {
-    entityId: entity.id, number: (latest._max.number ?? 0) + 1,
-    snapshot: entitySnapshot(entity), editorLabel, message,
+    entityId: entity.id, number,
+    snapshot: ingestion ? { ...entitySnapshot(entity) as Prisma.InputJsonObject, ingestion } : entitySnapshot(entity), editorLabel, message,
   } })
+  return number
 }
 
 async function fullDetail(tx: Prisma.TransactionClient, slug: string): Promise<AdminEntityDetail> {

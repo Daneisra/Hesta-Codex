@@ -44,11 +44,72 @@ beforeEach(() => window.history.replaceState(null, '', '/admin/ingestion'))
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/') })
 
 describe('consultation privée du staging', () => {
+  it('updates the confirmed target only after review and returns to unchanged staging and association with a success banner', async () => {
+    const calls = api(), original = fetch, user = userEvent.setup(), entity = { id: previousId, slug: 'fiche-technique', title: 'Fiche existante', kind: 'OTHER', placeKind: null, status: 'PROPOSED', visibility: 'GM' }
+    let title = entity.title, preparationFailed = false
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('/matches')) return response(matched('Suggestion différente'))
+      if (url.includes('/update-proposal')) {
+        calls.push({ url, init })
+        if (init?.method) { title = JSON.parse(String(init.body)).entity.title; return response({ entity: { ...entity, title }, updatedAt: batch.createdAt, revisionNumber: 2 }) }
+        if (preparationFailed) return response({}, 500)
+        return response({ receiptId: id, version: 2, contentHash: item.contentHash, expectedAssociationRevision: 7, expectedEntityUpdatedAt: batch.createdAt, alreadyApplied: false,
+          entity: { ...entity, title, summary: null, bodyMarkdown: 'Contenu actuel', aliases: [], tags: [], publishedAt: null }, source: { ...batch.sources[0], visibility: 'GM' },
+          staging: { title: 'Titre adopté', content: detail.content, contentType: detail.contentType, contentSupported: true, tags: [], tagsAvailable: false, locator: null, observedAt: null },
+          evidence: { claimText: 'Énoncé fictif', sourceExcerpt: null, locator: null }, warnings: [] })
+      }
+      if (url.includes('/association')) return response({ revision: 7, scope: 'EXTERNAL_ID', confirmed: { entity: { ...entity, title }, origin: 'MANUAL', authorLabel: 'Auteur initial', decidedAt: batch.createdAt }, invalid: false, rejectedCandidateIds: [], rejectedCount: 0, recentRejections: [] })
+      return original(url, init)
+    }))
+    render(<AdminIngestion onAccessError={vi.fn()} />)
+    await user.click(await screen.findByRole('button', { name: batch.label })); await user.click(await screen.findByRole('button', { name: item.title! }))
+    const marker = window.history.state.ingestionNavigation
+    await user.click(await screen.findByRole('button', { name: 'Préparer une mise à jour' })); await screen.findByDisplayValue(entity.title)
+    await user.click(screen.getByRole('button', { name: 'Utiliser le titre du staging' })); await user.click(screen.getByRole('button', { name: 'Vérifier la mise à jour' }))
+    expect(calls.filter(call => call.init?.method)).toHaveLength(0)
+    await user.click(screen.getByRole('button', { name: 'Appliquer la mise à jour' })); await screen.findByRole('heading', { name: 'Fiche mise à jour depuis le staging' })
+    await screen.findByRole('heading', { name: 'Association confirmée' }); expect(screen.getByText(/Confirmée par Auteur initial/)).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Contenu brut reçu' }).textContent).toBe(detail.content)
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Ingestion' })); expect(calls.filter(call => call.init?.method)).toHaveLength(1)
+    expect(JSON.parse(String(calls.find(call => call.init?.method)!.init?.body)).targetEntityId).toBe(previousId)
+    expect(window.history.state.ingestionNavigation).toBe(marker); expect(window.location.search).toBe('')
+    preparationFailed = true
+    await user.click(screen.getByRole('button', { name: 'Préparer une mise à jour' })); await screen.findByRole('alert')
+    expect(screen.queryByRole('heading', { name: 'Fiche mise à jour depuis le staging' })).toBeNull()
+    expect(calls.filter(call => call.init?.method)).toHaveLength(1)
+  })
+  it('browser back/forward aborts a pending update and discards the memory draft, even when its old response arrives late', async () => {
+    api(); const original = fetch, user = userEvent.setup()
+    const entity = { id, slug: 'fiche-technique', title: 'Fiche existante', kind: 'OTHER', placeKind: null, status: 'PROPOSED', visibility: 'GM' }
+    let complete!: (value: Response) => void, signal!: AbortSignal
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/update-proposal')) {
+        if (init?.method) { signal = init.signal!; return new Promise<Response>(resolve => { complete = resolve }) }
+        return Promise.resolve(response({ receiptId: id, version: 2, expectedAssociationRevision: 7, expectedEntityUpdatedAt: batch.createdAt, alreadyApplied: false,
+          entity: { ...entity, summary: null, bodyMarkdown: 'Contenu actuel', aliases: [], tags: [], publishedAt: null }, source: { ...batch.sources[0], visibility: 'GM' },
+          staging: { title: 'Saisie fictive', content: detail.content, contentType: 'text/markdown', contentSupported: true, tags: [], tagsAvailable: false },
+          evidence: { claimText: 'Énoncé fictif', sourceExcerpt: null, locator: null }, warnings: [] }))
+      }
+      if (url.includes('/association')) return Promise.resolve(response({ revision: 7, scope: 'EXTERNAL_ID', confirmed: { entity, origin: 'MANUAL', authorLabel: 'Auteur initial', decidedAt: batch.createdAt }, invalid: false, rejectedCandidateIds: [], rejectedCount: 0, recentRejections: [] }))
+      return original(url, init)
+    }))
+    render(<AdminIngestion onAccessError={vi.fn()} />)
+    await user.click(await screen.findByRole('button', { name: batch.label })); await user.click(await screen.findByRole('button', { name: item.title! }))
+    await user.click(await screen.findByRole('button', { name: 'Préparer une mise à jour' })); await screen.findByDisplayValue(entity.title)
+    await user.click(screen.getByRole('button', { name: 'Utiliser le titre du staging' })); await user.click(screen.getByRole('button', { name: 'Vérifier la mise à jour' }))
+    await user.click(screen.getByRole('button', { name: 'Appliquer la mise à jour' }))
+    await act(async () => { window.history.back(); await new Promise(resolve => setTimeout(resolve, 40)) }); await screen.findByRole('button', { name: item.title! })
+    expect(signal.aborted).toBe(true); await act(async () => { complete(response({ entity, updatedAt: batch.createdAt, revisionNumber: 2 })) })
+    await act(async () => { window.history.forward(); await new Promise(resolve => setTimeout(resolve, 40)) }); await screen.findByRole('button', { name: 'Préparer une mise à jour' })
+    expect(screen.queryByRole('heading', { name: 'Fiche mise à jour depuis le staging' })).toBeNull(); expect(screen.queryByLabelText('Titre')).toBeNull()
+    expect(JSON.stringify(window.history.state)).not.toMatch(/Saisie fictive|Énoncé fictif/)
+  })
   it('prepares without writing, then creates explicitly and returns to the unchanged staging with a confirmed association', async () => {
     const calls = api(), original = fetch, user = userEvent.setup()
     const entity = { id, slug: 'fiche-technique', title: 'Fiche technique proposée', kind: 'OTHER', placeKind: null, status: 'PROPOSED', visibility: 'GM' }
     let confirmed = false
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('/update-proposal')) return response({}, 500)
       if (url.includes('/proposal')) {
         calls.push({ url, init })
         if (init?.method) { confirmed = true; return response({ entity }, 201) }
@@ -71,6 +132,8 @@ describe('consultation privée du staging', () => {
     expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Ingestion' }))
     expect(calls.filter(call => call.init?.method)).toHaveLength(1); expect(window.history.state.ingestionNavigation).toBe(marker)
     expect(window.location.pathname).toBe('/admin/ingestion'); expect(window.location.search).toBe('')
+    await user.click(screen.getByRole('button', { name: 'Préparer une mise à jour' })); await screen.findByRole('alert')
+    expect(screen.queryByRole('heading', { name: 'Fiche créée dans le Codex' })).toBeNull()
   })
   it('browser back closes preparation without a write and browser forward reloads the item without a private draft in history', async () => {
     const calls = api(), original = fetch, user = userEvent.setup()

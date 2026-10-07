@@ -96,6 +96,18 @@ beforeEach(() => window.history.replaceState(null, '', '/admin'))
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/') })
 
 describe('administration en lecture seule', () => {
+  it('shows private Markdown images as text without creating automatic external or admin URL requests', async () => {
+    window.history.replaceState(null, '', '/admin/fiches/barolt')
+    mockApi(); const original = fetch
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => String(input) === '/api/admin/entities/barolt' ?
+      Promise.resolve(response({ ...detail, title: 'Fiche technique fictive', bodyMarkdown: '**Contenu fictif**\n\n' +
+        '![Image fictive](https://example.invalid/pixel?texte=prive-fictif)\n\n![Repère fictif](/api/admin/secret?texte=prive-fictif)' })) : original(input, init)))
+    const { container } = render(<App />); await screen.findByRole('heading', { name: 'Fiche technique fictive' })
+    expect(screen.getByText('Image non chargée : Image fictive')).toBeTruthy()
+    expect(screen.getByText('Image non chargée : Repère fictif')).toBeTruthy()
+    expect(container.querySelector('.admin-markdown img, .admin-markdown [src]')).toBeNull()
+    expect(container.querySelector('.admin-markdown strong')?.textContent).toBe('Contenu fictif')
+  })
   it('ouvre /admin/graphe seulement après la session admin, y compris par URL directe', async () => {
     window.history.replaceState(null, '', '/admin/graphe')
     const requests = mockApi()

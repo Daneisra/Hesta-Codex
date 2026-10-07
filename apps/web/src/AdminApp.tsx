@@ -128,7 +128,8 @@ function Detail({ entity, onNavigate, editing, provenanceEditing, busy, authExpi
       {entity.aliases.length > 0 && <p><strong>Alias :</strong> {entity.aliases.join(' · ')}</p>}
       {entity.tags.length > 0 && <p><strong>Tags :</strong> {entity.tags.join(' · ')}</p>}
       <div className="markdown-body admin-markdown">
-        {entity.bodyMarkdown.trim() ? <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>{entity.bodyMarkdown}</ReactMarkdown>
+        {entity.bodyMarkdown.trim() ? <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml
+          components={{ img: ({ alt }) => <span className="admin-muted">Image non chargée : {alt || 'sans description'}</span> }}>{entity.bodyMarkdown}</ReactMarkdown>
           : <p className="admin-muted">Aucun contenu détaillé.</p>}
       </div>
     </section>}

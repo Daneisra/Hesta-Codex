@@ -140,7 +140,9 @@ avec la machine et ne mesurent pas PostgreSQL, ses scans ni ses index. Le calcul
 est vérifié face à une matrice indépendante, seuil inclusif à 85 %, bornes 5/250 et Unicode.
 
 Roadmap actuelle : v0.7a staging ; v0.7b détection ; v0.7c associations humaines ; v0.7d création
-humaine d’une fiche proposée depuis le staging. La génération automatique et la file de revue
+humaine d’une fiche proposée depuis le staging ; v0.7e
+[mise à jour humaine d’une fiche confirmée](STAGING-UPDATE.md), sans autorité supplémentaire du score.
+La génération automatique et la file de revue
 restent reportées. Le matcher
 v0.7b ne persiste rien : v0.7c ajoute un service séparé de décisions, sans changer les scores,
 le classement, les seuils ou la réserve. Voir [ASSOCIATION.md](ASSOCIATION.md).

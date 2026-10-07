@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { EntityKind, IngestionProposalCreated, IngestionProposalPreparation, IngestionProposalRequest, PlaceKind, Visibility } from '@hesta-codex/shared'
 import { getAdminJson, errorStatus, HttpError } from './admin-http'
 import { kindLabels, placeLabels } from './graph-model'
+import { IngestionTerms as Terms } from './IngestionTerms'
 
 const suggestSlug = (title: string) => title.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
   .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 200).replace(/-$/, '')
@@ -9,12 +10,6 @@ type Issue = { path: string; message: string }
 type Draft = { title: string; slug: string; kind: EntityKind | ''; placeKind: PlaceKind | ''; summary: string;
   bodyMarkdown: string; aliases: string[]; tags: string[]; visibility: Visibility; claimText: string; sourceExcerpt: string; locator: string }
 type Load = { phase: 'loading' } | { phase: 'error'; status: number | null } | { phase: 'ready'; data: IngestionProposalPreparation }
-function Terms({ label, values, max, onChange, invalid, errorId }: { label: string; values: string[]; max: number; onChange: (values: string[]) => void; invalid: boolean; errorId: string }) {
-  return <fieldset className="ingestion-proposal-terms"><legend>{label}</legend>{values.map((value, index) => <div className="ingestion-association-actions" key={index}>
-    <input aria-label={`${label} ${index + 1}`} aria-invalid={invalid} aria-describedby={invalid ? errorId : undefined} maxLength={max} value={value} onChange={event => onChange(values.map((entry, n) => n === index ? event.target.value : entry))} />
-    <button type="button" aria-label={`Retirer ${label} ${index + 1}`} onClick={() => onChange(values.filter((_, n) => n !== index))}>Retirer</button>
-  </div>)}<button type="button" disabled={values.length >= 30} onClick={() => onChange([...values, ''])}>Ajouter {label}</button></fieldset>
-}
 export function IngestionProposalForm({ itemId, receiptId, onCancel, onCreated, onAccessError }: {
   itemId: string; receiptId: string; onCancel: () => void; onCreated: (result: IngestionProposalCreated) => void; onAccessError: (status: number) => void
 }) {
