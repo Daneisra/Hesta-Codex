@@ -14,6 +14,8 @@ import { sessionHash } from '../auth/session.js'
 import { createPrismaStore } from '../store.js'
 import { createPrismaGraphStore } from '../graph.js'
 import { entitySnapshot } from '../admin/editorial.js'
+import { createPrismaPromotionRepository } from './promotion-repository.js'
+import { buildPromotionPlan } from './promotion.js'
 
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
 const itemId = uuid(1), receiptId = uuid(2), sourceId = uuid(3), existingId = uuid(4)
@@ -25,7 +27,7 @@ const body = (slug = 'fiche-technique') => ({ receiptId, expectedRevision: 0,
 type Row = Record<string, unknown>
 type State = { source: Row[]; entity: Row[]; relation: Row[]; evidence: Row[]; revision: Row[]; batch: Row[]; item: Row[]; receipt: Row[]; root: Row[]; decision: Row[] }
 function database() {
-  let state: State = { source: [{ id: sourceId, kind: 'OBSIDIAN', label: 'Source fictive', visibility: 'SECRET', updatedAt: now }],
+  let state: State = { source: [{ id: sourceId, kind: 'OBSIDIAN', externalId: 'fictional-proposal-vault', label: 'Source fictive', visibility: 'SECRET', updatedAt: now }],
     entity: [{ id: existingId, slug: 'existante', title: 'Existante privée', kind: 'OTHER', placeKind: null,
       summary: null, bodyMarkdown: 'Contenu préexistant fictif', aliases: [], tags: [], status: 'DRAFT', visibility: 'SECRET', publishedAt: null, updatedAt: now }],
     relation: [{ id: uuid(5), status: 'DRAFT', visibility: 'SECRET', updatedAt: now }], evidence: [], revision: [], batch: [{ id: uuid(6), label: 'Lot fictif' }],
@@ -39,12 +41,33 @@ function database() {
   const prisma = new Proxy({ async $transaction<T>(work: (tx: unknown) => Promise<T>, options: { isolationLevel: string }) {
     levels.push(options.isolationLevel)
     const start = epoch, pending = structuredClone(state)
-    let dirty = false
-    const write = (stage: string) => { operations.push(stage); dirty = true; fault(stage) }
+    let dirty = false, readOnly = false
+    const write = (stage: string) => { assert.equal(readOnly, false, 'Read-only transaction cannot write'); operations.push(stage); dirty = true; fault(stage) }
     const selectedDecision = (row: Row) => ({ ...row, entity: pending.entity.find(entity => entity.id === row.entityId) })
+    const itemFields = (row: Row) => Object.fromEntries(['id', 'sourceId', 'identityKey', 'externalId', 'version', 'contentHash'].map(key => [key, row[key]]))
     const tx = {
-      source: { async findUnique(query: { where: { id: string } }) { return pending.source.find(row => row.id === query.where.id) ?? null } },
+      async $executeRaw(query: Prisma.Sql) { assert.equal(query.sql, 'SET TRANSACTION READ ONLY'); readOnly = true; return 0 },
+      async $queryRaw(query: Prisma.Sql) {
+        assert.equal(readOnly, true); assert.match(query.sql, /SELECT DISTINCT ON \("identityKey"\)/)
+        assert.match(query.sql, /WHERE "sourceId" = \?/); assert.match(query.sql, /ORDER BY "identityKey", version DESC LIMIT \?/)
+        assert.equal(query.values[1], 1001)
+        const latest = new Map<unknown, Row>()
+        for (const row of pending.item.filter(row => row.sourceId === query.values[0]).sort((a, b) => Number(b.version) - Number(a.version))) {
+          if (!latest.has(row.identityKey)) latest.set(row.identityKey, itemFields(row))
+        }
+        return [...latest.values()]
+      },
+      source: { async findUnique(query: { where: { id?: string; kind_externalId?: { kind: string; externalId: string } } }) {
+        return pending.source.find(row => query.where.id ? row.id === query.where.id :
+          row.kind === query.where.kind_externalId?.kind && row.externalId === query.where.kind_externalId?.externalId) ?? null
+      } },
+      ingestionItem: { async findFirst(query: { where: { sourceId: string; identityKey: string } }) {
+        const row = pending.item.filter(row => row.sourceId === query.where.sourceId && row.identityKey === query.where.identityKey)
+          .sort((a, b) => Number(b.version) - Number(a.version))[0]
+        return row ? itemFields(row) : null
+      } },
       entity: {
+        async findMany() { return pending.entity.map(row => ({ id: row.id, slug: row.slug })) },
         async findUnique(query: { where: { slug?: string; id?: string } }) { return pending.entity.find(row => query.where.slug ? row.slug === query.where.slug : row.id === query.where.id) ?? null },
         async create(query: { data: Row }) {
           write('entity'); if (pending.entity.some(row => row.slug === query.data.slug)) throw unique()
@@ -52,7 +75,9 @@ function database() {
         },
       },
       ingestionReceipt: { async findFirst(query: { where: { itemId: string; id?: string } }) {
-        const row = pending.receipt.find(row => row.itemId === query.where.itemId && (!query.where.id || row.id === query.where.id))
+        const row = pending.receipt.filter(row => row.itemId === query.where.itemId && (!query.where.id || row.id === query.where.id))
+          .sort((a, b) => (b.ingestedAt as Date).getTime() - (a.ingestedAt as Date).getTime() ||
+            Number(b.ordinal ?? 0) - Number(a.ordinal ?? 0) || String(b.id).localeCompare(String(a.id)))[0]
         return row ? { ...row, item: pending.item.find(item => item.id === row.itemId) } : null
       } },
       ingestionAssociation: {
@@ -418,3 +443,85 @@ test('HTTP failure returns generic 500/no-store without leaking narrative, and t
   assert.equal(response.status, 500); assert.equal(response.headers.get('cache-control'), 'no-store'); assert.doesNotMatch(await response.text(), /private|fictive|sourceId|receiptId/)
   assert.deepEqual(db.state(), before); assert.deepEqual(logs, [['Hesta Codex API request failed']])
 }))
+
+async function promotionFixture() {
+  const db = database(), repository = createPrismaPromotionRepository(db.prisma)
+  const snapshot = await repository.snapshot('fictional-proposal-vault')
+  const plan = buildPromotionPlan(snapshot, { actor, expectedCount: 1, allowProvisional: true, exceptions: [] })
+  assert.equal(plan.summary.creatable, 1)
+  return { db, repository, plan, entry: plan.entries[0]! }
+}
+
+test('promotion repository snapshot is read-only, selects only its Source, latest versions and deterministic latest receipts', async () => {
+  const db = database()
+  db.change(state => {
+    for (let index = 0; index < 9; index++) state.item.push({ ...state.item[0], id: uuid(500 + index), sourceId: uuid(999),
+      externalId: `technical-${index}.md`, identityKey: itemIdentity(`technical-${index}.md`, 'a'.repeat(64)) })
+    state.item.push({ ...state.item[0], id: uuid(20), version: 2, contentHash: 'b'.repeat(64), content: 'Dernière version fictive' })
+    state.receipt.push({ ...state.receipt[0], id: uuid(21), itemId: uuid(20) },
+      { ...state.receipt[0], id: uuid(22), itemId: uuid(20), rawVariant: 'Variante brute fictive', ingestedAt: new Date(now.getTime() + 1000) },
+      { ...state.receipt[0], id: uuid(23), itemId: uuid(20), rawVariant: 'Variante brute la plus récente', ingestedAt: new Date(now.getTime() + 1000) })
+  })
+  const before = db.state(), repository = createPrismaPromotionRepository(db.prisma)
+  const snapshot = await repository.snapshot('fictional-proposal-vault')
+  assert.equal(snapshot.notes.length, 1); assert.equal(snapshot.notes[0]!.id, uuid(20)); assert.equal(snapshot.notes[0]!.version, 2)
+  assert.equal(snapshot.notes[0]!.receipt.id, uuid(23)); assert.equal(snapshot.notes[0]!.receipt.rawVariant, 'Variante brute la plus récente')
+  assert.deepEqual(db.state(), before); assert.deepEqual(db.operations, []); assert.deepEqual(db.levels, ['RepeatableRead'])
+})
+
+test('promotion reuses the real proposal transaction with persistent original provenance, author and private PROPOSED status', async () => {
+  const { db, repository, plan, entry } = await promotionFixture(), before = db.state()
+  assert.equal(await repository.create(plan.source, entry.note, entry.input!, actor), 'created')
+  const state = db.state(), entity = state.entity[1]!, evidence = state.evidence[0]!, revision = state.revision[0]!
+  assert.equal(entity.status, 'PROPOSED'); assert.equal(entity.visibility, 'GM'); assert.equal(entity.publishedAt, null)
+  assert.equal(entity.bodyMarkdown, before.item[0]!.content); assert.equal(entity.title, before.receipt[0]!.title)
+  assert.deepEqual(entity.tags, ['fictif', 'épreuve']); assert.equal(entity.summary, null)
+  assert.equal(evidence.sourceId, sourceId); assert.equal(evidence.locator, 'fixture.md'); assert.equal(evidence.visibility, 'SECRET')
+  assert.equal(revision.number, 1); assert.equal(revision.editorLabel, actor.label)
+  const trace = (revision.snapshot as { ingestion: Row }).ingestion
+  assert.equal(trace.itemId, itemId); assert.equal(trace.receiptId, receiptId); assert.equal(trace.locator, 'fixture.md')
+  assert.equal(trace.sourceId, sourceId); assert.equal(trace.evidenceId, evidence.id); assert.equal(trace.version, 1)
+  assert.equal(state.root[0]!.externalId, 'fixture.md'); assert.equal(state.decision[0]!.decision, 'CONFIRMED')
+  assert.equal(state.decision[0]!.origin, 'MANUAL'); assert.equal(state.decision[0]!.authorDiscordId, actor.discordId)
+  for (const table of ['source', 'item', 'receipt', 'batch', 'relation'] as const) assert.deepEqual(state[table], before[table])
+  const after = db.state()
+  assert.equal(await repository.create(plan.source, entry.note, entry.input!, actor), 'skipped')
+  assert.deepEqual(db.state(), after); assert.deepEqual(db.levels, ['RepeatableRead', 'Serializable', 'Serializable'])
+})
+
+for (const stage of ['root', 'entity', 'evidence', 'revision', 'decision', 'commit']) test(`promotion transaction failure at ${stage} rolls back every write`, async () => {
+  const { db, repository, plan, entry } = await promotionFixture(), before = db.state()
+  db.fail(stage)
+  await assert.rejects(repository.create(plan.source, entry.note, entry.input!, actor))
+  assert.deepEqual(db.state(), before)
+})
+
+for (const change of ['version', 'receipt', 'source', 'rejection']) test(`promotion detects concurrent ${change} changes before editorial writes`, async () => {
+  const { db, repository, plan, entry } = await promotionFixture()
+  if (change === 'rejection') await db.associations.reject(itemId, { receiptId, expectedRevision: 0, entityId: existingId, origin: 'MANUAL' }, actor)
+  else db.change(state => {
+    if (change === 'version') state.item.push({ ...state.item[0], id: uuid(20), version: 2 })
+    if (change === 'receipt') state.receipt.push({ ...state.receipt[0], id: uuid(21), ingestedAt: new Date(now.getTime() + 1000) })
+    if (change === 'source') state.source[0]!.visibility = 'PUBLIC'
+  })
+  const before = db.state()
+  await assert.rejects(repository.create(plan.source, entry.note, entry.input!, actor), change === 'source' ? /SOURCE_CHANGED/ : /STAGING_CHANGED/)
+  assert.deepEqual(db.state(), before)
+})
+
+test('promotion skips a concurrent human confirmation and cannot overwrite that decision', async () => {
+  const { db, repository, plan, entry } = await promotionFixture()
+  await db.associations.confirm(itemId, { receiptId, expectedRevision: 0, entityId: existingId, origin: 'MANUAL' }, actor)
+  const before = db.state()
+  assert.equal(await repository.create(plan.source, entry.note, entry.input!, actor), 'skipped')
+  assert.deepEqual(db.state(), before); assert.equal(db.state().evidence.length, 0)
+})
+
+test('two promotion workers cannot create orphan or duplicate editorial records for the same identity', async () => {
+  const { db, repository, plan, entry } = await promotionFixture()
+  const outcomes = await Promise.allSettled([repository.create(plan.source, entry.note, entry.input!, actor),
+    repository.create(plan.source, entry.note, entry.input!, actor)])
+  assert.equal(outcomes.filter(result => result.status === 'fulfilled').length, 1)
+  const state = db.state()
+  assert.equal(state.entity.length, 2); assert.equal(state.evidence.length, 1); assert.equal(state.revision.length, 1); assert.equal(state.decision.length, 1)
+})

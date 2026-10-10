@@ -14,6 +14,13 @@ validés, sans connexion PostgreSQL, réseau ni création éditoriale. Inspectio
 coffre/identifiant explicites, sélection progressive et sortie privée hors Git.
 Voir [docs/OBSIDIAN-IMPORT.md](docs/OBSIDIAN-IMPORT.md) pour les commandes et précautions.
 
+La création éditoriale groupée depuis une Source Obsidian existante est disponible avec
+`npm run --silent lore:staging:promote -- --help` : dry-run, plan approuvé par empreinte,
+puis créations PROPOSED/GM transactionnelles avec association humaine, provenance et Revision.
+Voir [docs/STAGING-PROMOTION.md](docs/STAGING-PROMOTION.md) pour les paramètres et commandes VPS.
+Le [nettoyage ponctuel préalable](docs/STAGING-CLEANUP.md) fournit un inventaire et un
+modèle SQL avec UUID explicites et ROLLBACK par défaut, à vérifier puis exécuter manuellement.
+
 v0.7e ajoute la **mise à jour humaine depuis une association confirmée** : les valeurs finales
 partent de la fiche actuelle ; le staging est repris champ par champ, puis un récapitulatif
 Avant/Après précède l’application atomique (Entity + une Evidence + une Revision).
@@ -200,7 +207,7 @@ packages/shared/  Contrats TypeScript communs
 prisma/           Schéma PostgreSQL, migration initiale et seed RelationType
 docs/             Décisions et contraintes du modèle de données
 examples/         Modèles JSON techniques d'import/ingestion, jamais chargés automatiquement
-scripts/          Emplacement pour les futurs scripts nécessaires
+scripts/          Scripts ponctuels d'exploitation, sans lancement automatique
 ```
 
 Les modèles `Entity`, `RelationType`, `Relation`, `Source`, `Evidence`, `Revision`, `User` et `Session`, leurs
