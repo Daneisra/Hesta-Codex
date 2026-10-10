@@ -198,6 +198,12 @@ Le workflow est détaillé dans [docs/EDITORIAL-WORKFLOW.md](docs/EDITORIAL-WORK
 configuration Discord dans [docs/AUTH.md](docs/AUTH.md). La correction des relations, sources
 et preuves est détaillée dans [docs/PROVENANCE-WORKFLOW.md](docs/PROVENANCE-WORKFLOW.md).
 
+Les wikilinks des fiches Obsidian sont résolus en lecture seule depuis les associations confirmées.
+L’administration affiche les références entrantes/sortantes et leurs diagnostics ; le graphe admin
+distingue ces mentions textuelles des relations éditoriales. Aucune donnée n’est réimportée ou publiée.
+Voir [docs/OBSIDIAN-REFERENCES.md](docs/OBSIDIAN-REFERENCES.md) pour la résolution, les compteurs
+et la vérification du corpus réel.
+
 ## Structure
 
 ```text

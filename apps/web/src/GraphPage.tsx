@@ -206,14 +206,22 @@ export function GraphPage({ endpoint, admin = false, onOpenNode }: {
   }, [copyState])
   useEffect(() => () => { copyRequest.current++ }, [])
 
+  const referenceStats = admin ? (data as AdminGraphResponse | null)?.obsidianStats : undefined
   return <section className="graph-page" aria-label={admin ? 'Graphe éditorial' : 'Graphe public'}>
     <div className="graph-heading"><div><p className="section-eyebrow">Explorer les connexions</p>
       <h1>{admin ? 'Graphe éditorial' : 'Graphe du Codex'}</h1>
-      <p>{admin ? 'Fiches et relations accessibles à l’administration.' : 'Fiches et relations publiées, visibles de tous.'}</p></div>
+      <p>{admin ? 'Fiches, relations éditoriales et références textuelles Obsidian.' : 'Fiches et relations publiées, visibles de tous.'}</p></div>
       {data && visibleGraph && <p className="graph-count" role="status">
-        {visibleGraph.nodes.length} fiche{visibleGraph.nodes.length > 1 ? 's' : ''} · {visibleGraph.edges.length} relation{visibleGraph.edges.length > 1 ? 's' : ''} affichée{visibleGraph.edges.length > 1 ? 's' : ''}
-        <small> sur {data.nodes.length} fiches · {data.edges.length} relations chargées</small>
+        {visibleGraph.nodes.length} fiche{visibleGraph.nodes.length > 1 ? 's' : ''} · {visibleGraph.edges.length} {admin ? `connexion${visibleGraph.edges.length > 1 ? 's' : ''}` : `relation${visibleGraph.edges.length > 1 ? 's' : ''}`} affichée{visibleGraph.edges.length > 1 ? 's' : ''}
+        <small> sur {data.nodes.length} fiches · {data.edges.length} {admin ? 'connexions' : 'relations'} chargées</small>
       </p>}</div>
+    {referenceStats && data && <p className="graph-reference-stats">
+      Obsidian : {referenceStats.occurrences} occurrences · {referenceStats.resolved} références uniques résolues
+      {' · '}{data.edges.filter(edge => edge.origin === 'OBSIDIAN').length} arcs entre fiches
+      {' · '}{referenceStats.ambiguous} ambiguës · {referenceStats.missing} absentes
+      {' · '}{referenceStats.unassociated} sans fiche associée · {referenceStats.unsupported} non prises en charge.
+      <small>Compteurs du catalogue complet, avant filtrage. Les références ne créent aucune relation éditoriale.</small>
+    </p>}
     {data && <div className="graph-share">
       <button ref={copyButton} type="button" disabled={copyState === 'pending'} onClick={() => { void copyLink() }}
         title={admin ? 'Copier les filtres et la profondeur, sans sélection ni recherche éditoriale' : 'Copier le lien de cet état du graphe'}>Copier le lien</button>

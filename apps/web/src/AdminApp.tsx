@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type MouseEvent } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import { WikiMarkdown, scrollToWikiAnchor } from './WikiMarkdown'
+import { ObsidianReferences } from './ObsidianReferences'
 import type {
   AdminEntityDetail, AdminEntityListResponse, AdminEntityPatch, AdminManualCreateRequest, AdminManualRelationRequest, AdminStats,
   AuthSessionResponse, EditorialStatus, EntityKind, Visibility,
@@ -128,8 +128,8 @@ function Detail({ entity, onNavigate, editing, provenanceEditing, busy, authExpi
       {entity.aliases.length > 0 && <p><strong>Alias :</strong> {entity.aliases.join(' · ')}</p>}
       {entity.tags.length > 0 && <p><strong>Tags :</strong> {entity.tags.join(' · ')}</p>}
       <div className="markdown-body admin-markdown">
-        {entity.bodyMarkdown.trim() ? <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml
-          components={{ img: ({ alt }) => <span className="admin-muted">Image non chargée : {alt || 'sans description'}</span> }}>{entity.bodyMarkdown}</ReactMarkdown>
+        {entity.bodyMarkdown.trim() ? <WikiMarkdown body={entity.bodyMarkdown} updatedAt={entity.updatedAt}
+          navigation={entity.obsidianReferences} admin onNavigate={onNavigate} />
           : <p className="admin-muted">Aucun contenu détaillé.</p>}
       </div>
     </section>}
@@ -150,6 +150,8 @@ function Detail({ entity, onNavigate, editing, provenanceEditing, busy, authExpi
           <button type="button" disabled={busy} onClick={() => onWorkflow('unpublish')}>Retirer de la publication</button>
         </>}
       </section>}
+    {!editing && entity.obsidianReferences?.updatedAt === entity.updatedAt &&
+      <ObsidianReferences references={entity.obsidianReferences} onNavigate={onNavigate} />}
     <AdminProvenance entity={entity} onNavigate={onNavigate} onMutate={onProvenanceMutation} error={error}
       onDirtyChange={onDirtyChange} onEditingChange={onProvenanceEditingChange} busy={busy} disabled={authExpired || editing} />
     <section className="admin-section">
@@ -196,7 +198,7 @@ export function AdminApp() {
   const [evidenceNotice, setEvidenceNotice] = useState(false)
   const mainRef = useRef<HTMLElement>(null)
   const focusAfterNavigation = useRef(false)
-  const currentPath = useRef(window.location.pathname)
+  const currentPath = useRef(window.location.pathname + window.location.hash)
   const dirtyRef = useRef(false)
   dirtyRef.current = editDirty
 
@@ -215,7 +217,7 @@ export function AdminApp() {
         window.history.pushState(null, '', currentPath.current)
         return
       }
-      currentPath.current = window.location.pathname
+      currentPath.current = window.location.pathname + window.location.hash
       setEditing(false)
       setProvenanceEditing(false)
       setEditDirty(false)
@@ -316,7 +318,7 @@ export function AdminApp() {
   useEffect(() => { document.title = 'Administration · Hesta Codex' }, [])
 
   function navigateTo(path: string) {
-    if (window.location.pathname !== path) {
+    if (window.location.pathname + window.location.hash !== path) {
       currentPath.current = path
       setEditing(false)
       setProvenanceEditing(false)
@@ -329,6 +331,7 @@ export function AdminApp() {
       focusAfterNavigation.current = true
       window.history.pushState(null, '', path)
       setRoute(readRoute())
+      requestAnimationFrame(scrollToWikiAnchor)
     }
   }
 
@@ -388,6 +391,8 @@ export function AdminApp() {
   }
 
   function mutationSucceeded(updated: AdminEntityDetail) {
+    // Mutation responses omit derived references. Refresh a fiche that previously displayed them.
+    if (detail.phase === 'ready' && detail.data.obsidianReferences) setDetailRefresh(value => value + 1)
     setDetailFor(updated.slug)
     setDetail({ phase: 'ready', data: updated })
     setEditing(false)

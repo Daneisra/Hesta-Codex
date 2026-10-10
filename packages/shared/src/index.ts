@@ -44,6 +44,8 @@ export interface GraphNode {
 }
 
 export interface GraphEdge {
+  origin?: 'OBSIDIAN'
+  occurrences?: number
   id: string
   source: string
   target: string
@@ -56,7 +58,11 @@ export interface GraphEdge {
 export interface GraphResponse { nodes: GraphNode[]; edges: GraphEdge[] }
 export interface AdminGraphNode extends GraphNode { status: EditorialStatus; visibility: Visibility }
 export interface AdminGraphEdge extends GraphEdge { status: EditorialStatus; visibility: Visibility }
-export interface AdminGraphResponse { nodes: AdminGraphNode[]; edges: AdminGraphEdge[] }
+export interface ObsidianGraphEdge extends GraphEdge { origin: 'OBSIDIAN'; status?: never; visibility?: never }
+export interface AdminGraphResponse {
+  nodes: AdminGraphNode[]; edges: (AdminGraphEdge | ObsidianGraphEdge)[]
+  obsidianStats?: import('./obsidian.js').ReferenceStats
+}
 
 export interface EntityListItem {
   id: string
@@ -76,6 +82,7 @@ export interface EntityRelationItem {
 }
 
 export interface EntityDetail extends EntityListItem {
+  wikiNavigation?: import('./obsidian.js').WikiNavigation
   bodyMarkdown: string
   aliases: string[]
   status: 'PUBLISHED'
@@ -211,6 +218,7 @@ export interface AdminRevision {
 }
 
 export interface AdminEntityDetail extends AdminEntityListItem {
+  obsidianReferences?: import('./obsidian.js').ObsidianReferences
   bodyMarkdown: string
   aliases: string[]
   createdAt: string
@@ -355,3 +363,4 @@ export interface IngestionUpdateRequest {
   evidence: Pick<AdminManualCreateRequest['evidence'], 'claimText' | 'sourceExcerpt' | 'locator'>;
 }
 export interface IngestionUpdateApplied { entity: IngestionAssociationEntity; updatedAt: string; revisionNumber: number }
+export * from './obsidian.js'

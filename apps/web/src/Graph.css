@@ -72,6 +72,10 @@
 .graph-message button { margin-top: .5rem; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .workspace--graph { display: block; }
+.graph-reference-stats, .graph-reference-legend { color: #c6d3e5; line-height: 1.6; overflow-wrap: anywhere; }
+.graph-reference-stats small, .graph-reference-legend small { display: block; }
+.graph-edge-swatch { display: inline-block; width: 2rem; border-top: 2px solid #d4bb8e; vertical-align: middle; }
+.graph-edge-swatch--reference { border-top: 2px dashed #79bddb; }
 .workspace--graph .main-panel { width: 100%; max-width: none; }
 @media (max-width: 900px) {
   .graph-layout { grid-template-columns: minmax(0, 1fr); }

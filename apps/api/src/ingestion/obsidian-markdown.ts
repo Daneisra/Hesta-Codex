@@ -1,4 +1,5 @@
 import { posix } from 'node:path'
+import { obsidianLinkIndex, resolveObsidianPath } from '@hesta-codex/shared'
 import { isAlias, isMap, isScalar, isSeq, parseDocument } from 'yaml'
 import { editorialBase } from '../admin/validation.js'
 import { ingestionSchema, validateIngestionDocument } from './format.js'
@@ -9,16 +10,7 @@ export interface WikiLink {
   status: 'FOUND' | 'MISSING' | 'AMBIGUOUS' | 'UNSUPPORTED' | 'OUT_OF_SCOPE'
   path: string | null
 }
-export function linkIndex(paths: string[]) {
-  const exact = new Set(paths), names = new Map<string, string[]>()
-  for (const path of paths) {
-    const name = posix.basename(path).replace(/\.md$/i, '')
-    const candidates = names.get(name)
-    if (candidates) candidates.push(path)
-    else names.set(name, [path])
-  }
-  return { exact, names }
-}
+export const linkIndex = obsidianLinkIndex
 export type LinkIndex = ReturnType<typeof linkIndex>
 
 function prose(body: string): string {
@@ -46,25 +38,7 @@ function links(body: string, path: string, index: LinkIndex): WikiLink[] {
     const hash = reference.indexOf('#'), target = (hash < 0 ? reference : reference.slice(0, hash)).trim()
     const link: WikiLink = { target, anchor: hash < 0 ? null : reference.slice(hash + 1), alias: pipe < 0 ? null : raw.slice(pipe + 1),
       embed: match[1] === '!', status: 'MISSING', path: null }
-    const normalized = target.replace(/\\/g, '/')
-    if (/^(?:[a-z]+:|\/)/i.test(normalized) || /\.(?:png|jpe?g|gif|webp|svg|pdf|canvas|mp[34]|wav|ogg|zip)$/i.test(normalized)) link.status = 'UNSUPPORTED'
-    else {
-      const rootPath = posix.normalize(normalized), localPath = posix.normalize(posix.join(posix.dirname(path), normalized))
-      if (rootPath === '..' || rootPath.startsWith('../')) {
-        if (localPath === '..' || localPath.startsWith('../')) link.status = 'OUT_OF_SCOPE'
-        else { const candidate = /\.md$/i.test(localPath) ? localPath : `${localPath}.md`; if (index.exact.has(candidate)) { link.status = 'FOUND'; link.path = candidate } }
-      } else if (!target) { link.status = 'FOUND'; link.path = path }
-      else {
-        const withExtension = (value: string) => /\.md$/i.test(value) ? value : `${value}.md`
-        const candidates = new Set([withExtension(localPath), withExtension(rootPath)].filter(value => index.exact.has(value)))
-        if (!normalized.includes('/') && candidates.size < 2) for (const candidate of index.names.get(normalized.replace(/\.md$/i, '')) ?? []) {
-          candidates.add(candidate)
-          if (candidates.size >= 2) break
-        }
-        if (candidates.size === 1) { link.status = 'FOUND'; link.path = [...candidates][0]! }
-        else if (candidates.size > 1) link.status = 'AMBIGUOUS'
-      }
-    }
+    Object.assign(link, resolveObsidianPath(target, path, index))
     results.push(link)
   }
   return results

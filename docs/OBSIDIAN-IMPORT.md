@@ -28,8 +28,11 @@ pour supprimer une course observée durant la validation, sans affaiblir le cont
 
 ## Commande et options
 
-Depuis la racine du dépôt, après `npm ci` et `npm run prisma:generate` (génération locale des
-types/enums, sans connexion SQL). Node.js 22 minimum.
+Depuis la racine du dépôt, après `npm ci`, `npm run prisma:generate` (génération locale des
+types/enums, sans connexion SQL) et `npm run build -w @hesta-codex/shared` (compilation locale
+du résolveur de chemins partagé avec la navigation des fiches). Node.js 22 minimum.
+Ces préparatifs écrivent seulement les artefacts de code ignorés par Git. La commande de
+conversion elle-même reste sans écriture en `--dry-run`.
 
 ```powershell
 npm run --silent lore:obsidian:prepare -- --help

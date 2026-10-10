@@ -172,3 +172,19 @@ Toutes les mutations admin exigent une session et une Origin identique à l'orig
 y compris si le cookie est présent. Une Origin absente ou différente donne `403 INVALID_ORIGIN`.
 Voir [EDITORIAL-WORKFLOW.md](EDITORIAL-WORKFLOW.md) pour les états, révisions et règles de
 visibilité.
+
+## Références Obsidian dérivées
+
+Le GET public d’une fiche ajoute `wikiNavigation: { updatedAt, links }`. Chaque lien contient
+`start`, `end` (offsets UTF-16 du Markdown original), `label` et `href` (ou `null`). Les seules
+destinations publiques sont `PUBLISHED + PUBLIC` ; aucun diagnostic ou compteur privé n’est exposé.
+
+Le GET admin d’une fiche ajoute `obsidianReferences`, avec les mêmes liens, `outgoing`, `incoming`,
+`stats` et `diagnostics`. Une connexion est `{ id, slug, title, occurrences }`. Un diagnostic
+contient `{ target, anchor, status, message, occurrences }`. Le GET admin du graphe ajoute les
+arêtes `origin: "OBSIDIAN"` et `obsidianStats`, calculées depuis les associations confirmées.
+Ces arêtes n’ont pas de statut ni de visibilité éditoriale et n’existent pas dans `Relation`.
+Les champs dérivés peuvent être absents si la lecture de la fiche a changé entre les deux projections ;
+les réponses de mutation restent inchangées. Limites : 2 000 fiches, 4 000 associations, 32 Mio
+de Markdown et 100 000 occurrences ; dépassement `503 REFERENCES_LIMIT`, sans réponse partielle.
+Les protections d’accès et `no-store` admin restent identiques. Voir [OBSIDIAN-REFERENCES.md](OBSIDIAN-REFERENCES.md).

@@ -147,3 +147,7 @@
   .admin-create-review dl { grid-template-columns: minmax(0, 1fr); }
   .admin-add-relation { margin-left: 0; }
 }
+.obsidian-references { overflow-wrap: anywhere; }
+.obsidian-references li { margin-block: .5rem; }
+.obsidian-references summary { cursor: pointer; }
+.markdown-body [id^="obsidian-"] { scroll-margin-top: 2rem; }

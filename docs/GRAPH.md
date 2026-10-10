@@ -1,4 +1,4 @@
-# Graphe du Codex — v0.6d
+# Graphe du Codex
 
 `/graphe` visualise les fiches publiques ; `/admin/graphe` visualise le réseau éditorial
 après la même authentification Discord et la même whitelist que les autres routes admin.
@@ -13,13 +13,16 @@ de sélectionner une fiche au clavier ; le panneau affiche ses connexions et per
 
 - Nœud : `{ id, slug, title, kind, placeKind, summary, aliases }` ; l'admin reçoit aussi `status` et `visibility`.
 - Arête : `{ id, source, target, type, label, inverseLabel, symmetric }` ; l'admin reçoit aussi
-  `status` et `visibility`. `source` et `target` sont les UUID des nœuds dans le sens stocké.
+  `status` et `visibility` pour les relations éditoriales. `source` et `target` sont les UUID des nœuds dans le sens stocké.
+  Les références textuelles admin portent `origin: "OBSIDIAN"`, `type: "OBSIDIAN_REFERENCE"`
+  et `occurrences`, sans statut/visibilité éditoriale. La réponse admin inclut `obsidianStats`.
 - Chaque Relation est renvoyée une fois. Une relation symétrique reste une seule arête ; les
   relations directionnelles portent une flèche. `inverseLabel` sert au panneau quand le nœud
   sélectionné est à l'extrémité entrante.
-- Les tableaux sont triés par UUID pour une réponse stable. Les nœuds isolés sont conservés.
+- Les nœuds et relations éditoriales sont triés par UUID ; les références Obsidian ajoutées
+  sont triées par identifiant dérivé. La réponse reste stable et conserve les nœuds isolés.
 
-Le serveur sélectionne explicitement les seules colonnes ci-dessus. La route publique exige
+Les réponses projettent explicitement les seuls champs ci-dessus. La route publique exige
 `PUBLISHED + PUBLIC` pour chaque Entity, chaque Relation et les deux extrémités de chaque arête.
 Elle ne retourne aucun identifiant, nœud, arête ou compteur privé. Les routes du graphe ne
 renvoient jamais Source, Evidence, Revision, metadata, compte ou session Discord. La route
@@ -193,4 +196,8 @@ pour tous les labels d'une zone dense ni éviter tout recouvrement d'arête/nœu
 recherche et panneau complètent les labels masqués. L'URL ne partage pas les coordonnées.
 Le Canvas lui-même n'offre pas de parcours clavier nœud par nœud ; ses
 contrôles textuels assurent cette navigation. Les couleurs regroupent les types de fiches
-sans changer leur modèle. Aucun contrat API, schéma Prisma ni règle de publication n'a changé.
+sans changer leur modèle. Les références Obsidian enrichissent le contrat admin sans migration
+ni modification des règles de publication. Elles sont bleues et pointillées, avec une légende
+et une option dans « Type de connexion ». Les filtres de statut/visibilité de relation les
+masquent. Les compteurs globaux restent indépendants des filtres et distinguent occurrences,
+références uniques et arcs ; voir [OBSIDIAN-REFERENCES.md](OBSIDIAN-REFERENCES.md).

@@ -164,8 +164,8 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
       <label className="graph-depth">Profondeur du voisinage<select value={depth} disabled={!selectedId}
         onChange={(event) => { const value = Number(event.target.value)
           if (value === 1 || value === 2 || value === 3) onDepthChange(value) }}>
-        <option value="1">1 · Connexions directes</option><option value="2">2 · Deux relations</option>
-        <option value="3">3 · Trois relations</option>
+        <option value="1">1 · Connexions directes</option><option value="2">2 · Deux {scope === 'admin' ? 'connexions' : 'relations'}</option>
+        <option value="3">3 · Trois {scope === 'admin' ? 'connexions' : 'relations'}</option>
       </select></label>
       <button type="button" disabled={!selectedId} aria-pressed={isolated} onClick={onToggleIsolation}>
         {isolated ? 'Afficher tout le graphe' : depth === 1 ? 'Connexions directes' : 'Isoler le voisinage'}
@@ -193,10 +193,13 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
         // The library renders tooltip labels as HTML; all lore text stays in Canvas or React text.
         nodeLabel={() => ''} linkLabel={() => ''}
         linkColor={(edge) => hasHighlight && !highlighted.edges.has(String(edge.id))
-          ? 'rgba(135, 150, 178, .16)' : 'rgba(225, 204, 157, .75)'}
+          ? 'rgba(135, 150, 178, .16)' : edge.origin === 'OBSIDIAN' ? '#79bddb' : 'rgba(225, 204, 157, .75)'}
+        linkLineDash={(edge) => edge.origin === 'OBSIDIAN' ? [5, 3] : null}
+        // Separate a textual mention from an editorial relation joining the same fiches.
+        linkCurvature={(edge) => edge.origin === 'OBSIDIAN' ? 0.15 : 0}
         linkWidth={(edge) => highlighted.edges.has(String(edge.id)) ? 2.7 : 1.1}
         linkDirectionalArrowLength={(edge) => edge.symmetric ? 0 : 5}
-        linkDirectionalArrowColor={() => '#d4bb8e'}
+        linkDirectionalArrowColor={(edge) => edge.origin === 'OBSIDIAN' ? '#79bddb' : '#d4bb8e'}
         onNodeHover={(node) => { setHoveredNodeId(node ? String(node.id) : '') }}
         onLinkHover={(edge) => { setHoveredEdgeId(edge ? String(edge.id) : '') }}
         onNodeClick={(node) => {
@@ -284,7 +287,7 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
     </div>
     {layoutMessage && <p className="graph-feedback" role="status">{layoutMessage}</p>}
     {selectedId && <p className="graph-neighborhood-key">
-      <span>◎ Fiche sélectionnée</span><span>○ Voisins directs</span><span>◌ Voisins à 2–3 relations</span>
+      <span>◎ Fiche sélectionnée</span><span>○ Voisins directs</span><span>◌ Voisins à 2–3 {scope === 'admin' ? 'connexions' : 'relations'}</span>
     </p>}
     <p className="graph-hint">Molette ou boutons pour zoomer · glisser le fond pour déplacer · glisser un nœud pour le fixer · double clic pour ouvrir.</p>
   </div>

@@ -12,6 +12,7 @@ import { createAuthRouter, requireAdmin, requireSameOrigin, type AuthDependencie
 import type { CodexStore, EntityFilters } from './store.js'
 import type { GraphStore } from './graph.js'
 import type { IngestionAdminStore } from './ingestion/admin.js'
+import type { ReferenceService } from './obsidian-references.js'
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const entityKinds = new Set<string>(Object.values(EntityKind))
@@ -41,8 +42,8 @@ function parseEntityFilters(query: Record<string, unknown>): EntityFilters {
 export function createApp(store: CodexStore, privateServices?: {
   auth: AuthDependencies; admin: AdminStore; editorial: EditorialService;
   provenance?: ProvenanceService; manual?: ManualService; manualRelations?: ManualRelationService;
-  evidenceAdd?: EvidenceAddService; graph?: GraphStore; ingestion?: IngestionAdminStore
-}, graph?: GraphStore) {
+  evidenceAdd?: EvidenceAddService; graph?: GraphStore; ingestion?: IngestionAdminStore; references?: ReferenceService
+}, graph?: GraphStore, references?: ReferenceService) {
   const app = express()
   app.disable('x-powered-by')
 
@@ -51,7 +52,7 @@ export function createApp(store: CodexStore, privateServices?: {
     app.use('/api/admin', requireAdmin(privateServices.auth), requireSameOrigin(privateServices.auth.config.origin),
       express.json({ limit: '1mb' }), createAdminRouter(privateServices.admin, privateServices.editorial,
         privateServices.provenance, privateServices.manual, privateServices.manualRelations,
-        privateServices.evidenceAdd, privateServices.graph, privateServices.ingestion))
+        privateServices.evidenceAdd, privateServices.graph, privateServices.ingestion, privateServices.references))
     app.use('/api/auth', (_request, response) => {
       response.status(404).json({ error: { code: 'NOT_FOUND', message: 'Endpoint not found' } })
     })
@@ -105,7 +106,8 @@ export function createApp(store: CodexStore, privateServices?: {
       response.status(404).json({ error: { code: 'NOT_FOUND', message: 'Entity not found' } })
       return
     }
-    response.json(entity)
+    const wikiNavigation = await references?.navigation(entity.id, entity.updatedAt)
+    response.json({ ...entity, ...(wikiNavigation ? { wikiNavigation } : {}) })
   })
 
   app.use('/api/v1', (_request, response) => {

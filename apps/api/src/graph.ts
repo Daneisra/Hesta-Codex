@@ -1,5 +1,6 @@
 import type { AdminGraphResponse, GraphResponse } from '@hesta-codex/shared'
 import { EditorialStatus, Visibility, type Prisma, type PrismaClient } from './prisma-client/client.ts'
+import type { ReferenceService } from './obsidian-references.js'
 
 export interface GraphStore {
   publicGraph(): Promise<GraphResponse>
@@ -14,7 +15,7 @@ const edgeSelect = {
   relationType: { select: { code: true, label: true, inverseLabel: true, symmetric: true } },
 } satisfies Prisma.RelationSelect
 
-export function createPrismaGraphStore(prisma: PrismaClient): GraphStore {
+export function createPrismaGraphStore(prisma: PrismaClient, references?: ReferenceService): GraphStore {
   return {
     async publicGraph() {
       const [nodes, relations] = await Promise.all([
@@ -39,13 +40,14 @@ export function createPrismaGraphStore(prisma: PrismaClient): GraphStore {
           orderBy: { id: 'asc' } }),
       ])
       const present = new Set(nodes.map((node) => node.id))
-      return { nodes, edges: relations.filter((relation) => present.has(relation.fromEntityId) &&
+      const obsidian = await references?.graph()
+      return { nodes, ...(obsidian ? { obsidianStats: obsidian.stats } : {}), edges: [...relations.filter((relation) => present.has(relation.fromEntityId) &&
         present.has(relation.toEntityId)).map((relation) => ({
         id: relation.id, source: relation.fromEntityId, target: relation.toEntityId,
         type: relation.relationType.code, label: relation.relationType.label,
         inverseLabel: relation.relationType.inverseLabel, symmetric: relation.relationType.symmetric,
         status: relation.status, visibility: relation.visibility,
-      })) }
+      })), ...(obsidian?.edges.filter(edge => present.has(edge.source) && present.has(edge.target)) ?? [])] }
     },
   }
 }

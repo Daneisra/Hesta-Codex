@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import { WikiMarkdown, scrollToWikiAnchor } from './WikiMarkdown'
 import type {
   EntityDetail,
   EntityKind,
@@ -59,17 +58,6 @@ function readRoute(): Route {
   if (window.location.pathname === '/graphe' || window.location.pathname === '/graphe/') return { view: 'graph' }
   const match = entityPathPattern.exec(window.location.pathname)
   return match ? { view: 'entity', slug: match[1] } : { view: 'not-found' }
-}
-
-function internalPagePath(href: string | undefined): string | null {
-  if (!href) return null
-  try {
-    const url = new URL(href, window.location.href)
-    if (url.origin !== window.location.origin || url.search || url.hash) return null
-    return url.pathname === '/' || url.pathname === '/graphe' || entityPathPattern.test(url.pathname) ? url.pathname : null
-  } catch {
-    return null
-  }
 }
 
 async function getJson<T>(url: string, signal: AbortSignal): Promise<T> {
@@ -334,20 +322,8 @@ function EntityArticle({ entity, onNavigate }: { entity: EntityDetail; onNavigat
       <div className="article-rule" aria-hidden="true"><span>✦</span></div>
       <div className="markdown-body">
         {entity.bodyMarkdown.trim() ? (
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            skipHtml
-            components={{
-              a: ({ href, title, children }) => {
-                const path = internalPagePath(href)
-                return path
-                  ? <InternalLink href={path} onNavigate={onNavigate}>{children}</InternalLink>
-                  : <a href={href} title={title}>{children}</a>
-              },
-            }}
-          >
-            {entity.bodyMarkdown}
-          </ReactMarkdown>
+          <WikiMarkdown body={entity.bodyMarkdown} updatedAt={entity.updatedAt}
+            navigation={entity.wikiNavigation} onNavigate={onNavigate} />
         ) : (
           <p className="muted-copy">Cette fiche ne contient pas encore de texte détaillé.</p>
         )}
@@ -497,10 +473,11 @@ function PublicApp() {
   }, [activeSlug, detailState])
 
   function navigate(href: string, focus = true) {
-    if (window.location.pathname === href) return
+    if (window.location.pathname + window.location.hash === href) return
     focusAfterNavigation.current = focus
     window.history.pushState(null, '', href)
     setRoute(readRoute())
+    requestAnimationFrame(scrollToWikiAnchor)
   }
 
   function onNavigate(event: MouseEvent<HTMLAnchorElement>, href: string) {

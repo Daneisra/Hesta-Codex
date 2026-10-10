@@ -13,6 +13,7 @@ import type { ProvenanceService } from './provenance.js'
 import { evidencePatchSchema, relationPatchSchema, relationWorkflowSchema, sourcePatchSchema } from './provenance-validation.js'
 import type { AdminStore } from './store.js'
 import type { GraphStore } from '../graph.js'
+import type { ReferenceService } from '../obsidian-references.js'
 import { patchSchema, validationMessage, workflowSchema } from './validation.js'
 import { createIngestionAdminRouter, type IngestionAdminStore } from '../ingestion/admin.js'
 
@@ -36,7 +37,7 @@ function editorLabel(response: { locals: Record<string, unknown> }): string {
 
 export function createAdminRouter(store: AdminStore, editorial: EditorialService,
   provenance?: ProvenanceService, manual?: ManualService, manualRelations?: ManualRelationService,
-  evidenceAdd?: EvidenceAddService, graph?: GraphStore, ingestion?: IngestionAdminStore) {
+  evidenceAdd?: EvidenceAddService, graph?: GraphStore, ingestion?: IngestionAdminStore, references?: ReferenceService) {
   const router = Router()
   if (ingestion) router.use('/ingestion', createIngestionAdminRouter(ingestion))
 
@@ -139,7 +140,8 @@ export function createAdminRouter(store: AdminStore, editorial: EditorialService
       response.status(404).json({ error: { code: 'NOT_FOUND', message: 'Fiche introuvable' } })
       return
     }
-    response.json(entity)
+    const obsidianReferences = await references?.detail(entity.id, entity.updatedAt)
+    response.json({ ...entity, ...(obsidianReferences ? { obsidianReferences } : {}) })
   })
 
   router.patch('/entities/:slug', async (request, response) => {

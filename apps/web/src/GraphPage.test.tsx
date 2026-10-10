@@ -63,6 +63,31 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); localStorage.clear(); window.history.replaceState(null, '', '/') })
 
 describe('exploration du graphe', () => {
+  it('shows distinct Obsidian arcs, diagnostics counters and preserves relation-only status filters', async () => {
+    const referenceGraph: AdminGraphResponse = { ...adminFixture, edges: [...adminFixture.edges, {
+      id: 'obsidian:a:b', source: 'a', target: 'b', type: 'OBSIDIAN_REFERENCE', origin: 'OBSIDIAN',
+      label: 'Référence Obsidian', inverseLabel: 'Mentionné par', symmetric: false, occurrences: 3,
+    }], obsidianStats: { occurrences: 6, resolved: 2, ambiguous: 1, missing: 1, unassociated: 1, unsupported: 0 } }
+    window.history.replaceState(null, '', '/admin/graphe')
+    vi.stubGlobal('fetch', vi.fn(async () => response(referenceGraph)))
+    const user = userEvent.setup(), open = vi.fn()
+    render(<GraphPage endpoint="/api/admin/graph" admin onOpenNode={open} />)
+    await screen.findByText('5 nœuds, 4 arêtes')
+    expect(screen.getByText(/6 occurrences · 2 références uniques résolues/)).toBeTruthy()
+    expect(screen.getByText(/Les filtres de statut/)).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'obsidian:a:b' }))
+    expect(screen.getByRole('heading', { name: 'Référence Obsidian sélectionnée' })).toBeTruthy()
+    expect(screen.getByText(/Mention textuelle · 3 occurrences/)).toBeTruthy()
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Type de connexion' }), 'OBSIDIAN_REFERENCE')
+    expect(screen.getByText('5 nœuds, 1 arêtes')).toBeTruthy()
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Choisir une fiche' }), 'a')
+    expect(screen.getByText(/1 référence Obsidian · 2 relations éditoriales/)).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Ouvrir la fiche' }))
+    expect(open).toHaveBeenCalledWith('ville')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Statut de relation' }), 'PUBLISHED')
+    expect(screen.getByText('5 nœuds, 0 arêtes')).toBeTruthy()
+    expect(window.location.search).not.toContain('fiche=')
+  })
   it('reloads a complete public URL and restores filters, categories, query, depth and isolation on popstate', async () => {
     const first = '/graphe?fiche=ville&profondeur=2&isoler=1&q=CITE&type=PLACE&lieu=CITY&relation=located_in&sans=ideas'
     window.history.replaceState(null, '', first)

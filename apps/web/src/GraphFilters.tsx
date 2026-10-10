@@ -64,7 +64,7 @@ export function GraphFiltersPanel({ data, admin, filters, activeGroups, query, r
         <option value="">Tous</option>
         {Object.entries(placeLabels).map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}
       </select></label>
-      <label>Type de relation<select value={filters.relationType} onChange={(event) => update('relationType', event.target.value)}>
+      <label>{admin ? 'Type de connexion' : 'Type de relation'}<select value={filters.relationType} onChange={(event) => update('relationType', event.target.value)}>
         <option value="">Tous</option>
         {types.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
       </select></label>
@@ -87,6 +87,11 @@ export function GraphFiltersPanel({ data, admin, filters, activeGroups, query, r
         </select></label>
       </>}
     </fieldset>
+    {admin && data.edges.some(edge => edge.origin === 'OBSIDIAN') && <p className="graph-reference-legend">
+      <span className="graph-edge-swatch" /> Relations éditoriales
+      {' · '}<span className="graph-edge-swatch graph-edge-swatch--reference" /> Références Obsidian
+      <small>Les filtres de statut et de visibilité de relation concernent les relations éditoriales et masquent les références textuelles.</small>
+    </p>}
     <div className="graph-filter-bottom">
       <div className="graph-legend"><h2>Catégories</h2><div className="graph-legend-buttons">
         {graphGroups.map((group) => <button type="button" key={group.id}
