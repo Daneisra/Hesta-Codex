@@ -8,6 +8,12 @@
 
 # Hesta Codex
 
+M3 commence avec un **convertisseur Obsidian local en lecture seule** :
+`npm run --silent lore:obsidian:prepare -- --help`. Il prépare des lots staging v1
+validés, sans connexion PostgreSQL, réseau ni création éditoriale. Inspection `--dry-run`,
+coffre/identifiant explicites, sélection progressive et sortie privée hors Git.
+Voir [docs/OBSIDIAN-IMPORT.md](docs/OBSIDIAN-IMPORT.md) pour les commandes et précautions.
+
 v0.7e ajoute la **mise à jour humaine depuis une association confirmée** : les valeurs finales
 partent de la fiche actuelle ; le staging est repris champ par champ, puis un récapitulatif
 Avant/Après précède l’application atomique (Entity + une Evidence + une Revision).

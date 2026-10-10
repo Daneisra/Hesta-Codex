@@ -98,6 +98,14 @@ test('ingestion bounds UTF-8 bytes, item count, metadata depth and rejects null/
   assert.equal(parseIngestionText(JSON.stringify({ version: 1, batch: { label: 'Fictif' }, items: [{ ...input(), metadata: nested }] })).success, false)
 })
 
+test('metadata rejects forbidden original keys before record projection, including nested prototype keys', () => {
+  for (const metadata of [JSON.parse('{"__proto__":"fiction"}'), JSON.parse('{"nested":{"__proto__":"fiction"}}'),
+    { constructor: 'fiction' }, { prototype: 'fiction' }, { api_key: 'fiction' }]) {
+    const result = parseIngestionText(JSON.stringify({ version: 1, batch: { label: 'Fictif' }, items: [{ ...input(), metadata }] }))
+    assert.equal(result.success, false)
+  }
+})
+
 test('content hash normalizes only line endings and Unicode NFC, retaining meaningful whitespace', () => {
   assert.equal(contentHash('é\r\na\rb'), contentHash('e\u0301\na\nb'))
   assert.notEqual(contentHash('a '), contentHash('a'))

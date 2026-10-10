@@ -60,7 +60,9 @@ export const ingestionSchema = z.strictObject({
       .refine(noCredential, 'Secret ou identifiant de connexion interdit'),
     contentType: z.string().max(100).regex(/^[a-z0-9][a-z0-9.+-]*\/[a-z0-9][a-z0-9.+-]*$/i).refine(noCredential, 'Secret interdit').default('text/plain'),
     observedAt: z.iso.datetime({ offset: true }).refine(value => Number(value.slice(0, 4)) >= 1, 'Année invalide').nullable().optional().default(null),
-    metadata: z.record(z.string(), z.unknown()).refine(metadataValid, 'Metadata excessives ou interdites').nullable().optional().default(null),
+    // Validate the original object before Zod's record projection can discard __proto__.
+    metadata: z.custom<Record<string, unknown>>(value => !!value && typeof value === 'object' && !Array.isArray(value) && metadataValid(value as Record<string, unknown>),
+      'Metadata excessives ou interdites').pipe(z.record(z.string(), z.unknown())).nullable().optional().default(null),
   })).min(1).max(MAX_INGEST_ITEMS),
 })
 export type IngestionDocument = z.infer<typeof ingestionSchema>

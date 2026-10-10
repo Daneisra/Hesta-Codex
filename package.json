@@ -23,7 +23,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "npm run prisma:generate && prisma db seed",
     "lore:import": "npm run prisma:generate && tsx apps/api/src/import/cli.ts",
-    "lore:ingest": "npm run prisma:generate && tsx apps/api/src/ingestion/cli.ts"
+    "lore:ingest": "npm run prisma:generate && tsx apps/api/src/ingestion/cli.ts",
+    "lore:obsidian:prepare": "tsx apps/api/src/ingestion/obsidian-cli.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.10.0",

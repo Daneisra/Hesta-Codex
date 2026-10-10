@@ -136,7 +136,7 @@ describe('mise à jour humaine depuis une association confirmée', () => {
   })
   for (const status of [401, 403, 404, 409, 500]) it(`preparation ${status} exposes no draft and no write action`, async () => {
     const calls = api({ readStatus: status }); render(<IngestionUpdateForm {...props} />); const alert = await screen.findByRole('alert')
-    expect(document.activeElement).toBe(alert)
+    await waitFor(() => expect(document.activeElement).toBe(alert))
     expect(screen.queryByLabelText('Titre')).toBeNull(); expect(screen.queryByRole('button', { name: 'Appliquer la mise à jour' })).toBeNull()
     if (status === 401 || status === 403) expect(props.onAccessError).toHaveBeenCalledWith(status)
     expect(calls.every(call => !call.init?.method)).toBe(true)
