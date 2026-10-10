@@ -1,7 +1,7 @@
 # M3 — préparation locale d’un coffre Obsidian
 
 Cette première étape prolonge le pipeline v0.7a–v0.7e. Elle convertit des notes locales en
-lots JSON staging v1. Elle ne reçoit pas encore le vrai coffre et ne déclenche ni ingestion
+lots JSON staging v1. Elle lit uniquement le coffre explicitement fourni et ne déclenche ni ingestion
 en base, matching, association, création/mise à jour de fiche, relation, événement ou publication.
 Le document d’architecture Hesta Hub décrit une cible ultérieure : ses correspondances
 dossiers→types et relations automatiques ne sont pas appliquées ici.
@@ -15,7 +15,8 @@ dossiers→types et relations automatiques ne sont pas appliquées ici.
 - `obsidian-markdown.ts` analyse défensivement le frontmatter avec `yaml`, extrait les seuls
   champs autorisés et inventorie les wikilinks. Aucun contenu YAML/Markdown/HTML n’est exécuté.
 - `obsidian.ts` réutilise `validateIngestionDocument` et `parseIngestionText` de `format.ts`.
-  Première passe : contrôler les notes, constituer et valider les lots, garder seulement leurs
+  Première passe : contrôler les notes, compter séparément les emplacements réservés,
+  constituer et valider les lots des notes admissibles, garder seulement leurs
   listes de fichiers et empreintes. Deuxième passe : relire, vérifier les empreintes et écrire.
   Les corps de tout le coffre ne sont pas conservés ensemble en mémoire.
 
@@ -77,6 +78,31 @@ Un renommage/déplacement crée une autre identité : **résolution humaine futu
 rapprochement par titre ou hash, aucune suppression de l’ancienne identité. Sans historique
 local, ce convertisseur ne peut pas reconnaître automatiquement les renommages/suppressions.
 
+## Notes vides : emplacements réservés
+
+Un fichier Markdown vide ou composé uniquement de caractères d’espacement est un
+**emplacement réservé**, distinct d’une note admissible et d’une erreur. Cela comprend
+espaces, tabulations, fins de ligne, espaces Unicode et BOM seul. La classification intervient
+après la lecture sécurisée : chemin, fichier régulier, stabilité pendant la lecture, limite de
+256 Kio et UTF-8 strict restent contrôlés. Un fichier trop volumineux, illisible, mal encodé ou
+contenant un NUL reste une erreur réelle ; il n’est pas assimilé à un emplacement réservé.
+
+Ces fichiers ne sont ni modifiés, ni remplis de Markdown artificiel, ni convertis en items
+staging. Aucun lot vide, Source en base ou Entity n’est créé pour eux. Un coffre composé
+uniquement d’emplacements réservés réussit avec zéro erreur, zéro lot et aucun dossier de
+sortie créé. Un frontmatter seul ou tout autre Markdown non vide suit les règles existantes ;
+le convertisseur ne décide pas si la description est suffisamment rédigée.
+
+Tous les chemins Markdown découverts restent dans l’index des wikilinks, y compris les
+emplacements réservés. **Un lien `FOUND` vers une note vide signifie seulement que le
+fichier existe dans le périmètre découvert : aucune Entity correspondante n’est garantie
+dans le Codex, et cette note n’est pas exportée au staging.** Le format staging v1 reste
+inchangé et continue de refuser un item dont le contenu est vide ou uniquement blanc.
+
+Le compteur concerne uniquement les notes sélectionnées et lues. `--limit N` sélectionne
+toujours N chemins, emplacements réservés compris ; il ne recherche pas N notes admissibles.
+Les fichiers différés restent dans l’index mais ne sont pas lus ni classés.
+
 ## Frontmatter et wikilinks
 
 Un frontmatter doit commencer à la première ligne, après le BOM éventuel, par `---` seul
@@ -122,7 +148,8 @@ aucune troncature. Ce reconnaisseur ne remplace pas tout le parseur Markdown/Obs
 pas qu’une Entity/association existe ou que l’ancre interne a été vérifiée. Les correspondances
 sont sensibles à la casse, sans décodage URL/NFC, par chemins relatifs/racine et basename ;
 plusieurs candidats donnent `AMBIGUOUS`, sans choix arbitraire. Le catalogue comprend les
-notes différées par `--limit`, sans lire leur contenu : FOUND ne garantit pas leur admissibilité.
+notes vides et notes différées par `--limit`, sans lire le contenu de ces dernières : FOUND
+ne garantit ni leur admissibilité, ni leur export, ni une Entity correspondante.
 Un sous-dossier limite aussi le catalogue. `MISSING`, `AMBIGUOUS`, `UNSUPPORTED` et
 `OUT_OF_SCOPE` sont conservés avec cible/alias/ancre dans le JSON et comptés en avertissements.
 La résolution ne fait aucun accès filesystem au chemin du lien.
@@ -162,7 +189,8 @@ sous Windows, vérifier les ACL du parent. Écriture dans `.part`, sync, publica
 atomique sans remplacement, puis retrait du `.part` : filesystem supportant les hardlinks
 requis (NTFS notamment). Les `.json` publiés sont toujours des lots complets validés.
 
-Modification d’une note entre les deux passes : refus et retrait des fichiers créés par cette
+Modification d’une note retenue pour l’export entre les deux passes, y compris si elle devient
+vide : refus et retrait des fichiers créés par cette
 exécution après contrôle du dossier. Erreur d’écriture : même nettoyage. Si le nettoyage échoue
 ou que le dossier est substitué, `EXPORT_FAILED_CLEANUP_REQUIRED` exige une inspection locale ;
 aucun nettoyage récursif aveugle. Une interruption brutale peut laisser un répertoire incomplet
@@ -173,15 +201,21 @@ la génération. Les contrôles stat/lstat/realpath/open et les empreintes ne co
 snapshot atomique de tout le coffre ; des créations/suppressions hors sélection après le scan
 ou une substitution malveillante concurrente de parents/montages ne sont pas couvertes comme
 par une sandbox OS. Le contenu de chaque note relue est toutefois comparé avant publication.
+Les emplacements réservés sont classés à la première passe et ne sont pas relus pour l’export :
+leur remplissage ultérieur nécessite une nouvelle exécution sur un coffre immobile.
 
 Rapport : Markdown détectés dans le périmètre visible ; notes sélectionnées/admissibles ;
+**emplacements réservés (notes vides), exclus de l’export**, sans erreur ni avertissement ;
 entrées ignorées (un dossier ignoré compte une entrée, son contenu n’est pas exploré) ; notes
 différées par limite ; nombres d’erreurs/avertissements ; lots estimés/validés/écrits ; comptes
-de wikilinks par statut. Les statistiques concernent les notes admissibles. Une note peut avoir
+de wikilinks par statut. Les statistiques de wikilinks concernent les notes admissibles.
+Les notes sélectionnées se répartissent entre admissibles, emplacements réservés et erreurs
+réelles (un diagnostic d’erreur par note refusée). Une note peut avoir
 plusieurs avertissements. Diagnostics limités à 100 lignes, total des suivants indiqué.
 « Note N » désigne la position 1-based dans la liste triée des notes sélectionnées, sans exposer
 son chemin. Tous les lots estimés sont vérifiés par le validateur existant. **Toute erreur de note
-bloque l’export entier**, même si d’autres notes sont admissibles. Coffre vide : zéro lot/dossier.
+bloque l’export entier**, même si d’autres notes sont admissibles ou réservées.
+Coffre vide ou composé uniquement d’emplacements réservés : zéro lot/dossier.
 Aucun compteur NEW/MODIFIED/UNCHANGED ni simulation de comparaison avec PostgreSQL.
 
 ## Essai fictif et validation locale
@@ -257,6 +291,23 @@ de code à tildes avec fins de ligne CR seules pouvaient fournir un faux titre/w
 Le test de régression couvre LF, CRLF et CR, délimiteurs backticks et tildes, avec conservation
 exacte du Markdown exporté et des notes sources. Aucun autre défaut bloquant identifié,
 aucune fonctionnalité supplémentaire ni changement du format staging v1.
+
+Validation du correctif M3.2 (notes vides) : **571 tests réussis = 331 API + 240 web**,
+dont 46 tests du convertisseur. Une fixture exclusivement fictive de 161 Markdown reproduit
+31 emplacements réservés, 130 notes admissibles et zéro erreur en dry-run puis à l’export ;
+seuls les 130 items admissibles apparaissent dans le lot staging v1. Cela ne constitue pas
+une nouvelle inspection du véritable coffre : son résultat reste à confirmer localement par
+son propriétaire, sous réserve d’absence d’autre erreur réelle.
+
+Les régressions couvrent fichiers zéro octet, espaces/tabulations/fins de ligne/Unicode/BOM,
+limite de taille conservée même pour des espaces, coffre entièrement réservé sans sortie,
+liens FOUND vers des notes vides, sélection par limite, exports identiques octet pour octet
+et SHA-256 identiques, erreurs réelles bloquant tous les lots malgré les emplacements réservés,
+ainsi qu’une note devenue vide entre les deux passes avec nettoyage des lots déjà écrits.
+Les sorties CLI restent dépourvues de données privées ; le test avec réseau/base interdits
+inclut un emplacement réservé. Le validateur staging v1 continue de refuser les items vides.
+Ce correctif ne modifie ni version du paquet, dépendance, schéma Prisma, migration ou workflow
+éditorial, ni règles de création d’Entity.
 
 ## Étape distincte : inspection du staging en base
 

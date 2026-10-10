@@ -7,7 +7,7 @@ import { join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import test from 'node:test'
-import { contentHash, itemIdentity, MAX_CONTENT_BYTES, MAX_INGEST_BYTES, parseIngestionText } from './format.js'
+import { contentHash, itemIdentity, MAX_CONTENT_BYTES, MAX_INGEST_BYTES, parseIngestionText, sha256 } from './format.js'
 import { parseObsidianArgs, runObsidianCommand } from './obsidian-command.js'
 import { extractMarkdown, linkIndex } from './obsidian-markdown.js'
 import { prepareObsidian, type ObsidianOptions } from './obsidian.js'
@@ -36,9 +36,90 @@ async function batches(output: string) {
 test('Obsidian empty vault has a complete zero report and creates no output', async () => fixture(async (root, _vault, options) => {
   const output = join(root, 'empty')
   const report = await prepareObsidian({ ...options, dryRun: false, output })
-  assert.equal(report.markdownDetected, 0); assert.equal(report.errors, 0); assert.equal(report.writtenBatches, 0)
+  assert.equal(report.markdownDetected, 0); assert.equal(report.placeholders, 0); assert.equal(report.errors, 0); assert.equal(report.writtenBatches, 0)
   assert.deepEqual(report.wikilinks, { FOUND: 0, MISSING: 0, AMBIGUOUS: 0, UNSUPPORTED: 0, OUT_OF_SCOPE: 0 })
   await assert.rejects(stat(output))
+}))
+
+test('Obsidian empty and whitespace-only notes are read-only placeholders, without errors or empty batches', async () => fixture(async (root, vault, options) => {
+  const contents = ['', ' \t\r\n\r\n ', '\uFEFF\u00A0\u2003\n', ' '.repeat(MAX_CONTENT_BYTES)]
+  const paths = contents.map((_content, index) => join(vault, `Placeholder-${index}.md`))
+  for (const [index, content] of contents.entries()) await writeFile(paths[index]!, content)
+  const before = await Promise.all(paths.map(path => stat(path)))
+  const output = join(root, 'export')
+  for (const dryRun of [true, false]) {
+    const report = await prepareObsidian({ ...options, dryRun, output })
+    assert.equal(report.markdownDetected, 4); assert.equal(report.selected, 4); assert.equal(report.placeholders, 4)
+    assert.equal(report.admissible, 0); assert.equal(report.errors, 0); assert.equal(report.warnings, 0)
+    assert.equal(report.estimatedBatches, 0); assert.equal(report.validatedBatches, 0); assert.equal(report.writtenBatches, 0)
+    assert.deepEqual(report.issues, []); await assert.rejects(stat(output))
+  }
+  const lines: string[] = []
+  assert.equal(await runObsidianCommand(['--vault', vault, '--vault-id', options.vaultId, '--source-label', options.sourceLabel,
+    '--output', output], line => lines.push(line)), 0)
+  assert.ok(lines.includes('Emplacements réservés (notes vides) : 4 ; exclus de l’export.'))
+  assert.ok(lines.includes('Erreurs : 0 ; avertissements : 0.')); await assert.rejects(stat(output))
+  for (const [index, path] of paths.entries()) {
+    assert.equal(await readFile(path, 'utf8'), contents[index]); assert.equal((await stat(path)).mtimeMs, before[index]!.mtimeMs)
+  }
+}))
+
+test('Obsidian links to placeholders remain FOUND while deterministic staging exports contain only nonblank notes', async () => fixture(async (root, vault, options) => {
+  const content = '# Article fictif\n[[Blank#Heading|Alias]] ![[Spaces]] [[Missing]]'
+  await writeFile(join(vault, 'Article.md'), content); await writeFile(join(vault, 'Blank.md'), '')
+  await writeFile(join(vault, 'Spaces.md'), ' \t\n')
+  // A frontmatter-only note contains actual Markdown and keeps the existing staging behavior.
+  const frontmatter = '---\ntitle: Fiche fictive\n---\n'
+  await writeFile(join(vault, 'Frontmatter.md'), frontmatter)
+  for (const name of ['first', 'second']) {
+    const report = await prepareObsidian({ ...options, dryRun: false, output: join(root, name) })
+    assert.equal(report.markdownDetected, 4); assert.equal(report.placeholders, 2); assert.equal(report.admissible, 2)
+    assert.equal(report.errors, 0); assert.equal(report.warnings, 1); assert.equal(report.writtenBatches, 1)
+    assert.equal(report.wikilinks.FOUND, 2); assert.equal(report.wikilinks.MISSING, 1)
+  }
+  const first = await readFile(join(root, 'first', 'obsidian-000001.json'), 'utf8')
+  const second = await readFile(join(root, 'second', 'obsidian-000001.json'), 'utf8')
+  assert.equal(first, second); assert.equal(sha256(first), sha256(second))
+  const document = (await batches(join(root, 'first')))[0]!
+  assert.deepEqual(document.items.map(item => item.externalId), ['Article.md', 'Frontmatter.md'])
+  assert.equal(document.items[0]!.content, content); assert.equal(document.items[1]!.content, frontmatter)
+  const links = document.items[0]!.metadata!.obsidian as { wikilinks: Array<{ status: string; path: string | null }> }
+  assert.deepEqual(links.wikilinks.map(link => [link.status, link.path]), [['FOUND', 'Blank.md'], ['FOUND', 'Spaces.md'], ['MISSING', null]])
+  // Placeholder support belongs to the converter, never to the unchanged staging v1 schema.
+  for (const empty of ['', ' \t\n']) assert.equal(parseIngestionText(JSON.stringify({ ...document,
+    items: [{ ...document.items[0], content: empty }] })).success, false)
+  assert.equal(await readFile(join(vault, 'Blank.md'), 'utf8'), '')
+  assert.equal(await readFile(join(vault, 'Spaces.md'), 'utf8'), ' \t\n')
+}))
+
+test('Obsidian fictitious 161-note vault reports 31 placeholders and exports exactly 130 admissible notes', async () => fixture(async (root, vault, options) => {
+  for (let index = 0; index < 161; index++) await writeFile(join(vault, `${String(index).padStart(3, '0')}.md`),
+    index < 31 ? (index % 2 ? ' \t\r\n' : '') : `# Fiction ${index}\n[[000]]`)
+  const output = join(root, 'export')
+  for (const dryRun of [true, false]) {
+    const report = await prepareObsidian({ ...options, dryRun, output })
+    assert.equal(report.markdownDetected, 161); assert.equal(report.selected, 161); assert.equal(report.placeholders, 31)
+    assert.equal(report.admissible, 130); assert.equal(report.errors, 0); assert.equal(report.warnings, 0)
+    assert.equal(report.wikilinks.FOUND, 130); assert.equal(report.validatedBatches, 1)
+    assert.equal(report.writtenBatches, dryRun ? 0 : 1)
+    if (dryRun) await assert.rejects(stat(output))
+  }
+  const items = (await batches(output)).flatMap(document => document.items)
+  assert.equal(items.length, 130); assert.equal(items[0]!.externalId, '031.md'); assert.equal(items.at(-1)!.externalId, '160.md')
+  assert.ok(items.every(item => item.content.trim().length > 0))
+}))
+
+test('Obsidian limit counts selected placeholders and keeps deferred empty notes in the link index', async () => fixture(async (root, vault, options) => {
+  await writeFile(join(vault, 'A.md'), ''); await writeFile(join(vault, 'B.md'), 'Fiction [[C]]'); await writeFile(join(vault, 'C.md'), '')
+  const output = join(root, 'export')
+  const first = await prepareObsidian({ ...options, limit: 1, output, dryRun: false })
+  assert.equal(first.selected, 1); assert.equal(first.placeholders, 1); assert.equal(first.admissible, 0)
+  assert.equal(first.deferred, 2); assert.equal(first.errors, 0); await assert.rejects(stat(output))
+  const second = await prepareObsidian({ ...options, limit: 2, output, dryRun: false })
+  assert.equal(second.markdownDetected, 3); assert.equal(second.selected, 2); assert.equal(second.placeholders, 1)
+  assert.equal(second.admissible, 1); assert.equal(second.deferred, 1); assert.equal(second.wikilinks.FOUND, 1)
+  assert.equal(second.errors, 0); assert.equal(second.writtenBatches, 1)
+  assert.equal((await batches(output))[0]!.items[0]!.externalId, 'B.md')
 }))
 
 test('Obsidian exports nested Unicode notes, exact BOM/CRLF and allowlisted metadata without source writes', async () => fixture(async (root, vault, options) => {
@@ -125,8 +206,8 @@ test('Obsidian ignores directory and file symlinks and refuses a symlink-selecte
 
 for (const [name, content, code] of [
   ['oversize', Buffer.alloc(MAX_CONTENT_BYTES + 1, 65), 'CONTENT_TOO_LARGE'],
+  ['oversize-whitespace', Buffer.alloc(MAX_CONTENT_BYTES + 1, 32), 'CONTENT_TOO_LARGE'],
   ['utf8', Buffer.from([0xc3, 0x28]), 'INVALID_UTF8'],
-  ['empty', '', 'NOTE_CONTENT_INVALID'],
   ['nul', 'Fictif\0', 'NOTE_CONTENT_INVALID'],
   ['title', '# ' + 'a'.repeat(251), 'NOTE_TITLE_INVALID'],
   ['unclosed', '---\ntitle: Fictif\n', 'FRONTMATTER_UNCLOSED'],
@@ -143,8 +224,10 @@ for (const [name, content, code] of [
 ] as const) {
   test(`Obsidian ${name} is diagnosed without writing any partial export`, async () => fixture(async (root, vault, options) => {
     await writeFile(join(vault, 'A-valid.md'), 'Fictif'); await writeFile(join(vault, 'B-invalid.md'), content)
+    await writeFile(join(vault, 'C-placeholder.md'), '')
     const output = join(root, 'export'), report = await prepareObsidian({ ...options, output, dryRun: false })
     assert.equal(report.errors, 1); assert.equal(report.admissible, 1); assert.equal(report.writtenBatches, 0)
+    assert.equal(report.placeholders, 1); assert.equal(report.selected, 3)
     assert.ok(report.issues.some(issue => issue.code === code)); await assert.rejects(stat(output))
   }))
 }
@@ -202,18 +285,20 @@ test('Obsidian splits on escaped JSON bytes before 500 items and admits the cont
   assert.ok(documents.flatMap(document => document.items).every(item => item.content === content))
 }))
 
-test('Obsidian detects source changes between passes and removes already written batches', async () => fixture(async (root, vault, options) => {
-  for (let i = 0; i <= 500; i++) await writeFile(join(vault, `${String(i).padStart(4, '0')}.md`), `Fiction ${i}`)
-  const output = join(root, 'export')
-  let change: Promise<void> | undefined
-  const watcher = watch(root, (_event, name) => {
-    if (String(name) === 'export' && !change) change = writeFile(join(vault, '0500.md'), 'Fiction changed during export')
-  })
-  try {
-    await assert.rejects(prepareObsidian({ ...options, output, dryRun: false }), /VAULT_CHANGED_DURING_EXPORT/)
-    await change; assert.ok(change); await assert.rejects(stat(output))
-  } finally { watcher.close() }
-}))
+for (const replacement of ['Fiction changed during export', ' \t\n']) {
+  test(`Obsidian detects source ${replacement.trim() ? 'changes' : 'becoming empty'} between passes and removes already written batches`, async () => fixture(async (root, vault, options) => {
+    for (let i = 0; i <= 500; i++) await writeFile(join(vault, `${String(i).padStart(4, '0')}.md`), `Fiction ${i}`)
+    const output = join(root, 'export')
+    let change: Promise<void> | undefined
+    const watcher = watch(root, (_event, name) => {
+      if (String(name) === 'export' && !change) change = writeFile(join(vault, '0500.md'), replacement)
+    })
+    try {
+      await assert.rejects(prepareObsidian({ ...options, output, dryRun: false }), /VAULT_CHANGED_DURING_EXPORT/)
+      await change; assert.ok(change); await assert.rejects(stat(output))
+    } finally { watcher.close() }
+  }))
+}
 
 test('Obsidian rejects external IDs over 1024 UTF-8 bytes without truncating their vault-relative path', async () => fixture(async (root, vault, options) => {
   let folder = vault
@@ -235,6 +320,7 @@ test('Obsidian bounded frontmatter refuses excessive depth and serialized metada
 test('Obsidian CLI accepts only explicit options and emits no private paths, labels, titles, content or native errors', async () => fixture(async (root, vault, options) => {
   const lines: string[] = [], args = ['--vault', vault, '--vault-id', options.vaultId, '--source-label', 'Private fictional label']
   await writeFile(join(vault, 'Private-fictional-title.md'), '# Private fictional title\nBody fictif [[private-unresolved]]')
+  await writeFile(join(vault, 'Private-fictional-placeholder.md'), '')
   assert.equal(await runObsidianCommand([...args, '--dry-run'], line => lines.push(line)), 0)
   assert.equal(await runObsidianCommand([...args, '--output', join(root, 'export')], line => lines.push(line)), 0)
   assert.equal(await runObsidianCommand([...args, '--subdir', 'Private-missing'], line => lines.push(line)), 1)
@@ -244,6 +330,7 @@ test('Obsidian CLI accepts only explicit options and emits no private paths, lab
     assert.throws(() => parseObsidianArgs(invalid))
   }
   const logs = lines.join('\n')
+  assert.match(logs, /Emplacements réservés \(notes vides\) : 1/)
   for (const value of [vault, 'Private', 'Body fictif', 'private-unresolved', 'ENOENT', 'NEW', 'MODIFIED', 'UNCHANGED']) assert.ok(!logs.includes(value))
 }))
 
@@ -256,6 +343,7 @@ test('Obsidian rejects relative/network paths, invalid Source identity and non-e
 
 test('Obsidian real CLI succeeds with database/network access forbidden and no configured environment', async () => fixture(async (root, vault) => {
   await writeFile(join(vault, 'Fictif.md'), 'Texte fictif [[Absent]]')
+  await writeFile(join(vault, 'Placeholder.md'), '')
   const cwd = fileURLToPath(new URL('../../../../', import.meta.url))
   const module = new URL('./obsidian-command.ts', import.meta.url).href
   const guard = `import net from 'node:net'; import http from 'node:http'; import https from 'node:https';
@@ -267,5 +355,7 @@ test('Obsidian real CLI succeeds with database/network access forbidden and no c
     '--', '--vault', vault, '--vault-id', 'fiction', '--source-label', 'Fiction', '--output', join(root, 'export')],
   { cwd, env: { ...process.env, DATABASE_URL: 'postgresql://forbidden:forbidden@127.0.0.1:1/forbidden' }, encoding: 'utf8', timeout: 30_000 })
   assert.equal(result.stderr, ''); assert.match(result.stdout, /lots écrits : 1/)
+  assert.match(result.stdout, /Emplacements réservés \(notes vides\) : 1/)
   assert.equal((await batches(join(root, 'export'))).length, 1)
+  assert.deepEqual((await batches(join(root, 'export')))[0]!.items.map(item => item.externalId), ['Fictif.md'])
 }))

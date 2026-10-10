@@ -24,6 +24,7 @@ export async function runObsidianCommand(args: string[], write: (line: string) =
     const options = parseObsidianArgs(args), report = await prepareObsidian(options)
     write(options.dryRun ? 'Obsidian : inspection locale sans écriture.' : 'Obsidian : préparation locale du staging.')
     write(`Markdown détectés : ${report.markdownDetected} ; sélectionnés : ${report.selected} ; admissibles : ${report.admissible}.`)
+    write(`Emplacements réservés (notes vides) : ${report.placeholders} ; exclus de l’export.`)
     write(`Entrées ignorées : ${report.ignoredEntries} ; notes différées par limite : ${report.deferred}.`)
     write(`Erreurs : ${report.errors} ; avertissements : ${report.warnings}.`)
     write(`Lots estimés : ${report.estimatedBatches} ; format v1 validé : ${report.validatedBatches} ; lots écrits : ${report.writtenBatches}.`)

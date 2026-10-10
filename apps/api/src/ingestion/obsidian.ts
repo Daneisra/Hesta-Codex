@@ -8,7 +8,7 @@ export interface ObsidianOptions {
   vault: string; vaultId: string; sourceLabel: string; subdir?: string; limit?: number; output?: string; dryRun: boolean
 }
 export interface ObsidianReport {
-  markdownDetected: number; selected: number; admissible: number; ignoredEntries: number; deferred: number
+  markdownDetected: number; selected: number; admissible: number; placeholders: number; ignoredEntries: number; deferred: number
   errors: number; warnings: number; validatedBatches: number; estimatedBatches: number; writtenBatches: number
   wikilinks: Record<WikiLink['status'], number>
   issues: Array<{ note: number; severity: 'error' | 'warning'; code: string }>; omittedIssues: number
@@ -32,6 +32,8 @@ function validateOptions(options: ObsidianOptions) {
 }
 async function noteItem(vault: string, file: VaultFile, source: IngestionInput['source'], index: LinkIndex) {
   const { content, observedAt } = await readNote(vault, file)
+  // Classify only after the bounded, strict UTF-8 read; placeholders never become staging items.
+  if (!content.trim()) return { kind: 'placeholder' as const }
   const extracted = extractMarkdown(content, file.path, index)
   const parsed = validateIngestionDocument(envelope([{
     source, externalId: file.path, locator: file.path, content, contentType: 'text/markdown', observedAt,
@@ -42,7 +44,7 @@ async function noteItem(vault: string, file: VaultFile, source: IngestionInput['
     throw new ObsidianError(['title', 'externalId', 'locator', 'content', 'metadata', 'observedAt'].includes(field ?? '')
       ? `NOTE_${field!.toUpperCase()}_INVALID` : 'NOTE_FORMAT_INVALID')
   }
-  return { item: parsed.document.items[0]!, extracted }
+  return { kind: 'admissible' as const, item: parsed.document.items[0]!, extracted }
 }
 
 // Two bounded passes: retain file/digest plans, never all vault bodies in memory.
@@ -52,7 +54,7 @@ export async function prepareObsidian(options: ObsidianOptions): Promise<Obsidia
   const scanned = await scanVault(vault, options.subdir), selected = scanned.files.slice(0, options.limit)
   const index = linkIndex(scanned.files.map(file => file.path))
   const report: ObsidianReport = {
-    markdownDetected: scanned.files.length, selected: selected.length, admissible: 0, ignoredEntries: scanned.ignored,
+    markdownDetected: scanned.files.length, selected: selected.length, admissible: 0, placeholders: 0, ignoredEntries: scanned.ignored,
     deferred: scanned.files.length - selected.length, errors: 0, warnings: 0, validatedBatches: 0, estimatedBatches: 0,
     writtenBatches: 0, wikilinks: { FOUND: 0, MISSING: 0, AMBIGUOUS: 0, UNSUPPORTED: 0, OUT_OF_SCOPE: 0 }, issues: [], omittedIssues: 0,
   }
@@ -71,7 +73,9 @@ export async function prepareObsidian(options: ObsidianOptions): Promise<Obsidia
   }
   for (const [ordinal, file] of selected.entries()) {
     try {
-      const { item, extracted } = await noteItem(vault, file, source, index)
+      const result = await noteItem(vault, file, source, index)
+      if (result.kind === 'placeholder') { report.placeholders++; continue }
+      const { item, extracted } = result
       const serialized = JSON.stringify(item), bytes = Buffer.byteLength(serialized, 'utf8')
       // Count actual escaped JSON bytes, including commas, defaults and the final newline.
       const headerBytes = Buffer.byteLength(JSON.stringify(envelope([], batches.length)), 'utf8') + 1
@@ -92,7 +96,9 @@ export async function prepareObsidian(options: ObsidianOptions): Promise<Obsidia
     for (const [ordinal, batch] of batches.entries()) {
       const values: IngestionInput[] = []
       for (const planned of batch.files) {
-        const { item } = await noteItem(vault, planned.file, source, index)
+        const result = await noteItem(vault, planned.file, source, index)
+        if (result.kind === 'placeholder') throw new ObsidianError('VAULT_CHANGED_DURING_EXPORT')
+        const { item } = result
         if (sha256(JSON.stringify(item)) !== planned.digest) throw new ObsidianError('VAULT_CHANGED_DURING_EXPORT')
         values.push(item)
       }
