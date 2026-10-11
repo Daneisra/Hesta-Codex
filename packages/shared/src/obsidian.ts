@@ -13,7 +13,11 @@ export interface WikiNavigation {
   links: Array<{ start: number; end: number; label: string; href: string | null }>
 }
 export type WikiStatus = 'RESOLVED' | 'MISSING' | 'AMBIGUOUS' | 'UNASSOCIATED' | 'UNSUPPORTED' | 'OUT_OF_SCOPE'
-export interface ReferenceConnection { id: string; slug: string; title: string; occurrences: number }
+export interface ReferenceConnection {
+  id: string; slug: string; title: string; occurrences: number
+  archived?: boolean
+  origin?: { sourceId: string; path: string; excerpt: string | null }
+}
 export interface ReferenceStats {
   occurrences: number; resolved: number; ambiguous: number; missing: number; unassociated: number; unsupported: number
 }

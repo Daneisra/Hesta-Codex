@@ -10,6 +10,8 @@ import { createApp } from './app.js'
 import { readAuthConfig } from './auth/config.js'
 import { sessionHash } from './auth/session.js'
 import { createPrismaStore } from './store.js'
+import { createPrismaGraphStore } from './graph.js'
+import { buildReferenceCatalog, type ReferenceEntity } from './obsidian-references.js'
 
 const now = new Date('2026-09-29T12:00:00.000Z')
 const barolt = '11111111-1111-4111-8111-111111111111'
@@ -290,6 +292,49 @@ test('all write failures roll back Source, Relation and Evidence; global writes 
   await assert.rejects(conflict.service.create(manualRelationSchema.parse(input)),
     { code: 'RELATION_CONFLICT', status: 409 })
   assert.equal(conflict.state().sources.length, 0)
+})
+
+test('Obsidian-assisted creation preserves notes and provenance while admin graph keeps both edge kinds', async () => {
+  const db = memoryDatabase()
+  const body = 'Exemple inventé : [[Dossier/Cible|Alias]].'
+  db.change(state => {
+    state.entities[0]!.title = 'Auteur fictif'; state.entities[0]!.bodyMarkdown = body
+    state.entities[1]!.title = 'Cible'; state.entities[1]!.bodyMarkdown = 'Texte fictif de contrôle.'
+    state.sources.push({ id: sourceId, kind: 'OBSIDIAN', label: 'Coffre fictif', externalId: 'synthetic-vault',
+      url: null, authorLabel: null, publishedAt: null, visibility: 'GM', createdAt: now, updatedAt: now })
+  })
+  const before = db.state()
+  await db.service.create(manualRelationSchema.parse({ ...input, source: { mode: 'existing', sourceId },
+    evidence: { ...input.evidence, sourceExcerpt: body, locator: 'Dossier/Auteur.md' } }))
+  const state = db.state()
+  assert.deepEqual(state.entities, before.entities)
+  assert.deepEqual(state.sources, before.sources)
+  assert.deepEqual(state.revisions, before.revisions)
+  assert.deepEqual(db.operations, ['relation', 'evidence'])
+  assert.equal(state.evidence[0]!.sourceExcerpt, body)
+  assert.equal(state.evidence[0]!.locator, 'Dossier/Auteur.md')
+  assert.equal(state.evidence[0]!.entityId, null)
+  assert.equal(state.evidence[0]!.relationId, state.relations[0]!.id)
+  const catalog = buildReferenceCatalog(state.entities as unknown as ReferenceEntity[], [
+    { sourceId, entityId: barolt, path: 'Dossier/Auteur.md', metadata: {} },
+    { sourceId, entityId: archipel, path: 'Dossier/Cible.md', metadata: {} },
+  ])
+  const prisma = {
+    entity: { async findMany(query: { where?: { status: string; visibility: string } }) {
+      return state.entities.filter(row => !query.where || row.status === query.where.status && row.visibility === query.where.visibility)
+    } },
+    relation: { async findMany(query: { where?: { status: string; visibility: string } }) {
+      return state.relations.filter(row => !query.where || row.status === query.where.status && row.visibility === query.where.visibility)
+        .map(row => ({ ...row, relationType: types[0] }))
+    } },
+  } as unknown as PrismaClient
+  const store = createPrismaGraphStore(prisma, { async graph() { return catalog.graph() },
+    async detail(id, stamp) { return catalog.detail(id, stamp) }, async navigation(id, stamp) { return catalog.navigation(id, stamp, true) } })
+  const admin = await store.adminGraph()
+  assert.equal(admin.edges.length, 2)
+  assert.equal(admin.edges.filter(edge => edge.origin === 'OBSIDIAN').length, 1)
+  assert.equal(admin.edges.filter(edge => edge.type === 'located_in').length, 1)
+  assert.deepEqual(await store.publicGraph(), { nodes: [], edges: [] })
 })
 
 test('strict relation validation reuses Source and Evidence rules', () => {

@@ -64,3 +64,60 @@ chargent pas toute la base.
 Une Relation `PROPOSED`, même `PUBLIC`, n'apparaît jamais dans l'API publique. Après publication
 explicite, elle n'y apparaît que si elle et **ses deux fiches** sont `PUBLISHED + PUBLIC`.
 Source et Evidence restent privées.
+
+## Création assistée depuis Obsidian
+
+Les listes « Fiches mentionnées » et « Fiches qui mentionnent cette fiche » proposent
+« Définir une relation » pour une destination résolue, distincte et non archivée.
+L’action ouvre le même formulaire et utilise le même `POST /api/admin/relations`.
+Une référence entrante conserve le sens original : la fiche contenant le wikilink est
+le départ. Les UUID et slugs des deux fiches permettent de vérifier les homonymes.
+« Inverser les fiches » corrige le sens ; les options inverses du catalogue normalisent
+toujours le stockage côté serveur. Aucun type n’est choisi automatiquement.
+
+La provenance est calculée depuis l’association Obsidian confirmée de la note contenant
+la mention, jamais depuis le nom de la cible. Une origine unique Source/chemin permet
+de proposer le repère (250 caractères maximum et sans espaces périphériques requis,
+sinon laissé vide plutôt que modifié par la validation existante) et
+un fragment exact du Markdown autour de la première occurrence résolue vers cette fiche
+(180 caractères de contexte de chaque côté, espaces périphériques retirés ; aucun extrait
+si le wikilink dépasse 4 000 caractères). Plusieurs origines distinctes laissent ces
+champs vides. La Source n’est présélectionnée que si elle est aussi vérifiée dans les
+preuves de la note et de type `OBSIDIAN`. Sinon, elle doit être choisie manuellement.
+Le formulaire reste entièrement éditable ; changer la cible efface l’extrait et l’énoncé
+pour ne pas attribuer la mention initiale à une autre destination.
+
+Après choix du type, « Utiliser cet énoncé » propose une formulation à vérifier et à
+modifier. Ce texte n’est pas une citation ni une preuve automatique de sa signification.
+La création exige toujours une Source, une Evidence et une confirmation du récapitulatif.
+Relation et Evidence sont `GM` par défaut ; la Relation reste `PROPOSED`.
+
+La sélection assistée reste en mémoire React, sans paramètres d’URL, état d’historique
+ou stockage navigateur. Un rechargement ouvre donc le formulaire manuel classique.
+Après réussite, le parcours revient à la fiche où la référence a été sélectionnée,
+relit ses relations et conserve ses références automatiques. Les relations existantes
+sont signalées dans la liste. Le même type et le même sens sont bloqués dans le formulaire ;
+un autre type peut être choisi explicitement. Un conflit concurrent recharge les relations
+sans effacer la saisie. Le verrou immédiat du bouton et l’unicité transactionnelle évitent
+les doubles créations, y compris lors d’une relance après perte de réponse réseau.
+
+Les références absentes, ambiguës, sans fiche associée et les auto-références ne proposent
+aucune création directe. Un archivage/suppression après ouverture est aussi vérifié côté
+serveur. Aucun Markdown, association, Source existante ou Revision Entity n’est modifié.
+Le graphe admin garde les deux types de connexions ; les filtres et protections du graphe
+public restent inchangés. Aucun traitement groupé ou migration n’est ajouté.
+
+La revue locale utilise des notes et Sources fictives, des stores transactionnels simulés
+et un navigateur Edge avec API locale simulée : aucune base réelle ni coffre privé n’est
+consulté. Les contrôles couvrent les deux directions, les homonymes, les types inverses et
+symétriques, la provenance exacte, les doublons/conflits, une réponse perdue après création,
+les sessions expirées et les protections publiques. Le parcours et le graphe de 130 fiches /
+296 références sont vérifiés à 1920 × 1080, 3840 × 2160, 768 × 1024 et 390 × 844.
+Ces simulations ne remplacent pas la vérification humaine du sens des relations ni une
+recette après déploiement avec la session Discord réelle.
+
+Dans cette session Windows, les délais DOM standards ont provoqué des dépassements,
+y compris dans les suites antérieures. La suite complète (412 tests API et 284 tests web)
+a ensuite réussi avec une configuration temporaire hors dépôt : attente DOM de 10 secondes
+et délai par test de 60 secondes, sans exclusion ni modification des assertions.
+La configuration de tests du dépôt reste inchangée.

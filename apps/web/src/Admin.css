@@ -9,7 +9,8 @@
 .admin-user { color: #dcc18e; font-size: .9rem; }
 .admin-logout, .admin-pagination button, .admin-state button, .admin-message button,
 .admin-edit-button, .admin-publication button, .admin-editor button, .admin-form-error button,
-.admin-evidence-list button, .admin-relation-list button, .admin-provenance-editor button {
+.admin-evidence-list button, .admin-relation-list button, .admin-provenance-editor button,
+.admin-create button, .obsidian-references button {
   border: 1px solid #5b6780;
   border-radius: .45rem;
   padding: .55rem .8rem;
@@ -18,6 +19,7 @@
 }
 .admin-logout:hover, .admin-pagination button:hover, .admin-state button:hover { border-color: #d2b77e; }
 .admin-pagination button:disabled { cursor: default; opacity: .45; }
+.admin-create button:disabled, .obsidian-references button:disabled { opacity: .5; cursor: not-allowed; }
 
 .admin-main { max-width: 1480px; margin: auto; padding: clamp(1rem, 3vw, 2.5rem); }
 .admin-page-heading { margin: 1.2rem 0 2rem; }
@@ -149,5 +151,6 @@
 }
 .obsidian-references { overflow-wrap: anywhere; }
 .obsidian-references li { margin-block: .5rem; }
+.obsidian-references li > button { margin: .35rem 0 .35rem .65rem; }
 .obsidian-references summary { cursor: pointer; }
 .markdown-body [id^="obsidian-"] { scroll-margin-top: 2rem; }

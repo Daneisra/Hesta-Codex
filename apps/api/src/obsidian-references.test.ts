@@ -17,6 +17,47 @@ function origin(entityId: string, path: string, metadata: unknown = {}, sourceId
   return { entityId, path, metadata, sourceId }
 }
 
+test('assisted provenance follows the mentioning note in both directions, using an exact excerpt', () => {
+  const body = '  Une phrase de test : [[Dossier/Cible|Alias]] et [[Cible#Section]].\n  '
+  const catalog = buildReferenceCatalog([entity('owner', 'Auteur', body), entity('target', 'Cible', '## Section')], [
+    origin('owner', 'Dossier/Auteur.md', {}, 'source-owner'), origin('target', 'Dossier/Cible.md', {}, 'source-owner'),
+  ])
+  const outgoing = catalog.detail('owner', stamp)!.outgoing[0]!
+  const incoming = catalog.detail('target', stamp)!.incoming[0]!
+  assert.deepEqual(outgoing.origin, { sourceId: 'source-owner', path: 'Dossier/Auteur.md', excerpt: body.trim() })
+  assert.deepEqual(incoming.origin, outgoing.origin)
+  assert.equal(outgoing.occurrences, 2)
+  assert.equal(body.includes(outgoing.origin!.excerpt!), true)
+  assert.equal(catalog.graph().edges[0]!.source, 'owner')
+  assert.equal(JSON.stringify(catalog.graph()).includes('source-owner'), false)
+  assert.equal(JSON.stringify(catalog.navigation('owner', stamp, false)).includes('Dossier/Auteur.md'), false)
+})
+
+test('uncertain note provenance is omitted, while archived destinations are marked only in admin details', () => {
+  const entities = [entity('owner', 'Auteur', '[[Cible]]'), entity('target', 'Cible', '', { status: 'ARCHIVED' })]
+  const origins = [origin('owner', 'Auteur.md'), origin('owner', 'Autre/Auteur.md'), origin('target', 'Cible.md')]
+  const catalog = buildReferenceCatalog(entities, origins)
+  assert.equal(catalog.detail('owner', stamp)!.outgoing[0]!.origin, undefined)
+  assert.equal(catalog.detail('owner', stamp)!.outgoing[0]!.archived, true)
+  assert.equal(catalog.detail('target', stamp)!.incoming[0]!.archived, undefined)
+  assert.equal(catalog.navigation('owner', stamp, true), undefined)
+})
+
+test('provenance stays admin-only when a public note mentions private and proposed destinations', () => {
+  const catalog = buildReferenceCatalog([
+    entity('owner', 'Auteur', '[[Privée]] [[Proposition]]', { status: 'PUBLISHED', visibility: 'PUBLIC' }),
+    entity('private', 'Privée', '', { status: 'PUBLISHED', visibility: 'GM' }),
+    entity('proposed', 'Proposition', '', { status: 'PROPOSED', visibility: 'PUBLIC' }),
+  ], [origin('owner', 'Privé/Auteur.md', {}, 'private-source'), origin('private', 'Privée.md', {}, 'private-source'),
+    origin('proposed', 'Proposition.md', {}, 'private-source')])
+  assert.equal(catalog.detail('owner', stamp)!.outgoing.length, 2)
+  const publicProjection = catalog.navigation('owner', stamp, true)!
+  assert.deepEqual(publicProjection.links.map(link => link.href), [null, null])
+  assert.equal(JSON.stringify(publicProjection).includes('private-source'), false)
+  assert.equal(JSON.stringify(publicProjection).includes('Privé/Auteur.md'), false)
+  assert.equal(JSON.stringify(publicProjection).includes('origin'), false)
+})
+
 // Names supplied in the acceptance cases; only synthetic link strings, no actual lore or vault content.
 for (const [title, targets] of [
   ['Goliath', ['Dipovia', 'Vruliwen']], ['Inquisition', ['Comosicus Thiri', 'Zemantis']],

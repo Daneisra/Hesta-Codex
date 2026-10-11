@@ -138,7 +138,16 @@ export function buildReferenceCatalog(entities: ReferenceEntity[], origins: Refe
   function connections(id: string, direction: 'incoming' | 'outgoing'): ReferenceConnection[] {
     return [...edges.values()].filter(edge => (direction === 'incoming' ? edge.target : edge.source) === id).map(edge => {
       const other = byId.get(direction === 'incoming' ? edge.source : edge.target)!
-      return { id: other.id, slug: other.slug, title: other.title, occurrences: edge.occurrences! }
+      const owner = byId.get(edge.source)!
+      const origins = new Map((contexts.get(owner.id) ?? []).map(origin => [JSON.stringify([origin.sourceId, origin.path]), origin]))
+      const origin = origins.size === 1 ? [...origins.values()][0] : undefined
+      const occurrence = resolved.get(owner.id)?.find(result => result.entity?.id === edge.target)?.occurrence
+      // An exact fragment is context for human review, never proof of a semantic relation.
+      const excerpt = occurrence && occurrence.end - occurrence.start <= 4000
+        ? owner.bodyMarkdown.slice(Math.max(0, occurrence.start - 180), Math.min(owner.bodyMarkdown.length, occurrence.end + 180)).trim() : null
+      return { id: other.id, slug: other.slug, title: other.title, occurrences: edge.occurrences!,
+        ...(other.status === 'ARCHIVED' ? { archived: true } : {}),
+        ...(origin ? { origin: { sourceId: origin.sourceId, path: origin.path, excerpt } } : {}) }
     }).sort((a, b) => a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0)
   }
   function detail(id: string, updatedAt: string): ObsidianReferences | undefined {

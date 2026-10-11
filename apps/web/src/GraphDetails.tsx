@@ -41,7 +41,7 @@ export const GraphDetails = memo(function GraphDetails({ data, index, totalIndex
       <h2>{selectedEdge.origin === 'OBSIDIAN' ? 'Référence Obsidian sélectionnée' : 'Relation sélectionnée'}</h2>
       <p>{edgeFrom.title} {selectedEdge.symmetric ? '↔' : '→'} {selectedEdge.label} {selectedEdge.symmetric ? '↔' : '→'} {edgeTo.title}</p>
       <small>Type : {selectedEdge.type}</small>
-      {selectedEdge.origin === 'OBSIDIAN' && <p>Mention textuelle · {selectedEdge.occurrences} occurrences. Aucune relation éditoriale créée.</p>}
+      {selectedEdge.origin === 'OBSIDIAN' && <p>Mention textuelle · {selectedEdge.occurrences} occurrences. Indépendante des relations éditoriales.</p>}
     </div>}
     {selected ? <div className="graph-selected"><p className="section-eyebrow">Fiche sélectionnée</p>
       <h2 ref={headingRef} tabIndex={-1}>{selected.title}</h2>

@@ -8,6 +8,7 @@ import type {
 import { AdminEditor } from './AdminEditor'
 import { AdminCreate } from './AdminCreate'
 import { AdminCreateRelation } from './AdminCreateRelation'
+import type { ReferenceRelationSeed } from './reference-relation'
 import { AdminProvenance } from './AdminProvenance'
 import { getAdminJson as getJson, HttpError, errorStatus } from './admin-http'
 import './Admin.css'
@@ -79,7 +80,7 @@ function StateMessage({ children }: { children: string }) {
 }
 
 function Detail({ entity, onNavigate, editing, provenanceEditing, busy, authExpired, error, onEdit, onCancel, onSave,
-  onDirtyChange, onWorkflow, onReload, onProvenanceMutation, onProvenanceEditingChange, evidenceNotice }: {
+  onDirtyChange, onWorkflow, onReload, onProvenanceMutation, onProvenanceEditingChange, evidenceNotice, onDefine }: {
   entity: AdminEntityDetail
   onNavigate: (event: MouseEvent<HTMLAnchorElement>, path: string) => void
   editing: boolean
@@ -97,6 +98,7 @@ function Detail({ entity, onNavigate, editing, provenanceEditing, busy, authExpi
   onProvenanceMutation: (path: string, method: 'PATCH' | 'POST', body: unknown) => Promise<boolean>
   onProvenanceEditingChange: (editing: boolean) => void
   evidenceNotice: boolean
+  onDefine: (seed: ReferenceRelationSeed, fromSlug: string) => void
 }) {
   return <article className="admin-detail">
     <a className="admin-back" href="/admin" onClick={(event) => onNavigate(event, '/admin')}>← Tableau de bord</a>
@@ -151,7 +153,8 @@ function Detail({ entity, onNavigate, editing, provenanceEditing, busy, authExpi
         </>}
       </section>}
     {!editing && entity.obsidianReferences?.updatedAt === entity.updatedAt &&
-      <ObsidianReferences references={entity.obsidianReferences} onNavigate={onNavigate} />}
+      <ObsidianReferences references={entity.obsidianReferences} onNavigate={onNavigate} entity={entity}
+        onDefine={onDefine} disabled={busy || authExpired || provenanceEditing} />}
     <AdminProvenance entity={entity} onNavigate={onNavigate} onMutate={onProvenanceMutation} error={error}
       onDirtyChange={onDirtyChange} onEditingChange={onProvenanceEditingChange} busy={busy} disabled={authExpired || editing} />
     <section className="admin-section">
@@ -195,6 +198,8 @@ export function AdminApp() {
     code?: string; issues?: Array<{ path: string; message: string }> } | null>(null)
   const [createdNotice, setCreatedNotice] = useState(false)
   const [createdRelationNotice, setCreatedRelationNotice] = useState(false)
+  const [relationSeed, setRelationSeed] = useState<ReferenceRelationSeed | null>(null)
+  const relationPending = useRef(false)
   const [evidenceNotice, setEvidenceNotice] = useState(false)
   const mainRef = useRef<HTMLElement>(null)
   const focusAfterNavigation = useRef(false)
@@ -213,6 +218,10 @@ export function AdminApp() {
 
   useEffect(() => {
     const onPop = () => {
+      if (relationPending.current) {
+        window.history.pushState(null, '', currentPath.current)
+        return
+      }
       if (dirtyRef.current && !window.confirm('Quitter cette fiche et perdre les modifications non enregistrées ?')) {
         window.history.pushState(null, '', currentPath.current)
         return
@@ -224,6 +233,7 @@ export function AdminApp() {
       setAuthExpired(false)
       setCreatedNotice(false)
       setCreatedRelationNotice(false)
+      setRelationSeed(null)
       setEvidenceNotice(false)
       focusAfterNavigation.current = true
       setRoute(readRoute())
@@ -317,8 +327,13 @@ export function AdminApp() {
 
   useEffect(() => { document.title = 'Administration · Hesta Codex' }, [])
 
-  function navigateTo(path: string) {
+  function navigateTo(path: string, seed: ReferenceRelationSeed | null = null) {
+    setRelationSeed(seed)
     if (window.location.pathname + window.location.hash !== path) {
+      // A concurrent creation changes relations without changing the Entity timestamp or slug.
+      if (route.view === 'relation-create' && detailPath.exec(path)?.[1] === activeSlug) {
+        setDetailRefresh(value => value + 1)
+      }
       currentPath.current = path
       setEditing(false)
       setProvenanceEditing(false)
@@ -338,11 +353,13 @@ export function AdminApp() {
   function onNavigate(event: MouseEvent<HTMLAnchorElement>, path: string) {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
     event.preventDefault()
+    if (relationPending.current) return
     if (editDirty && !window.confirm('Quitter cette fiche et perdre les modifications non enregistrées ?')) return
     navigateTo(path)
   }
 
   async function logout() {
+    if (relationPending.current) return
     if (editDirty && !window.confirm('Se déconnecter et perdre les modifications non enregistrées ?')) return
     try {
       const response = await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin', cache: 'no-store' })
@@ -353,6 +370,7 @@ export function AdminApp() {
       setProvenanceEditing(false)
       setEditDirty(false)
       setRoute({ view: 'dashboard' })
+      setRelationSeed(null)
       setSession({ phase: 'ready', data: { authenticated: false, isAdmin: false, user: null } })
     } catch { setSession({ phase: 'error', status: null }) }
   }
@@ -430,19 +448,23 @@ export function AdminApp() {
   }
 
   async function createRelation(input: AdminManualRelationRequest) {
-    if (busy || authExpired || !isAdmin || route.view !== 'relation-create') return
+    if (relationPending.current || busy || authExpired || !isAdmin || route.view !== 'relation-create') return
+    relationPending.current = true
     setBusy(true)
     setMutationError(null)
     try {
       const updated = await mutateJson<AdminEntityDetail>('/api/admin/relations', 'POST', input)
       mutationSucceeded(updated)
       setCreatedRelationNotice(true)
-      const path = `/admin/fiches/${updated.slug}`
+      const returnSlug = relationSeed?.returnSlug ?? updated.slug
+      setRelationSeed(null)
+      const path = `/admin/fiches/${returnSlug}`
       currentPath.current = path
       focusAfterNavigation.current = true
       window.history.pushState(null, '', path)
-      setRoute({ view: 'entity', slug: updated.slug })
+      setRoute({ view: 'entity', slug: returnSlug })
     } catch (error) { mutationFailed(error) }
+    finally { relationPending.current = false }
   }
 
   async function provenanceMutation(path: string, method: 'PATCH' | 'POST', body: unknown): Promise<boolean> {
@@ -488,7 +510,8 @@ export function AdminApp() {
         <span className="brand-wordmark"><small>HESTA · CODEX</small><strong>Administration</strong></span></a>
       <div className="header-actions"><a className="hub-link" href="/">Bibliothèque publique</a>
         {user && <span className="admin-user">{user.displayName ?? user.username}</span>}
-        {user && <button className="admin-logout" type="button" onClick={() => void logout()}>Se déconnecter</button>}
+        {user && <button className="admin-logout" type="button" disabled={busy && route.view === 'relation-create'}
+          onClick={() => void logout()}>Se déconnecter</button>}
       </div>
     </header>
     <main id="admin-main" className="admin-main" ref={mainRef} tabIndex={-1}>
@@ -577,7 +600,7 @@ export function AdminApp() {
             <p>Une fiche archivée ne peut pas recevoir de nouvelle relation.</p>
             <a href={`/admin/fiches/${detail.data.slug}`} onClick={(event) => onNavigate(event, `/admin/fiches/${detail.data.slug}`)}>Retour à la fiche</a></div>}
         {detailFor === activeSlug && detail.phase === 'ready' && detail.data.status !== 'ARCHIVED' &&
-          <AdminCreateRelation entity={detail.data} busy={busy}
+          <AdminCreateRelation entity={detail.data} busy={busy} seed={relationSeed ?? undefined}
           disabled={authExpired} error={mutationError} onCreate={(input) => void createRelation(input)}
           onClearError={() => setMutationError(null)} onDirtyChange={setEditDirty} onNavigate={onNavigate} />}
       </>}
@@ -590,6 +613,10 @@ export function AdminApp() {
         {detailFor === activeSlug && detail.phase === 'ready' && <Detail entity={detail.data} onNavigate={onNavigate}
           editing={editing} provenanceEditing={provenanceEditing} busy={busy} authExpired={authExpired}
           error={mutationError} evidenceNotice={evidenceNotice}
+          onDefine={(seed, fromSlug) => {
+            if (editDirty && !window.confirm('Quitter cette fiche et perdre les modifications non enregistrées ?')) return
+            navigateTo(`/admin/fiches/${fromSlug}/nouvelle-relation`, seed)
+          }}
           onEdit={() => { setMutationError(null); setEditing(true) }} onCancel={cancelEdit}
           onSave={(input) => void save(input)} onDirtyChange={setEditDirty}
           onProvenanceMutation={provenanceMutation} onProvenanceEditingChange={setProvenanceEditing}

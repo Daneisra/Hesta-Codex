@@ -175,6 +175,10 @@ et les conflits. Depuis une fiche non archivée, « Ajouter une relation » cré
 inverses et symétriques sont normalisés côté API ; voir
 [docs/MANUAL-RELATIONS.md](docs/MANUAL-RELATIONS.md).
 
+Depuis les références Obsidian résolues, « Définir une relation » préremplit les deux
+fiches et la provenance vérifiable dans ce même formulaire. Le type, l’énoncé et la création
+restent à confirmer humainement ; la référence automatique et le Markdown sont conservés.
+
 Depuis v0.5c, « Ajouter une preuve » enrichit une fiche ou une relation existante avec
 une Source existante ou nouvelle. L'ajout est transactionnel, refuse les doublons certains
 et ne crée aucune Revision ni publication. Les preuves sont regroupées par Source dans

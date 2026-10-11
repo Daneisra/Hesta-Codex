@@ -49,6 +49,14 @@ d'occurrences et les diagnostics. Le slug accompagne les titres pour distinguer 
 Les mentions sont textuelles : elles ne signifient ni « appartient à », ni « dirige », ni une
 autre relation sémantique.
 
+« Définir une relation » ouvre le formulaire éditorial existant avec les deux fiches et,
+lorsqu’elle est vérifiable, la provenance de la note contenant la mention. Le type reste
+à choisir et la création exige une confirmation humaine. La référence automatique reste
+visible après création ; les relations éditoriales déjà présentes sont signalées séparément.
+Les destinations absentes/ambiguës/sans fiche, archivées et auto-références ne proposent
+pas cette action. Le parcours et ses limites sont décrits dans
+[MANUAL-RELATIONS.md](MANUAL-RELATIONS.md#création-assistée-depuis-obsidian).
+
 Le graphe admin ajoute une arête dirigée par couple de fiches source/destination, avec
 `origin: "OBSIDIAN"`, `type: "OBSIDIAN_REFERENCE"` et `occurrences`. Ces arêtes sont bleu gris,
 fines et translucides en vue globale ; pointillés et flèches apparaissent sur les références
