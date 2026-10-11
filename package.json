@@ -33,6 +33,7 @@
     "pg": "^8.0.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.4.3",
     "@types/pg": "^8.0.0",
     "@eslint/js": "^10.0.0",
     "@types/node": "^22.0.0",

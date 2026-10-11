@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useImperativeHandle, type Ref } from 'react'
-import type { AdminGraphResponse, GraphResponse } from '@hesta-codex/shared'
+import { relationTypeDefinitions, type AdminGraphResponse, type GraphResponse } from '@hesta-codex/shared'
 import { GraphPage, visibleConnections } from './GraphPage'
 import { emptyFilters, filterGraph, graphGroups, searchGraph } from './graph-model'
 
@@ -67,6 +67,34 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); localStorage.clear(); window.history.replaceState(null, '', '/') })
 
 describe('exploration du graphe', () => {
+  it('affiche les nouveaux libellés directs, inverses et symétriques sans confondre les références Obsidian', async () => {
+    const capital = relationTypeDefinitions.find(type => type.code === 'capital_of')!
+    const border = relationTypeDefinitions.find(type => type.code === 'borders')!
+    const data: GraphResponse = { nodes: fixture.nodes, edges: [
+      { id: 'capital', source: 'a', target: 'b', type: capital.code, label: capital.label, inverseLabel: capital.inverseLabel, symmetric: false },
+      { id: 'border', source: 'a', target: 'b', type: border.code, label: border.label, inverseLabel: null, symmetric: true },
+      { id: 'auto', source: 'a', target: 'b', type: 'OBSIDIAN_REFERENCE', origin: 'OBSIDIAN',
+        label: 'Référence Obsidian', inverseLabel: 'Mentionné par', symmetric: false, occurrences: 3 },
+    ] }
+    vi.stubGlobal('fetch', vi.fn(async () => response(data)))
+    const user = userEvent.setup(); render(<GraphPage endpoint="/api/admin/graph" admin onOpenNode={vi.fn()} />)
+    await screen.findByText('5 nœuds, 3 arêtes')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Choisir une fiche' }), 'b')
+    expect(screen.getByRole('button', { name: /Continent → a pour capitale → Ville/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Continent ↔ est frontalier de ↔ Ville/ })).toBeTruthy()
+    expect(screen.getByText(/1 référence Obsidian · 2 relations éditoriales/)).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'capital' }))
+    expect(within(screen.getByRole('complementary', { name: 'Détails du graphe' })).getByText('Ville → est la capitale de → Continent')).toBeTruthy()
+  })
+
+  it('les 27 types gardent leurs libellés directs et inverses dans la projection des connexions', () => {
+    for (const type of relationTypeDefinitions) {
+      const data: GraphResponse = { nodes: fixture.nodes, edges: [{ id: 'relation', source: 'a', target: 'b',
+        type: type.code, label: type.label, inverseLabel: type.inverseLabel, symmetric: type.symmetric }] }
+      expect(visibleConnections(data, 'a')[0]!.displayLabel).toBe(type.label)
+      expect(visibleConnections(data, 'b')[0]!.displayLabel).toBe(type.symmetric ? type.label : type.inverseLabel)
+    }
+  })
   it('keeps a hidden details panel closed when selecting in Canvas, preserving the double-click target', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => response(fixture)))
     const user = userEvent.setup(), open = vi.fn()

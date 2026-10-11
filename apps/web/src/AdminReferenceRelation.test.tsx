@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { AdminEntityDetail, AdminRelation, AdminSource, RelationTypeItem } from '@hesta-codex/shared'
+import { relationTypeDefinitions, relationCategories, type AdminEntityDetail, type AdminRelation, type AdminSource, type RelationTypeItem } from '@hesta-codex/shared'
 import { App } from './App'
 import { AdminCreateRelation } from './AdminCreateRelation'
 import { ObsidianReferences } from './ObsidianReferences'
@@ -39,7 +39,7 @@ function response(data: unknown, status = 200) {
   return { ok: status >= 200 && status < 300, status, json: async () => data } as Response
 }
 function api(options: { failure?: number | 'network'; existing?: boolean; targetStatus?: 'ARCHIVED'; targetFailure?: number;
-  delayed?: Promise<void>; lostResponse?: boolean } = {}) {
+  delayed?: Promise<void>; lostResponse?: boolean; catalogue?: RelationTypeItem[]; targetKind?: AdminEntityDetail['kind'] } = {}) {
   let created = options.existing ?? false
   const calls: { url: string; init?: RequestInit }[] = []
   vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -57,8 +57,8 @@ function api(options: { failure?: number | 'network'; existing?: boolean; target
     })
     if (url === '/api/admin/entities/auteur') return response({ ...owner, outgoingRelations: created ? [relation()] : [] })
     if (url === '/api/admin/entities/cible') return options.targetFailure ? response({}, options.targetFailure)
-      : response({ ...target, status: options.targetStatus ?? target.status, incomingRelations: created ? [{ ...relation(), entity: owner }] : [] })
-    if (url === '/api/admin/relation-types') return response(types)
+      : response({ ...target, kind: options.targetKind ?? target.kind, status: options.targetStatus ?? target.status, incomingRelations: created ? [{ ...relation(), entity: owner }] : [] })
+    if (url === '/api/admin/relation-types') return response(options.catalogue ?? types)
     if (url.startsWith('/api/admin/sources?')) return response({ items: [source], total: 1, page: 1, pageSize: 20 })
     if (url.startsWith('/api/admin/entities?')) return response({ items: [owner, target], total: 2, page: 1, pageSize: 50 })
     if (url === '/api/admin/relations' && init?.method === 'POST') {
@@ -100,6 +100,52 @@ async function review(user: ReturnType<typeof userEvent.setup>, code = 'located_
 }
 
 describe('qualification humaine des références Obsidian', () => {
+  it('propose les 27 types regroupés, leurs 20 inverses et les sept symétries sans choisir automatiquement', async () => {
+    const catalogue = relationTypeDefinitions.map((type, index) => ({ ...type, id: `catalogue-${index}` }))
+    api({ catalogue: [...catalogue].reverse() }); const user = userEvent.setup(); await open(user)
+    const select = screen.getByRole('combobox', { name: 'Type et sens' }) as HTMLSelectElement
+    expect([...select.querySelectorAll('optgroup')].map(group => group.label)).toEqual(relationCategories.map(group => group.label))
+    expect([...select.options].filter(option => option.value)).toHaveLength(47)
+    expect([...select.options].filter(option => option.textContent?.includes('symétrique'))).toHaveLength(7)
+    expect(select.value).toBe('')
+    await user.selectOptions(select, 'worshipped_by')
+    expect(select.value).toBe('worshipped_by')
+    expect(screen.getByRole('option', { name: 'est vénéré par' })).toBeTruthy()
+  })
+
+  it('un choix inhabituel affiche un avertissement dans le formulaire et le récapitulatif sans bloquer la confirmation humaine', async () => {
+    const catalogue = relationTypeDefinitions.map((type, index) => ({ ...type, id: `catalogue-${index}` }))
+    api({ catalogue, targetKind: 'PLACE' }); const create = vi.fn(), user = userEvent.setup()
+    render(<AdminCreateRelation entity={{ ...owner, kind: 'PERSON' }} seed={seed} busy={false} disabled={false} error={null}
+      onCreate={create} onClearError={vi.fn()} onDirtyChange={vi.fn()} onNavigate={vi.fn()} />)
+    await screen.findByRole('option', { name: 'est la capitale de' })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Inverser les fiches' })).not.toHaveProperty('disabled', true))
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Type et sens' }), 'capital_of')
+    expect(screen.getByText(/Association inhabituelle/)).toBeTruthy()
+    await user.type(screen.getByRole('textbox', { name: 'Énoncé' }), 'Énoncé fictif vérifié par un humain')
+    await user.click(screen.getByRole('button', { name: 'Vérifier la création' }))
+    expect(create).not.toHaveBeenCalled(); expect(screen.getByText(/Association inhabituelle/)).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Créer la relation' }))
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ relationCode: 'capital_of', visibility: 'GM' }))
+  })
+
+  it('crée un nouveau type depuis la file centrale sans changer la provenance ni le parcours de confirmation', async () => {
+    window.history.replaceState(null, '', '/admin/relations-a-qualifier')
+    const catalogue = relationTypeDefinitions.map((type, index) => ({ ...type, id: `catalogue-${index}` }))
+    const calls = api({ catalogue }), user = userEvent.setup(); render(<App />)
+    await user.click(await screen.findByRole('button', { name: 'Définir une relation' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Inverser les fiches' })).not.toHaveProperty('disabled', true))
+    await screen.findByRole('option', { name: 'a été créé par' })
+    await review(user, 'created_by'); expect(posts(calls)).toHaveLength(0)
+    expect(screen.getByText('Homonyme → created → Homonyme')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Créer la relation' }))
+    await screen.findByRole('heading', { name: 'Relations à qualifier', level: 1 })
+    await waitFor(() => expect(screen.getByLabelText('Compteurs globaux').textContent).toContain('1 qualifiées'))
+    expect(JSON.parse(String(posts(calls)[0]!.init!.body))).toMatchObject({ fromEntityId: ownerId, toEntityId: targetId,
+      relationCode: 'created_by', visibility: 'GM', source: { sourceId: source.id },
+      evidence: { locator: proof.locator, sourceExcerpt: excerpt, visibility: 'GM' } })
+    expect(posts(calls)).toHaveLength(1)
+  })
   it('crée depuis la file centrale avec le formulaire existant et revient aux compteurs actualisés', async () => {
     window.history.replaceState(null, '', '/admin/relations-a-qualifier')
     const calls = api(), user = userEvent.setup(); render(<App />)

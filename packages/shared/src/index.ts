@@ -367,3 +367,4 @@ export interface IngestionUpdateRequest {
 export interface IngestionUpdateApplied { entity: IngestionAssociationEntity; updatedAt: string; revisionNumber: number }
 export * from './obsidian.js'
 export * from './reference-qualification.js'
+export * from './relation-catalog.js'

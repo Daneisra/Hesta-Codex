@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { once } from 'node:events'
 import type { Server } from 'node:http'
 import { after, before, test } from 'node:test'
-import type { AdminEntityDetail } from '@hesta-codex/shared'
+import { relationTypeDefinitions, originalRelationCodes, type AdminEntityDetail, type RelationTypeItem } from '@hesta-codex/shared'
 import { Prisma, type PrismaClient } from './prisma-client/client.ts'
 import { createPrismaManualRelationService, type ManualRelationService } from './admin/manual-relations.js'
 import { manualRelationSchema } from './admin/manual-relations-validation.js'
@@ -39,7 +39,8 @@ function entity(id: string, slug: string, title: string, status = 'PROPOSED', vi
   return { id, slug, title, kind: 'PERSON', placeKind: null, summary: null, tags: [], aliases: [], bodyMarkdown: '',
     status, visibility, publishedAt: status === 'PUBLISHED' ? now : null, createdAt: now, updatedAt: now }
 }
-function memoryDatabase() {
+function memoryDatabase(catalogue: RelationTypeItem[] = types) {
+  const types = catalogue
   let state: State = { entities: [entity(barolt, 'barolt', 'Barolt'), entity(archipel, 'archipel', 'Archipel'),
     entity(third, 'troisieme', 'Troisième')], sources: [], relations: [], evidence: [], revisions: [] }
   const operations: string[] = []
@@ -148,6 +149,28 @@ test('direct creation is PROPOSED GM, sourced, oriented and creates no Entity Re
   assert.deepEqual(state.revisions, [])
   assert.equal(detail.outgoingRelations[0]?.relationType.label, 'situé dans')
   assert.equal(detail.outgoingRelations[0]?.evidence.length, 1)
+})
+
+test('every new direct/inverse or symmetric type uses the existing transactional creation and rejects canonical duplicates', async () => {
+  const catalogue = relationTypeDefinitions.map((type, index) => ({ ...type,
+    id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}` }))
+  for (const type of catalogue.filter(type => !originalRelationCodes.some(code => code === type.code))) {
+    const db = memoryDatabase(catalogue)
+    const detail = await db.service.create(manualRelationSchema.parse({ ...input,
+      fromEntityId: type.inverseCode ? archipel : barolt, toEntityId: type.inverseCode ? barolt : archipel,
+      relationCode: type.inverseCode ?? type.code }))
+    assert.equal(db.state().relations.length, 1)
+    assert.deepEqual([db.state().relations[0]!.fromEntityId, db.state().relations[0]!.toEntityId], [barolt, archipel])
+    assert.equal(detail[ type.inverseCode ? 'incomingRelations' : 'outgoingRelations' ][0]!.relationType.id, type.id)
+    assert.equal(db.state().relations[0]!.status, 'PROPOSED'); assert.equal(db.state().relations[0]!.visibility, 'GM')
+    assert.equal(db.state().evidence[0]!.relationId, db.state().relations[0]!.id)
+    assert.deepEqual(db.globalWrites, []); assert.deepEqual(db.state().revisions, [])
+    await assert.rejects(db.service.create(manualRelationSchema.parse({ ...input, relationCode: type.code })),
+      { status: 409, code: 'RELATION_CONFLICT' })
+    if (type.symmetric) await assert.rejects(db.service.create(manualRelationSchema.parse({ ...input,
+      fromEntityId: archipel, toEntityId: barolt, relationCode: type.code })), { status: 409, code: 'RELATION_CONFLICT' })
+    assert.equal(db.state().evidence.length, 1)
+  }
 })
 
 test('inverse code resolves to the same physical edge without an inverse row', async () => {

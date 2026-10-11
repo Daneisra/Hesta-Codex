@@ -105,7 +105,7 @@ describe('création de relation depuis l’admin', () => {
     await openForm(user)
     await screen.findByRole('combobox', { name: 'Type et sens' })
     expect(screen.getByRole('option', { name: 'contient' })).toBeTruthy()
-    expect(screen.getAllByRole('option', { name: 'allié à' })).toHaveLength(1)
+    expect(screen.getAllByRole('option', { name: 'allié à · symétrique' })).toHaveLength(1)
     await fillCore(user, 'contains')
     await user.click(screen.getByRole('button', { name: 'Vérifier la création' }))
     expect(screen.getByText('Barolt → contient → Archipel Trekrerith')).toBeTruthy()

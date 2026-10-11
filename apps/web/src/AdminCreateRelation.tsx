@@ -6,6 +6,7 @@ import type {
 import { AdminSourcePicker } from './AdminSourcePicker'
 import { existingRelation, referenceProvenance, type ReferenceRelationSeed } from './reference-relation'
 import { getAdminJson, errorStatus } from './admin-http'
+import { groupRelationTypes, relationKindWarning } from '@hesta-codex/shared'
 
 const sourceKinds: SourceKind[] = ['MANUAL', 'OBSIDIAN', 'DISCORD', 'HESTA_MAP', 'YOUTUBE', 'AI_DERIVED', 'OTHER']
 const visibilities: Visibility[] = ['PUBLIC', 'PLAYERS', 'GM', 'SECRET']
@@ -162,6 +163,7 @@ export function AdminCreateRelation({ entity, busy, disabled, error, onCreate, o
   const inverseDirection = !!chosenType && !chosenType.symmetric && form.relationCode === chosenType.inverseCode
   const from = reversed && target ? target : entity
   const to = reversed ? entity : target
+  const kindWarning = to ? relationKindWarning(form.relationCode, from.kind, to.kind) : null
   const swapForStorage = !!to && (inverseDirection || (!!chosenType?.symmetric && from.id > to.id))
   const duplicate = existingRelation(recentEntity, target, chosenType, form.relationCode, reversed)
   const blocked = busy || disabled || seedLoading || !!seedError || !!duplicate
@@ -235,6 +237,7 @@ export function AdminCreateRelation({ entity, busy, disabled, error, onCreate, o
     {error && <div className="admin-form-error" role="alert" tabIndex={-1} ref={errorRef}>{error.message}
       {error.status === 401 && <> Vos données restent affichées. <a href="/api/auth/discord/login">Se reconnecter avec Discord</a></>}
     </div>}
+    {kindWarning && <p role="status" className="admin-muted">{kindWarning}</p>}
     {review ? <section className="admin-section admin-create-review"><h2>Vérifier avant création</h2>
       <dl><dt>Relation</dt><dd>{from.title} → {chosenLabel} → {to?.title}</dd>
         <dt>Stockage canonique</dt><dd>{swapForStorage ? to?.title : from.title} → {chosenType?.code} →
@@ -259,9 +262,11 @@ export function AdminCreateRelation({ entity, busy, disabled, error, onCreate, o
       <section className="admin-section"><h2>Relation</h2><div className="admin-editor-grid">
         <label>Type et sens<select id="relationCode" value={form.relationCode} {...field('relationCode')}
           onChange={(event) => change('relationCode', event.target.value)}><option value="">Choisir…</option>
-          {types?.flatMap((item) => [<option key={item.code} value={item.code}>{item.label}</option>,
-            ...(!item.symmetric && item.inverseCode
-              ? [<option key={item.inverseCode} value={item.inverseCode}>{item.inverseLabel ?? item.inverseCode}</option>] : [])])}
+          {groupRelationTypes(types ?? []).map(group => <optgroup key={group.code} label={group.label}>
+            {group.types.flatMap(item => [<option key={item.code} value={item.code}>{item.label}{item.symmetric ? ' · symétrique' : ''}</option>,
+              ...(!item.symmetric && item.inverseCode
+                ? [<option key={item.inverseCode} value={item.inverseCode}>{item.inverseLabel ?? item.inverseCode}</option>] : [])])}
+          </optgroup>)}
         </select>{errorText('relationCode')}</label>
         <label>Visibilité<select value={form.visibility} onChange={(event) => change('visibility', event.target.value as Visibility)}>
           {visibilities.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
