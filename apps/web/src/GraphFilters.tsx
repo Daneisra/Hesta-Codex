@@ -25,7 +25,7 @@ export function GraphFiltersPanel({ data, admin, filters, activeGroups, query, r
   onToggleGroup: (id: string) => void
   onReset: () => void
 }) {
-  const [open, setOpen] = useState(() => typeof window === 'undefined' || !window.matchMedia?.('(max-width: 560px)').matches)
+  const [open, setOpen] = useState(() => Object.values(filters).some(Boolean) || activeGroups.size < graphGroups.length)
   const types = useMemo(() => [...new Map(data.edges.map((edge) => [edge.type, edge.label])).entries()]
     .sort(([a], [b]) => a.localeCompare(b, 'fr')), [data.edges])
   const needle = normalizeSearch(query)

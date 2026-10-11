@@ -21,7 +21,7 @@ export function layoutGraphLabels(candidates: readonly LabelCandidate[], scale: 
   if (!Number.isFinite(scale) || scale < .01 || scale > 100) return placed
   const cell = 80 / scale
   const grid = new Map<string, LabelBox[]>()
-  const maxLabels = scale < .7 ? 60 : scale < 1.4 ? 120 : 180
+  const maxLabels = scale < .7 ? 36 : scale < 1.4 ? 80 : 180
   let ordinary = 0
   const keys = (box: LabelBox): string[] => {
     const cells: string[] = []
@@ -37,8 +37,8 @@ export function layoutGraphLabels(candidates: readonly LabelCandidate[], scale: 
     const x = node.x!, y = node.y!
     if (Math.abs(x) > 1_000_000 || Math.abs(y) > 1_000_000 || !Number.isFinite(radius) || radius < 0 || radius > 100) continue
     if (bounds && (x < bounds.left || x > bounds.right || y < bounds.top || y > bounds.bottom)) continue
-    if (priority >= 4 && scale < 1.4 && ordinary >= (scale < .7 ? 12 : 32)) continue
-    const screenFontSize = priority === 0 ? 13 : priority === 1 ? 12 : priority <= 3 ? 11 : 10
+    if (priority >= 4 && scale < 1.4 && ordinary >= (scale < .7 ? 8 : 24)) continue
+    const screenFontSize = priority === 0 ? 14 : priority === 1 ? 13 : priority <= 3 ? 12 : 11
     const fontSize = screenFontSize / scale
     const measuredWidth = measure(text, screenFontSize)
     if (!Number.isFinite(measuredWidth) || measuredWidth < 0 || measuredWidth > 10_000) continue

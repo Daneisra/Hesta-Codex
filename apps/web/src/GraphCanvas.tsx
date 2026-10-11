@@ -1,10 +1,11 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import ForceGraph2D from 'react-force-graph-2d'
 import type { ForceGraphMethods, NodeObject } from 'react-force-graph-2d'
 import type { GraphEdge, GraphNode, GraphResponse } from '@hesta-codex/shared'
 import { groupFor, neighborhoodDistances, nodeRadius, type GraphIndex, type NeighborhoodDepth } from './graph-model'
 import { layoutGraphLabels, shortLabel, type LabelCandidate } from './graph-labels'
 import { clearPositions, loadPositions, savePositions, validPosition, type GraphScope } from './graph-positions'
+import { configureGraphPhysics, initializeGraphLayout, settleGraphLayout, type PhysicsEngine } from './graph-physics'
 
 type Node = GraphNode & NodeObject
 type FocusRequest = { id: string; token: number } | null
@@ -15,7 +16,7 @@ function motionDuration(duration: number): number {
 
 export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selectedEdgeId, isolated, focusRequest, scope = 'public',
   index, totalIndex, distances, depth, onDepthChange, searchMatches,
-  onSelectNode, onOpenNode, onSelectEdge, onClearSelection, onToggleIsolation }: {
+  onSelectNode, onOpenNode, onSelectEdge, onClearSelection, onToggleIsolation, panelControls, immersive = false }: {
   data: GraphResponse
   scope?: GraphScope
   index: GraphIndex
@@ -33,6 +34,8 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
   onSelectEdge: (id: string) => void
   onClearSelection: () => void
   onToggleIsolation: () => void
+  panelControls?: ReactNode
+  immersive?: boolean
 }) {
   const areaRef = useRef<HTMLDivElement>(null)
   const fitButtonRef = useRef<HTMLButtonElement>(null)
@@ -54,6 +57,17 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
   const canvasReady = size.width > 0
   const [hoveredNodeId, setHoveredNodeId] = useState('')
   const [hoveredEdgeId, setHoveredEdgeId] = useState('')
+  const pointerInside = useRef(false)
+  const [moreOpen, setMoreOpen] = useState(Boolean(selectedId))
+  const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false)
+  useEffect(() => {
+    const media = window.matchMedia?.('(prefers-reduced-motion: reduce)')
+    const update = () => setReducedMotion(media?.matches ?? false)
+    media?.addEventListener?.('change', update)
+    return () => media?.removeEventListener?.('change', update)
+  }, [])
+  useEffect(() => { if (selectedId && focusRequest?.id === selectedId) setMoreOpen(true) }, [selectedId, focusRequest])
+  useEffect(() => { if (immersive) setMoreOpen(false) }, [immersive])
   // ForceGraph mutates coordinates and link endpoints. Keep the API response untouched.
   const graphData = useMemo(() => ({ nodes: data.nodes.map((node) => {
     // Keep session-local coordinates (including dragged positions) through filters and isolation.
@@ -114,6 +128,13 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
     return () => observer.disconnect()
   }, [])
 
+  useEffect(() => {
+    if (!canvasReady || !graphRef.current?.d3Force) return
+    configureGraphPhysics(graphRef.current as unknown as PhysicsEngine, data)
+    if (reducedMotion) settleGraphLayout(graphData.nodes, graphData.links.map(edge => ({ ...edge })), data)
+    graphRef.current.d3ReheatSimulation()
+  }, [data, graphData, canvasReady, reducedMotion])
+
   const focus = useCallback((id: string) => {
     const node = positionedNodes.get(id)
     if (!node || !Number.isFinite(node.x) || !Number.isFinite(node.y) || !graphRef.current) return false
@@ -138,29 +159,49 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
   }, [focusRequest, selectedId, index, focus, canvasReady])
 
   useEffect(() => { fitted.current = false }, [graphData])
+  const previousSize = useRef(size)
+  const previousIsolation = useRef(isolated)
+  useEffect(() => {
+    const resized = previousSize.current.width > 0 && (previousSize.current.width !== size.width || previousSize.current.height !== size.height)
+    const changedIsolation = previousIsolation.current !== isolated
+    previousSize.current = size; previousIsolation.current = isolated
+    if (canvasReady && (changedIsolation || resized && !selectedId)) graphRef.current?.zoomToFit(motionDuration(450), 50)
+  }, [size, isolated, selectedId, canvasReady])
 
   const radiusFor = useCallback((id: string) => nodeRadius(totalIndex.incidentEdges.get(id)?.length ?? 0), [totalIndex])
   const resetLayout = useCallback(() => {
     const cleared = clearPositions(scope)
     savedPositions.current.clear()
-    for (const node of layoutNodes.current.values()) { node.fx = undefined; node.fy = undefined; node.vx = 0; node.vy = 0 }
+    for (const node of layoutNodes.current.values()) {
+      node.fx = undefined; node.fy = undefined; node.x = undefined; node.y = undefined; node.vx = 0; node.vy = 0
+    }
+    initializeGraphLayout(graphData.nodes)
     setFixedCount(0)
     resetFocus.current = true
+    fitButtonRef.current?.focus({ preventScroll: true })
     setLayoutMessage(cleared ? 'Disposition réinitialisée.' : 'Disposition réinitialisée pour cette vue. Le stockage local est indisponible.')
     lastClick.current = null
     pendingFocus.current = null
     fitAfterReset.current = true
+    if (reducedMotion) settleGraphLayout(graphData.nodes, graphData.links.map(edge => ({ ...edge })), data)
     graphRef.current?.d3ReheatSimulation()
-  }, [scope])
+  }, [scope, reducedMotion, graphData, data])
   const relationText = hoverEdge ? `${index.nodes.get(hoverEdge.source)?.title ?? ''} ${hoverEdge.symmetric ? '↔' : '→'} ` +
     `${hoverEdge.label} ${hoverEdge.symmetric ? '↔' : '→'} ${index.nodes.get(hoverEdge.target)?.title ?? ''}` : ''
 
   return <div className="graph-main">
     <div className="graph-controls" aria-label="Contrôles du graphe">
-      <button type="button" onClick={() => graphRef.current?.zoom(Math.min(8, graphRef.current.zoom() * 1.3), motionDuration(300))}>Zoom +</button>
-      <button type="button" onClick={() => graphRef.current?.zoom(Math.max(.15, graphRef.current.zoom() / 1.3), motionDuration(300))}>Zoom −</button>
-      <button type="button" onClick={() => graphRef.current?.centerAt(0, 0, motionDuration(400))}>Recentrer</button>
-      <button ref={fitButtonRef} type="button" onClick={() => graphRef.current?.zoomToFit(motionDuration(400), 48)}>Ajuster à l’écran</button>
+      <button type="button" onClick={() => { fitted.current = true; graphRef.current?.zoom(Math.min(8, graphRef.current.zoom() * 1.3), motionDuration(300)) }}>Zoom +</button>
+      <button type="button" onClick={() => { fitted.current = true; graphRef.current?.zoom(Math.max(.15, graphRef.current.zoom() / 1.3), motionDuration(300)) }}>Zoom −</button>
+      <button ref={fitButtonRef} type="button" onClick={() => { fitted.current = true; graphRef.current?.zoomToFit(motionDuration(400), 48) }}>Ajuster à l’écran</button>
+      {panelControls}
+      <button type="button" disabled={!canvasReady} onClick={resetLayout}
+        title="Relancer la disposition automatique et effacer les positions fixées de ce graphe dans ce navigateur">
+        Réinitialiser la disposition
+      </button>
+      <details className="graph-exploration" open={moreOpen} onToggle={event => setMoreOpen(event.currentTarget.open)}>
+      <summary>Exploration</summary><div>
+      <button type="button" onClick={() => { fitted.current = true; graphRef.current?.centerAt(0, 0, motionDuration(400)) }}>Recentrer</button>
       <label className="graph-depth">Profondeur du voisinage<select value={depth} disabled={!selectedId}
         onChange={(event) => { const value = Number(event.target.value)
           if (value === 1 || value === 2 || value === 3) onDepthChange(value) }}>
@@ -173,35 +214,39 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
       <button type="button" disabled={!selectedId && !selectedEdgeId} onClick={() => {
         onClearSelection(); graphRef.current?.zoomToFit(motionDuration(400), 48)
       }}>Vue complète</button>
-      <button type="button" disabled={!fixedCount || !canvasReady} onClick={resetLayout}
-        title="Effacer les positions fixées de ce graphe dans ce navigateur et relancer la disposition automatique">
-        Réinitialiser la disposition
-      </button>
+      </div></details>
     </div>
     <div className="graph-canvas" ref={areaRef} role="group"
+      onPointerDownCapture={() => { fitted.current = true }} onWheelCapture={() => { fitted.current = true }}
+      onPointerEnter={() => { pointerInside.current = true }}
+      onPointerLeave={() => { pointerInside.current = false; setHoveredNodeId(''); setHoveredEdgeId('') }}
       aria-label="Graphe interactif. La recherche et la liste de fiches permettent la navigation au clavier.">
       {size.width > 0 && <ForceGraph2D ref={graphRef} width={size.width} height={size.height}
-        graphData={graphData} backgroundColor="#0c1525" nodeRelSize={4}
+        graphData={graphData} backgroundColor="#10151c" nodeRelSize={4}
+        d3AlphaDecay={.04} d3VelocityDecay={.42} d3AlphaMin={.001}
+        warmupTicks={0} cooldownTicks={reducedMotion ? 0 : 180} cooldownTime={6000}
         nodeVal={(node) => (radiusFor(String(node.id)) / 4) ** 2} minZoom={.15} maxZoom={8}
         showPointerCursor
         nodeColor={(node) => {
           const id = String(node.id)
           const color = groupFor(node.kind).color
-          return hasHighlight && !highlighted.ids.has(id) ? `${color}55`
+          return hasHighlight && !highlighted.ids.has(id) ? `${color}30`
             : (highlightedDistances.get(id) ?? 0) > 1 ? `${color}bb` : color
         }}
         // The library renders tooltip labels as HTML; all lore text stays in Canvas or React text.
         nodeLabel={() => ''} linkLabel={() => ''}
         linkColor={(edge) => hasHighlight && !highlighted.edges.has(String(edge.id))
-          ? 'rgba(135, 150, 178, .16)' : edge.origin === 'OBSIDIAN' ? '#79bddb' : 'rgba(225, 204, 157, .75)'}
-        linkLineDash={(edge) => edge.origin === 'OBSIDIAN' ? [5, 3] : null}
+          ? 'rgba(142, 157, 177, .045)' : edge.origin === 'OBSIDIAN'
+            ? highlighted.edges.has(String(edge.id)) ? 'rgba(151, 185, 202, .72)' : 'rgba(142, 165, 181, .18)'
+            : highlighted.edges.has(String(edge.id)) ? 'rgba(204, 185, 147, .85)' : 'rgba(204, 185, 147, .38)'}
+        linkLineDash={(edge) => edge.origin === 'OBSIDIAN' && highlighted.edges.has(String(edge.id)) ? [3, 3] : null}
         // Separate a textual mention from an editorial relation joining the same fiches.
-        linkCurvature={(edge) => edge.origin === 'OBSIDIAN' ? 0.15 : 0}
-        linkWidth={(edge) => highlighted.edges.has(String(edge.id)) ? 2.7 : 1.1}
-        linkDirectionalArrowLength={(edge) => edge.symmetric ? 0 : 5}
-        linkDirectionalArrowColor={(edge) => edge.origin === 'OBSIDIAN' ? '#79bddb' : '#d4bb8e'}
-        onNodeHover={(node) => { setHoveredNodeId(node ? String(node.id) : '') }}
-        onLinkHover={(edge) => { setHoveredEdgeId(edge ? String(edge.id) : '') }}
+        linkCurvature={(edge) => edge.source === edge.target ? .3 : edge.origin === 'OBSIDIAN' ? .06 : 0}
+        linkWidth={(edge) => highlighted.edges.has(String(edge.id)) ? 1.35 : edge.origin === 'OBSIDIAN' ? .55 : .8}
+        linkDirectionalArrowLength={(edge) => edge.symmetric || (edge.origin === 'OBSIDIAN' && !highlighted.edges.has(String(edge.id))) ? 0 : 4}
+        linkDirectionalArrowColor={(edge) => edge.origin === 'OBSIDIAN' ? 'rgba(151, 185, 202, .72)' : '#c4b38c'}
+        onNodeHover={(node) => { setHoveredNodeId(pointerInside.current && node ? String(node.id) : '') }}
+        onLinkHover={(edge) => { setHoveredEdgeId(pointerInside.current && edge ? String(edge.id) : '') }}
         onNodeClick={(node) => {
           const now = Date.now()
           if (now - lastDrag.current < 300) return
@@ -273,10 +318,12 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
           }, topLeft && bottomRight ? { left: topLeft.x, top: topLeft.y, right: bottomRight.x, bottom: bottomRight.y } : undefined)
           context.textAlign = 'center'; context.textBaseline = 'middle'
           for (const [id, label] of labels) {
-            context.fillStyle = label.important ? 'rgba(12, 21, 37, .94)' : 'rgba(12, 21, 37, .8)'
-            context.fillRect(label.x, label.y, label.width, label.height)
+            if (label.important) {
+              context.fillStyle = 'rgba(16, 21, 28, .9)'
+              context.fillRect(label.x, label.y, label.width, label.height)
+            }
             context.font = `${label.fontSize}px sans-serif`
-            context.fillStyle = hasHighlight && !highlighted.ids.has(id) && id !== selectedId ? '#9dacbf' : '#e3eaf7'
+            context.fillStyle = hasHighlight && !highlighted.ids.has(id) && id !== selectedId ? 'rgba(185, 197, 211, .3)' : label.important ? '#e3eaf7' : '#aeb9c6'
             context.fillText(label.text, label.x + label.width / 2, label.y + label.height / 2)
           }
           context.restore()

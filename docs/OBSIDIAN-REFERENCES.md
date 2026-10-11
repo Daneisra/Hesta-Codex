@@ -50,8 +50,10 @@ Les mentions sont textuelles : elles ne signifient ni « appartient à », ni «
 autre relation sémantique.
 
 Le graphe admin ajoute une arête dirigée par couple de fiches source/destination, avec
-`origin: "OBSIDIAN"`, `type: "OBSIDIAN_REFERENCE"` et `occurrences`. Ces arêtes sont bleues
-et pointillées ; les relations éditoriales restent dorées et continues. Les références suivent
+`origin: "OBSIDIAN"`, `type: "OBSIDIAN_REFERENCE"` et `occurrences`. Ces arêtes sont bleu gris,
+fines et translucides en vue globale ; pointillés et flèches apparaissent sur les références
+mises en évidence par survol ou sélection. Les relations éditoriales restent dorées et continues.
+Les références suivent
 une légère courbe pour distinguer deux types de lien entre les mêmes fiches. Recherche, voisinage,
 isolation, zoom, déplacement, disposition et ouverture des fiches utilisent les index existants.
 Le filtre « Type de connexion » permet de choisir les références Obsidian. Les filtres de statut
@@ -97,7 +99,7 @@ et déploiement explicitement autorisé. Ils ne sont pas inventés à partir des
 Pour la vérification humaine : ouvrir Goliath, Inquisition et Académie des Mages ; vérifier
 respectivement Dipovia/Vruliwen, Comosicus Thiri/Zemantis et Valerius Primus/Vruliwen. Vérifier
 Barolt avec et sans dossier, les diagnostics vers les notes sans fiche, les alias et sections,
-les références entrantes et la distinction pointillée du graphe. Comparer la vue complète et les
+les références entrantes et la distinction des liens du graphe, notamment au survol. Comparer la vue complète et les
 filtres. En session publique, aucune fiche `PROPOSED`, `GM`, `PLAYERS` ou `SECRET` ne doit être
 accessible. Cette étape ne demande aucune réimportation ni nouvelle promotion du staging.
 

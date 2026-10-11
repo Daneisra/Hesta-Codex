@@ -51,7 +51,7 @@ export function isolateNeighborhood(data: GraphResponse, distances: ReadonlyMap<
 }
 
 export function nodeRadius(connectionCount: number): number {
-  return Math.min(9, 4 + Math.sqrt(Math.max(0, connectionCount)))
+  return Math.min(6, 2.8 + Math.sqrt(Math.max(0, connectionCount)) * .45)
 }
 export type GraphFilters = {
   kind: EntityKind | ''
@@ -69,11 +69,11 @@ export const emptyFilters: GraphFilters = {
 }
 
 export const graphGroups = [
-  { id: 'places', label: 'Lieux', kinds: ['PLACE'], color: '#75b7d7' },
-  { id: 'people', label: 'Personnes et peuples', kinds: ['PERSON', 'FAMILY', 'SPECIES', 'CREATURE'], color: '#b8a3df' },
-  { id: 'collectives', label: 'Collectifs et croyances', kinds: ['ORGANIZATION', 'RELIGION', 'DEITY'], color: '#d8bc85' },
-  { id: 'stories', label: 'Récits et objets', kinds: ['ARTIFACT', 'EVENT', 'QUEST', 'SESSION'], color: '#d596a7' },
-  { id: 'ideas', label: 'Idées et autres', kinds: ['CONCEPT', 'OTHER'], color: '#9fbed1' },
+  { id: 'places', label: 'Lieux', kinds: ['PLACE'], color: '#8eafb9' },
+  { id: 'people', label: 'Personnes et peuples', kinds: ['PERSON', 'FAMILY', 'SPECIES', 'CREATURE'], color: '#b1a0c4' },
+  { id: 'collectives', label: 'Collectifs et croyances', kinds: ['ORGANIZATION', 'RELIGION', 'DEITY'], color: '#c4b38c' },
+  { id: 'stories', label: 'Récits et objets', kinds: ['ARTIFACT', 'EVENT', 'QUEST', 'SESSION'], color: '#bd96a1' },
+  { id: 'ideas', label: 'Idées et autres', kinds: ['CONCEPT', 'OTHER'], color: '#9bac9b' },
 ] as const
 
 export const kindLabels: Record<EntityKind, string> = {

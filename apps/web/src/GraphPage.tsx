@@ -40,6 +40,84 @@ export function GraphPage({ endpoint, admin = false, onOpenNode }: {
   const copyButton = useRef<HTMLButtonElement>(null)
   const copyRequest = useRef(0)
   const restoreCopyFocus = useRef(false)
+  const pageRef = useRef<HTMLElement>(null)
+  const fullscreenButton = useRef<HTMLButtonElement>(null)
+  const filtersButton = useRef<HTMLButtonElement>(null)
+  const detailsButton = useRef<HTMLButtonElement>(null)
+  const filtersPanel = useRef<HTMLDivElement>(null)
+  const detailsPanel = useRef<HTMLDivElement>(null)
+  const [immersive, setImmersive] = useState(false)
+  const [fullscreenNotice, setFullscreenNotice] = useState('')
+  const [filtersOpen, setFiltersOpen] = useState(true)
+  const [detailsOpen, setDetailsOpen] = useState(true)
+  const previousPanels = useRef({ filters: true, details: true })
+  const fullscreenRequest = useRef(0)
+  const nativeFullscreen = useRef(false)
+  const [hideOrphans, setHideOrphans] = useState(false)
+
+  const leaveImmersive = useCallback(() => {
+    setImmersive(false)
+    setFullscreenNotice('')
+    setFiltersOpen(previousPanels.current.filters)
+    setDetailsOpen(previousPanels.current.details)
+    requestAnimationFrame(() => fullscreenButton.current?.focus({ preventScroll: true }))
+  }, [])
+  const exitImmersive = useCallback(async () => {
+    fullscreenRequest.current++
+    if (document.fullscreenElement === pageRef.current && document.exitFullscreen) {
+      try { await document.exitFullscreen() } catch {
+        if (document.fullscreenElement === pageRef.current) {
+          setFullscreenNotice('Utilisez Échap pour quitter le plein écran du navigateur.')
+          return
+        }
+      }
+    }
+    leaveImmersive()
+  }, [leaveImmersive])
+  const enterImmersive = useCallback(async () => {
+    const page = pageRef.current
+    if (!page) return
+    const request = ++fullscreenRequest.current
+    previousPanels.current = { filters: filtersOpen, details: detailsOpen }
+    setFiltersOpen(false); setDetailsOpen(false); setImmersive(true)
+    try {
+      if (!page.requestFullscreen) throw new Error('unavailable')
+      await page.requestFullscreen()
+      if ((!page.isConnected || request !== fullscreenRequest.current) && document.fullscreenElement === page) await document.exitFullscreen()
+    } catch {
+      if (page.isConnected && request === fullscreenRequest.current) setFullscreenNotice('Vue immersive active. Le plein écran du navigateur est indisponible ; Échap permet de revenir.')
+    }
+  }, [filtersOpen, detailsOpen])
+  useEffect(() => {
+    const page = pageRef.current
+    const change = () => {
+      if (document.fullscreenElement === page) nativeFullscreen.current = true
+      else if (nativeFullscreen.current) { nativeFullscreen.current = false; leaveImmersive() }
+    }
+    document.addEventListener('fullscreenchange', change)
+    return () => {
+      fullscreenRequest.current++
+      document.removeEventListener('fullscreenchange', change)
+      if (document.fullscreenElement === page) void document.exitFullscreen?.().catch(() => {})
+    }
+  }, [leaveImmersive])
+  useEffect(() => {
+    if (!immersive) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    fullscreenButton.current?.focus({ preventScroll: true })
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { if (!document.fullscreenElement) event.preventDefault(); void exitImmersive(); return }
+      if (event.key !== 'Tab') return
+      const focusable = [...(pageRef.current?.querySelectorAll<HTMLElement>('button, input, select, summary, a[href], [tabindex="0"]') ?? [])]
+        .filter(element => !element.matches(':disabled') && element.getClientRects().length > 0)
+      const first = focusable[0], last = focusable.at(-1)
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
+    }
+    document.addEventListener('keydown', keydown)
+    return () => { document.body.style.overflow = previousOverflow; document.removeEventListener('keydown', keydown) }
+  }, [immersive, exitImmersive])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -74,8 +152,14 @@ export function GraphPage({ endpoint, admin = false, onOpenNode }: {
   const state = useMemo(() => canonicalize(exploration), [canonicalize, exploration])
   const { query, filters, groups: activeGroups, depth, isolated } = state
   const selectedId = nodesBySlug.get(state.slug)?.id ?? ''
-  const baseGraph = useMemo(() => data ? filterGraph(data, filters, activeGroups) : null,
-    [data, filters, activeGroups])
+  const retainedSlug = hideOrphans && !(loadedIndex?.neighbors.get(selectedId)?.size) ? state.slug : ''
+  const baseGraph = useMemo(() => {
+    if (!data) return null
+    const filtered = filterGraph(data, filters, activeGroups)
+    // Only globally disconnected nodes are hidden; filters must not silently hide their endpoints.
+    return hideOrphans ? { ...filtered, nodes: filtered.nodes.filter(node => node.slug === retainedSlug ||
+      (loadedIndex?.neighbors.get(node.id)?.size ?? 0) > 0) } : filtered
+  }, [data, filters, activeGroups, hideOrphans, loadedIndex, retainedSlug])
   const baseIndex = useMemo(() => baseGraph && loadedIndex && baseGraph.nodes.length === data?.nodes.length &&
     baseGraph.edges.length === data?.edges.length ? loadedIndex : baseGraph ? indexGraph(baseGraph) : null,
   [baseGraph, loadedIndex, data])
@@ -143,9 +227,12 @@ export function GraphPage({ endpoint, admin = false, onOpenNode }: {
     commitState(previous => ({ ...previous, slug: node?.slug ?? '',
       isolated: node && node.slug === previous.slug ? previous.isolated : false }))
     setSelectedEdgeId('')
+    // Opening a side panel must not move the Canvas hit target between two clicks.
+    if (id && (recenter || immersive)) setDetailsOpen(true)
+    if (id && immersive && window.innerWidth < 760) setFiltersOpen(false)
     if (node && recenter) setFocusRequest((previous) => ({ id, token: (previous?.token ?? 0) + 1 }))
     else setFocusRequest(null)
-  }, [baseIndex, commitState])
+  }, [baseIndex, commitState, immersive])
 
   // Keep the hit target still between the two clicks that open a fiche.
   const selectCanvasNode = useCallback((id: string) => selectNode(id, false), [selectNode])
@@ -167,6 +254,7 @@ export function GraphPage({ endpoint, admin = false, onOpenNode }: {
   }, [commitState])
 
   const resetFilters = useCallback(() => {
+    setHideOrphans(false)
     editingSearch.current = false
     commitState(previous => ({ ...previous, filters: { ...emptyFilters }, groups: allGraphGroups(), query: '', isolated: false }))
   }, [commitState])
@@ -207,7 +295,23 @@ export function GraphPage({ endpoint, admin = false, onOpenNode }: {
   useEffect(() => () => { copyRequest.current++ }, [])
 
   const referenceStats = admin ? (data as AdminGraphResponse | null)?.obsidianStats : undefined
-  return <section className="graph-page" aria-label={admin ? 'Graphe éditorial' : 'Graphe public'}>
+  const openNode = useCallback((slug: string) => { if (immersive) void exitImmersive(); onOpenNode(slug) }, [immersive, exitImmersive, onOpenNode])
+  const selectEdge = useCallback((id: string) => {
+    setSelectedEdgeId(id); setDetailsOpen(true)
+    if (immersive && window.innerWidth < 760) setFiltersOpen(false)
+  }, [immersive])
+  const panelControls = useMemo(() => <>
+    <button ref={filtersButton} type="button" aria-expanded={filtersOpen} aria-controls="graph-filters-panel"
+      onClick={() => { if (filtersOpen && filtersPanel.current?.contains(document.activeElement)) filtersButton.current?.focus();
+        if (!filtersOpen && immersive && window.innerWidth < 760) setDetailsOpen(false); setFiltersOpen(value => !value) }}>Filtres</button>
+    <button ref={detailsButton} type="button" aria-expanded={detailsOpen} aria-controls="graph-details-panel"
+      onClick={() => { if (detailsOpen && detailsPanel.current?.contains(document.activeElement)) detailsButton.current?.focus();
+        if (!detailsOpen && immersive && window.innerWidth < 760) setFiltersOpen(false); setDetailsOpen(value => !value) }}>Détails</button>
+    <button ref={fullscreenButton} type="button" aria-pressed={immersive}
+      onClick={() => { if (immersive) void exitImmersive(); else void enterImmersive() }}>{immersive ? 'Quitter le plein écran' : 'Plein écran'}</button>
+  </>, [filtersOpen, detailsOpen, immersive, enterImmersive, exitImmersive])
+  return <section ref={pageRef} className={`graph-page${immersive ? ' graph-page--immersive' : ''}`}
+    role={immersive ? 'dialog' : undefined} aria-modal={immersive || undefined} aria-label={admin ? 'Graphe éditorial' : 'Graphe public'}>
     <div className="graph-heading"><div><p className="section-eyebrow">Explorer les connexions</p>
       <h1>{admin ? 'Graphe éditorial' : 'Graphe du Codex'}</h1>
       <p>{admin ? 'Fiches, relations éditoriales et références textuelles Obsidian.' : 'Fiches et relations publiées, visibles de tous.'}</p></div>
@@ -215,13 +319,16 @@ export function GraphPage({ endpoint, admin = false, onOpenNode }: {
         {visibleGraph.nodes.length} fiche{visibleGraph.nodes.length > 1 ? 's' : ''} · {visibleGraph.edges.length} {admin ? `connexion${visibleGraph.edges.length > 1 ? 's' : ''}` : `relation${visibleGraph.edges.length > 1 ? 's' : ''}`} affichée{visibleGraph.edges.length > 1 ? 's' : ''}
         <small> sur {data.nodes.length} fiches · {data.edges.length} {admin ? 'connexions' : 'relations'} chargées</small>
       </p>}</div>
-    {referenceStats && data && <p className="graph-reference-stats">
+    {referenceStats && data && <details className="graph-reference-summary"><summary>Références Obsidian et compteurs</summary><p className="graph-reference-stats">
       Obsidian : {referenceStats.occurrences} occurrences · {referenceStats.resolved} références uniques résolues
       {' · '}{data.edges.filter(edge => edge.origin === 'OBSIDIAN').length} arcs entre fiches
       {' · '}{referenceStats.ambiguous} ambiguës · {referenceStats.missing} absentes
       {' · '}{referenceStats.unassociated} sans fiche associée · {referenceStats.unsupported} non prises en charge.
       <small>Compteurs du catalogue complet, avant filtrage. Les références ne créent aucune relation éditoriale.</small>
-    </p>}
+    </p></details>}
+    {fullscreenNotice && <p className="graph-fullscreen-notice" role="status">{fullscreenNotice}</p>}
+    <div className="graph-stage">
+    <div ref={filtersPanel} id="graph-filters-panel" className="graph-filter-drawer" hidden={!filtersOpen}>
     {data && <div className="graph-share">
       <button ref={copyButton} type="button" disabled={copyState === 'pending'} onClick={() => { void copyLink() }}
         title={admin ? 'Copier les filtres et la profondeur, sans sélection ni recherche éditoriale' : 'Copier le lien de cet état du graphe'}>Copier le lien</button>
@@ -229,6 +336,22 @@ export function GraphPage({ endpoint, admin = false, onOpenNode }: {
       {copyState === 'error' && <><span role="status">Copie indisponible. Vous pouvez copier le lien ci-dessous.</span>
         <label>Lien du graphe<input ref={copyInput} value={copyUrl} readOnly onFocus={event => event.target.select()} /></label></>}
     </div>}
+    {data && data.nodes.length > 0 && <label className="graph-orphans"><input type="checkbox" checked={hideOrphans}
+      onChange={event => setHideOrphans(event.target.checked)} /> Masquer les fiches sans connexion
+      <small>La fiche sélectionnée reste visible.</small></label>}
+    {data && data.nodes.length > 0 && <GraphFiltersPanel data={data} admin={admin} filters={filters} activeGroups={activeGroups} query={query}
+        results={results} onQueryChange={query => {
+          const previousUrl = window.location.href
+          commitState(previous => ({ ...previous, query }), editingSearch.current)
+          editingSearch.current ||= window.location.href !== previousUrl
+        }} onSearchBlur={() => { editingSearch.current = false }} onSelectResult={(id) => {
+          selectNode(id); commitState(previous => ({ ...previous, query: '' }), true)
+          setDetailsFocusToken(value => value + 1)
+        }} onFiltersChange={filters => {
+          editingSearch.current = false
+          commitState(previous => ({ ...previous, filters }))
+        }} onToggleGroup={toggleGroup} onReset={resetFilters} />}
+    </div>
     {load.phase === 'loading' && <p className="graph-message" role="status">Chargement du graphe…</p>}
     {load.phase === 'error' && <div className="graph-message" role="alert"><p>{load.status === 401 ? 'Session expirée. Reconnectez-vous pour voir le graphe éditorial.'
       : load.status === 403 ? 'Accès au graphe éditorial refusé.' : 'Impossible de charger le graphe.'}</p>
@@ -236,35 +359,27 @@ export function GraphPage({ endpoint, admin = false, onOpenNode }: {
     {data && data.nodes.length === 0 && <p className="graph-message">{admin ? 'Aucune fiche à représenter.'
       : 'Le graphe attend ses premières fiches publiées.'}</p>}
     {data && data.nodes.length > 0 && visibleGraph && visibleIndex && loadedIndex && <>
-      <GraphFiltersPanel data={data} admin={admin} filters={filters} activeGroups={activeGroups} query={query}
-        results={results} onQueryChange={query => {
-          const previousUrl = window.location.href
-          commitState(previous => ({ ...previous, query }), editingSearch.current)
-          // Whitespace-only edits do not serialize; the first real change still needs a new entry.
-          editingSearch.current ||= window.location.href !== previousUrl
-        }} onSearchBlur={() => { editingSearch.current = false }} onSelectResult={(id) => {
-          selectNode(id); commitState(previous => ({ ...previous, query: '' }), true)
-          setDetailsFocusToken((value) => value + 1)
-        }}
-        onFiltersChange={filters => {
-          editingSearch.current = false
-          commitState(previous => ({ ...previous, filters }))
-        }} onToggleGroup={toggleGroup} onReset={resetFilters} />
       {visibleGraph.nodes.length === 0 ? <div className="graph-message" role="status">
         <p>Aucune fiche ne correspond aux filtres.</p>
         <button type="button" onClick={resetFilters}>Réinitialiser les filtres</button>
-      </div> : <div className="graph-layout">
+        {panelControls}
+      </div> : <div className={`graph-layout${detailsOpen ? '' : ' graph-layout--no-details'}`}>
         <GraphCanvas key={admin ? 'admin' : 'public'} scope={admin ? 'admin' : 'public'} data={visibleGraph} selectedId={selectedId} selectedEdgeId={selectedEdgeId}
           index={visibleIndex} totalIndex={loadedIndex} distances={distances} depth={depth}
           onDepthChange={setDepth} searchMatches={searchMatches}
-          isolated={isolated} focusRequest={focusRequest} onSelectNode={selectCanvasNode} onOpenNode={onOpenNode}
-          onSelectEdge={setSelectedEdgeId} onClearSelection={clearSelection}
+          isolated={isolated} focusRequest={focusRequest} onSelectNode={selectCanvasNode} onOpenNode={openNode}
+          panelControls={panelControls}
+          immersive={immersive}
+          onSelectEdge={selectEdge} onClearSelection={clearSelection}
           onToggleIsolation={toggleIsolation} />
+        <div ref={detailsPanel} id="graph-details-panel" className="graph-detail-drawer" hidden={!detailsOpen}>
         <GraphDetails data={visibleGraph} index={visibleIndex} totalIndex={loadedIndex}
           focusToken={detailsFocusToken}
           selected={selected} selectedEdge={selectedEdge}
-          onSelectNode={selectDetailsNode} onOpenNode={onOpenNode} onRecenter={recenter} />
+          onSelectNode={selectDetailsNode} onOpenNode={openNode} onRecenter={recenter} />
+        </div>
       </div>}
     </>}
+    </div>
   </section>
 }

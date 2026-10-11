@@ -23,7 +23,7 @@ describe('graph label readability', () => {
       expect(labels.has('0')).toBe(true)
       expect(labels.size).toBeGreaterThan(1)
       expect(labels.size).toBeLessThanOrEqual(180)
-      for (const label of labels.values()) expect(label.fontSize * scale).toBeLessThanOrEqual(13)
+      for (const label of labels.values()) expect(label.fontSize * scale).toBeLessThanOrEqual(14.001)
     }
   })
 

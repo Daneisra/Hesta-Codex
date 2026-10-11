@@ -5,6 +5,11 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); localStorage.clea
 const ids = new Set(['a', 'b', 'new', '__proto__'])
 
 describe('local graph positions', () => {
+  it('ignores the previous layout generation without touching another scope or stored lore', () => {
+    localStorage.setItem('hesta-codex:graph-layout:v1:public', serializePositions(new Map([['a', { x: 999999, y: 999999 }]])))
+    expect(loadPositions('public', ids).positions.size).toBe(0)
+    expect(positionStorageKey('public')).toBe('hesta-codex:graph-layout:v2:public')
+  })
   it('roundtrips ID/coordinates only and ignores deleted nodes while leaving new nodes free', () => {
     const raw = serializePositions(new Map([['a', { x: -123, y: 456 }], ['deleted', { x: 1, y: 2 }]]))
     expect(parsePositions(raw, ids)).toEqual(new Map([['a', { x: -123, y: 456 }]]))

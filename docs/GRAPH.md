@@ -50,8 +50,9 @@ Les filtres de type de fiche, sous-type de lieu, type de relation et catégories
 combinent. Le graphe admin ajoute statut et visibilité pour fiches et relations. Les arêtes
 dont une extrémité est masquée disparaissent. Les compteurs distinguent les éléments affichés
 de ceux chargés. « Réinitialiser les filtres » réactive toutes les catégories et efface la
-recherche ; aucun filtre ne peut élargir la réponse fournie par le serveur. Sur petit écran,
-les filtres sont repliés initialement pour garder le Canvas accessible sans long défilement.
+recherche ; aucun filtre ne peut élargir la réponse fournie par le serveur. Les filtres avancés
+sont repliés initialement, sauf lorsqu'un filtre ou une catégorie désactivée arrive par URL.
+La recherche reste directement accessible dans le panneau « Filtres ».
 
 Le sélecteur « Profondeur du voisinage » propose 1, 2 ou 3 relations à partir de la fiche
 sélectionnée. Le parcours utilise un index d'adjacence mémorisé et un parcours en largeur
@@ -71,7 +72,7 @@ sans modifier le panneau ni l'URL.
 Le panneau affiche résumé, sens des relations, comptes entrants/sortants, connexions
 symétriques et navigation vers les voisins. Le total de relations porte uniquement sur
 le graphe autorisé chargé ; les relations affichées avec les filtres sont comptées séparément.
-Le rayon des nœuds varie légèrement avec ce total, de 4 à 9 unités Canvas au maximum.
+Le rayon des nœuds varie légèrement avec ce total, de 2,8 à 6 unités Canvas au maximum.
 Pour une arête directionnelle, le libellé inverse apparaît depuis sa cible ; une arête
 symétrique utilise le même libellé aux deux extrémités. Le survol révèle un libellé textuel
 sans utiliser les infobulles HTML de la bibliothèque. Le Canvas accepte pan, zoom, drag et
@@ -82,6 +83,54 @@ cette détection et empêchent une ouverture accidentelle à leur issue.
 « Recentrer sur cette fiche » tient compte de la position déplacée. Les positions fixées
 sont sauvegardées à la fin du déplacement dans ce navigateur et restaurées au rechargement.
 Les boutons Zoom +/−, Recentrer et Ajuster à l'écran restent disponibles.
+
+## Disposition et vue immersive
+
+Le rendu s'inspire du [graphe natif d'Obsidian](https://obsidian.md/help/Plugins/Graph%2Bview),
+en conservant le moteur `react-force-graph-2d`, les données et les interactions existantes.
+Les forces sont configurées avec `d3-force-3d` 3.0.6, déjà utilisé par ce moteur et désormais
+déclaré directement comme dépendance du web ; aucune bibliothèque de rendu supplémentaire.
+
+| Aspect | Avant | Maintenant |
+| --- | --- | --- |
+| Réseau dense | Forces par défaut ; noyau compact et petits groupes éloignés | Répulsion et distance adaptées à la densité, collisions et rappel doux vers le centre |
+| Nœuds | Rayons 4–9, couleurs plus saturées | Rayons 2,8–6, palette douce par catégorie |
+| Références | Traits bleus pointillés, flèches permanentes | Traits fins et translucides ; direction et pointillés sur le voisinage mis en évidence |
+| Étiquettes | Plus nombreuses, chacune avec un fond | Densité adaptée au zoom ; fond réservé aux étiquettes prioritaires |
+| Commandes | Barre occupant une bande du graphe, filtres développés | Barre flottante compacte, menu « Exploration », panneaux masquables |
+| Surface | Graphe encadré dans la page | Plein écran natif, sans en-tête ni panneaux imposés |
+
+La densité compte les paires de fiches distinctes, indépendamment des arcs parallèles.
+Répulsion, portée et distance des liens augmentent de manière bornée avec cette densité
+et le nombre de nœuds. La force des liens est réduite pour les fiches très connectées et
+divisée entre les arcs parallèles : une référence et une relation entre les mêmes fiches
+ne resserrent pas artificiellement le réseau. Des collisions et un rappel faible sur les
+axes X/Y retiennent les composantes déconnectées ; les fiches sans connexion ont un rappel
+légèrement plus fort. La simulation s'arrête après 180 ticks, au plus 6 secondes, avec
+amortissement et refroidissement ; survol et sélection ne la réchauffent pas.
+
+Le premier cadrage s'effectue après stabilisation, sans reprendre la main si l'utilisateur
+a déjà déplacé ou zoomé la vue. Redimensionnement sans sélection et changement d'isolation
+ajustent le cadrage ; un recentrage déjà effectué n'est pas rejoué. Les objets de simulation
+restent séparés de la réponse API. En mouvement réduit, 180 ticks sont calculés hors écran
+avant d'afficher les coordonnées fixes et les commandes de caméra n'ont aucune transition.
+
+« Plein écran » utilise la Fullscreen API. Les panneaux Filtres et Détails sont masqués à
+l'entrée et peuvent être rouverts séparément depuis la barre flottante. « Quitter le plein
+écran » et Échap restaurent leur état précédent et le focus sur la commande d'entrée.
+Si le navigateur refuse le plein écran, une vue immersive dans la fenêtre reste disponible,
+avec le même bouton de sortie et Échap. Le focus clavier reste dans cette vue ; le défilement
+de la page est restauré à la sortie ou au démontage. Sur une largeur inférieure à 760 px,
+ouvrir un panneau masque l'autre. Les panneaux débordants défilent indépendamment.
+
+En vue normale, sélectionner dans le Canvas laisse un panneau Détails déjà masqué fermé,
+pour conserver la cible du double clic. Les sélections depuis la recherche ou la liste
+ouvrent le panneau ; en plein écran il peut aussi s'ouvrir sans redimensionner le Canvas.
+Le menu « Exploration » conserve recentrage, profondeur 1/2/3, isolation et retour à la
+vue complète. « Masquer les fiches sans connexion » masque uniquement les fiches sans
+voisin dans le graphe autorisé chargé, en conservant la sélection ; les filtres ne changent
+pas cette définition. Réinitialiser les filtres désactive ce masquage. Ces préférences
+visuelles restent locales à la vue, sans ajout à l'URL ni modification des données.
 
 Tabulation et Entrée permettent de rechercher, sélectionner, filtrer et ouvrir une fiche
 sans utiliser le Canvas. La liste déroulante fournit aussi un parcours clavier des nœuds.
@@ -136,7 +185,9 @@ sélectionnable apparaît et reçoit le focus ; aucune confirmation n'utilise `a
 ## Positions propres au navigateur
 
 Seuls les couples identifiant de fiche / coordonnées finies sont sauvegardés dans `localStorage`,
-sous `hesta-codex:graph-layout:v1:public` et `hesta-codex:graph-layout:v1:admin`. Le format versionné
+sous `hesta-codex:graph-layout:v2:public` et `hesta-codex:graph-layout:v2:admin`. Les clés de
+l'ancienne génération `v1` sont ignorées pour profiter de la nouvelle disposition.
+Le format des coordonnées est inchangé et versionné
 est `{ "version": 1, "positions": [["id", x, y]] }` : pas de titre, slug, résumé, statut ou compte.
 Une position enregistrée fixe `x/y` et `fx/fy` à la prochaine ouverture. Les fiches supprimées
 sont ignorées, les fiches nouvelles restent libres, et les filtres/isolation ne suppriment pas
@@ -148,8 +199,9 @@ indisponible n'empêchent pas l'exploration. Les positions sont bornées à ±1 
 indiquant que la disposition reste uniquement dans la vue courante.
 
 « Réinitialiser la disposition » supprime la sauvegarde du périmètre courant, public ou admin,
-libère aussi les nœuds masqués, réchauffe le moteur et ajuste le graphe à la fin du calcul.
-La commande est désactivée sans position fixée ; après activation, le focus passe à « Ajuster
+libère aussi les nœuds masqués, efface leurs anciennes coordonnées, initialise un placement
+neuf avec le même moteur D3, puis réchauffe la simulation et ajuste le graphe à la fin du calcul.
+La commande reste disponible même sans position fixée ; après activation, le focus passe à « Ajuster
 à l'écran ». Si l'effacement du stockage échoue, le message précise que seule la vue a été réinitialisée.
 Les positions restent propres à l'origine et au navigateur : aucune synchronisation multi-appareil,
 aucune persistance PostgreSQL et aucune nouvelle route API. Deux onglets peuvent remplacer leur
@@ -159,12 +211,13 @@ dernière sauvegarde mutuelle ; les utilisateurs d'un même profil navigateur pa
 
 Les labels sont classés hors des frames de dessin : sélection, survol, voisins directs,
 résultats de recherche, puis autres fiches, avec les fiches les plus connectées en premier à
-priorité égale. Ils gardent une taille à l'écran de 10 à 13 px, indépendante du zoom ; les
+priorité égale. Ils gardent une taille à l'écran de 11 à 14 px, indépendante du zoom ; les
 titres Canvas sont tronqués à 42 caractères Unicode et restent complets dans le survol/panneau.
-Un fond discret protège leur contraste. Une grille spatiale recherche quatre placements et
-évite les collisions entre labels ; le nom d'une sélection présente à l'écran reste prioritaire.
+Un fond discret protège le contraste des étiquettes prioritaires. Une grille spatiale recherche
+quatre placements et évite les collisions entre labels ; le nom d'une sélection présente à
+l'écran reste prioritaire.
 
-Le budget est de 60, 120 ou 180 labels selon le zoom, avec 12 ou 32 labels ordinaires au faible
+Le budget est de 36, 80 ou 180 labels selon le zoom, avec 8 ou 24 labels ordinaires au faible
 zoom pour conserver des repères. Les candidats hors écran sont ignorés. Les géométries mobiles
 sont recalculées par frame peinte, les mesures de texte sont mises en cache ; les index de
 recherche normalisée et d'adjacence ne sont pas reconstruits lors du dessin. `GraphCanvas` et
@@ -184,9 +237,29 @@ voisinages 1/2/3, isolation et recherche. Cette mesure concerne uniquement les h
 sans réseau, rendu Canvas ni simulation des forces ; elle ne constitue pas un seuil CI ni
 une garantie de fluidité sur d'autres machines.
 
+Contrôle visuel local du 11 octobre 2026 : Edge headless sous Windows, build de production
+servi sur localhost avec une API entièrement fictive, sans PostgreSQL ni données Hesta.
+Une fixture de 130 fiches comprend un noyau dense, deux petits groupes, six fiches sans
+connexion, des références automatiques et une relation éditoriale. Les captures avant/après
+ont été comparées ; les contrôles passent en 1920 × 1080, 3840 × 2160, 768 × 1024 et
+390 × 844, sans débordement horizontal ni erreur JavaScript. Plein écran natif, filtres,
+masquage des fiches sans connexion, détails, sortie Échap, focus restitué, survol réel et
+densité d'étiquettes au zoom ont été vérifiés. Un contrôle complémentaire valide Tab et
+Maj+Tab dans la vue immersive, l'isolation profondeur 2 et le retour au graphe complet.
+Les coordonnées restent identiques une seconde après stabilisation, également avec 600
+nœuds fictifs ; le mode de mouvement réduit affiche immédiatement une disposition fixe.
+Sur 600 nœuds et 1 788 connexions, deux passages de 199 frames instrumentées donnent des
+médianes de 11 à 14,1 ms et des percentiles 95 de 16,5 à 20,6 ms entre effacement du Canvas
+et dernière étiquette, pendant la simulation et le cadrage. Des validations du projet
+tournaient en parallèle. Cette mesure CPU inclut l'instrumentation ; elle exclut
+notamment le Canvas de détection du pointeur, la composition GPU et les requêtes réseau.
+Les scripts et captures de contrôle restent dans le répertoire temporaire, hors dépôt.
+Ces vérifications ne remplacent pas une mesure GPU dans un navigateur interactif, ni une
+revue visuelle du réseau réel après déploiement autorisé.
+
 ## Limites et suite
 
-v0.6d charge toujours le graphe entier dans une réponse. Les index des graphes chargé, filtré et
+Le graphe charge toujours le réseau entier dans une réponse. Les index des graphes chargé, filtré et
 éventuellement isolé sont mémorisés ; le voisinage coûte au plus O(nœuds + arêtes), et
 le dessin consulte des Map/Set sans reconstruire le réseau à chaque frame.
 Avec plusieurs milliers de nœuds, le calcul des forces et le transfert initial devront être
@@ -197,7 +270,9 @@ recherche et panneau complètent les labels masqués. L'URL ne partage pas les c
 Le Canvas lui-même n'offre pas de parcours clavier nœud par nœud ; ses
 contrôles textuels assurent cette navigation. Les couleurs regroupent les types de fiches
 sans changer leur modèle. Les références Obsidian enrichissent le contrat admin sans migration
-ni modification des règles de publication. Elles sont bleues et pointillées, avec une légende
-et une option dans « Type de connexion ». Les filtres de statut/visibilité de relation les
+ni modification des règles de publication. Elles sont bleu gris, très fines et translucides
+en vue globale, puis pointillées et fléchées au survol ou à la sélection ; les relations
+éditoriales restent dorées, avec une légende et une option dans « Type de connexion ».
+Les filtres de statut/visibilité de relation les
 masquent. Les compteurs globaux restent indépendants des filtres et distinguent occurrences,
 références uniques et arcs ; voir [OBSIDIAN-REFERENCES.md](OBSIDIAN-REFERENCES.md).

@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentProps, Ref } from 'react'
@@ -13,6 +13,7 @@ type RenderedGraph = {
   onNodeClick: (node: PositionedNode) => void
   onNodeDragEnd: (node: PositionedNode) => void
   onNodeHover: (node: PositionedNode | null) => void
+  onLinkHover: (edge: GraphEdge | null) => void
   onLinkClick: (edge: GraphEdge) => void
   onBackgroundClick: () => void
   onZoom: () => void
@@ -64,6 +65,13 @@ beforeEach(() => {
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 describe('graph canvas interactions', () => {
+  it('keeps a manual zoom made before the initial simulation settles', () => {
+    render(<GraphCanvas {...props()} selectedId="" focusRequest={null} />)
+    fireEvent.wheel(screen.getByRole('group', { name: /Graphe interactif/ }), { deltaY: -100 })
+    act(() => latest().onEngineStop())
+    expect(graphMock.methods.zoomToFit).not.toHaveBeenCalled()
+  })
+
   it('restores dragged positions after remount without fixing new nodes or altering API data', () => {
     render(<GraphCanvas {...props()} />)
     const dragged = latest().graphData.nodes[0]!
@@ -221,15 +229,28 @@ describe('graph canvas interactions', () => {
 
   it('temporarily highlights a hovered neighborhood then restores the selection', () => {
     render(<GraphCanvas {...props()} />)
+    const area = screen.getByRole('group', { name: /Graphe interactif/ })
+    fireEvent.pointerOver(area)
     const node = latest().graphData.nodes[2]!
-    expect(latest().nodeColor(node)).toMatch(/55$/)
+    expect(latest().nodeColor(node)).toMatch(/30$/)
     act(() => latest().onNodeHover(node))
-    expect(latest().nodeColor(node)).toBe('#75b7d7')
-    expect(latest().linkWidth(fixture.edges[1]!)).toBe(2.7)
-    expect(latest().linkWidth(fixture.edges[0]!)).toBe(1.1)
+    expect(latest().nodeColor(node)).toBe('#8eafb9')
+    expect(latest().linkWidth(fixture.edges[1]!)).toBe(1.35)
+    expect(latest().linkWidth(fixture.edges[0]!)).toBe(.8)
     act(() => latest().onNodeHover(null))
-    expect(latest().linkWidth(fixture.edges[0]!)).toBe(2.7)
-    expect(latest().nodeColor(node)).toMatch(/55$/)
+    expect(latest().linkWidth(fixture.edges[0]!)).toBe(1.35)
+    expect(latest().nodeColor(node)).toMatch(/30$/)
+    act(() => latest().onNodeHover(node))
+    fireEvent.pointerOut(area)
+    expect(latest().nodeColor(node)).toMatch(/30$/)
+    expect(document.querySelector('.graph-hover')).toBeNull()
+    // The engine can still report objects at its previous pointer coordinates during a zoom.
+    act(() => { latest().onNodeHover(node); latest().onLinkHover(fixture.edges[1]!) })
+    expect(latest().nodeColor(node)).toMatch(/30$/)
+    expect(document.querySelector('.graph-hover')).toBeNull()
+    fireEvent.pointerOver(area)
+    act(() => latest().onNodeHover(node))
+    expect(latest().nodeColor(node)).toBe('#8eafb9')
   })
 
   it('interrupts double activation after a relation click, a background click or a camera movement', () => {
@@ -257,7 +278,29 @@ describe('graph canvas interactions', () => {
     expect(context.setLineDash).toHaveBeenCalledWith([3, 3])
     expect(context.strokeRect).toHaveBeenCalledTimes(1)
     expect(context.restore).toHaveBeenCalledTimes(1)
-    expect(latest().linkDirectionalArrowLength(fixture.edges[0]!)).toBe(5)
+    expect(latest().linkDirectionalArrowLength(fixture.edges[0]!)).toBe(4)
     expect(latest().linkDirectionalArrowLength(fixture.edges[1]!)).toBe(0)
+  })
+
+  it('keeps references subtle globally and restores direction when their neighborhood is highlighted', () => {
+    const reference = { ...fixture.edges[0]!, origin: 'OBSIDIAN' as const }
+    const data = { ...fixture, edges: [reference] }, input = props()
+    render(<GraphCanvas {...input} data={data} index={indexGraph(data)} selectedId="" focusRequest={null} distances={new Map()} />)
+    fireEvent.pointerOver(screen.getByRole('group', { name: /Graphe interactif/ }))
+    expect(latest().linkDirectionalArrowLength(reference)).toBe(0)
+    expect(latest().linkWidth(reference)).toBe(.55)
+    act(() => latest().onNodeHover(latest().graphData.nodes[0]!))
+    expect(latest().linkDirectionalArrowLength(reference)).toBe(4)
+    act(() => latest().onNodeHover(null))
+    expect(latest().linkDirectionalArrowLength(reference)).toBe(0)
+  })
+
+  it('allows a fresh layout even when no node was manually fixed', async () => {
+    render(<GraphCanvas {...props()} />)
+    latest().graphData.nodes[0]!.x = 1_000_000
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Réinitialiser la disposition' }))
+    expect(Math.abs(latest().graphData.nodes[0]!.x!)).toBeLessThan(100)
+    expect(graphMock.methods.d3ReheatSimulation).toHaveBeenCalledTimes(1)
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Ajuster à l’écran' }))
   })
 })

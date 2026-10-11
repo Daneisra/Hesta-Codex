@@ -65,6 +65,8 @@ pas dans le Canvas. v0.6d conserve la recherche locale, les filtres, le voisinag
 1–3 et le survol temporaire, puis ajoute des liens publics partageant l'état d'exploration,
 « Copier le lien », des labels prioritaires et la sauvegarde des positions déplacées dans
 ce navigateur. « Réinitialiser la disposition » libère ces positions sans écriture en base.
+Le rendu propose une disposition plus aérée, des connexions discrètes, des étiquettes adaptées
+au zoom et un plein écran avec commandes flottantes et panneaux Filtres/Détails masquables.
 Les liens admin partagent seulement filtres, catégories et profondeur, sans sélection ni recherche privée.
 Voir [docs/GRAPH.md](docs/GRAPH.md).
 

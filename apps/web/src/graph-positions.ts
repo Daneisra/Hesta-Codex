@@ -3,7 +3,7 @@ export type SavedPosition = { x: number; y: number }
 
 const maxEntries = 10_000
 const maxCoordinate = 1_000_000
-export const positionStorageKey = (scope: GraphScope) => `hesta-codex:graph-layout:v1:${scope}`
+export const positionStorageKey = (scope: GraphScope) => `hesta-codex:graph-layout:v2:${scope}`
 
 export function validPosition(value: SavedPosition): boolean {
   return Number.isFinite(value.x) && Number.isFinite(value.y) &&

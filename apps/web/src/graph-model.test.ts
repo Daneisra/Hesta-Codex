@@ -49,10 +49,10 @@ describe('graph neighborhoods', () => {
   })
 
   it('bounds node radii while preserving a modest distinction for connected nodes', () => {
-    expect(nodeRadius(0)).toBe(4)
-    expect(nodeRadius(1)).toBe(5)
-    expect(nodeRadius(1_000_000)).toBe(9)
-    expect(nodeRadius(-1)).toBe(4)
+    expect(nodeRadius(0)).toBe(2.8)
+    expect(nodeRadius(1)).toBe(3.25)
+    expect(nodeRadius(1_000_000)).toBe(6)
+    expect(nodeRadius(-1)).toBe(2.8)
   })
 })
 
