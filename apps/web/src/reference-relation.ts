@@ -3,6 +3,7 @@ import type { AdminEntityDetail, AdminEntityListItem, AdminRelation, AdminSource
 /** This context stays in React memory, never in a URL, history state or browser storage. */
 export interface ReferenceRelationSeed {
   fromId: string; toId: string; toSlug: string; returnSlug: string; returnTitle: string
+  returnPath?: '/admin/relations-a-qualifier'
 }
 
 export function referenceProvenance(entity: AdminEntityDetail, targetId: string): {

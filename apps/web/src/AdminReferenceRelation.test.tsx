@@ -48,6 +48,13 @@ function api(options: { failure?: number | 'network'; existing?: boolean; target
       user: { username: 'test-editor', displayName: null } })
     if (url === '/api/admin/stats') return response({ byStatus: { DRAFT: 0, PROPOSED: 2, PUBLISHED: 0, ARCHIVED: 0 },
       byVisibility: { PUBLIC: 0, PLAYERS: 0, GM: 2, SECRET: 0 }, sources: 1, relations: created ? 1 : 0 })
+    if (url.startsWith('/api/admin/reference-qualifications?')) return response({
+      items: created ? [] : [{ id: 'pair', from: owner, to: target, occurrences: 1, state: 'PENDING', fingerprint: 'a'.repeat(64),
+        decisionRevision: null, ignoredAt: null, ignoredBy: null, stale: false, relations: [],
+        origins: [{ sourceId: source.id, sourceLabel: source.label, path: proof.locator }] }],
+      total: created ? 0 : 1, page: 1, pageSize: 50, counts: { total: 1, PENDING: created ? 0 : 1, QUALIFIED: created ? 1 : 0, IGNORED: 0 },
+      entities: [owner, target], sources: [source], diagnosticCounts: {}, diagnostics: [], diagnosticTotal: 0,
+    })
     if (url === '/api/admin/entities/auteur') return response({ ...owner, outgoingRelations: created ? [relation()] : [] })
     if (url === '/api/admin/entities/cible') return options.targetFailure ? response({}, options.targetFailure)
       : response({ ...target, status: options.targetStatus ?? target.status, incomingRelations: created ? [{ ...relation(), entity: owner }] : [] })
@@ -81,6 +88,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); window
 async function open(user: ReturnType<typeof userEvent.setup>, incoming = false) {
   if (incoming) window.history.replaceState(null, '', '/admin/fiches/cible')
   render(<App />)
+  await user.click(await screen.findByRole('button', { name: 'Examiner' }))
   await user.click(await screen.findByRole('button', { name: 'Définir une relation' }))
   await waitFor(() => expect(screen.getByRole('button', { name: 'Inverser les fiches' })).not.toHaveProperty('disabled', true))
   await screen.findByRole('option', { name: 'situé dans' })
@@ -92,6 +100,21 @@ async function review(user: ReturnType<typeof userEvent.setup>, code = 'located_
 }
 
 describe('qualification humaine des références Obsidian', () => {
+  it('crée depuis la file centrale avec le formulaire existant et revient aux compteurs actualisés', async () => {
+    window.history.replaceState(null, '', '/admin/relations-a-qualifier')
+    const calls = api(), user = userEvent.setup(); render(<App />)
+    await user.click(await screen.findByRole('button', { name: 'Définir une relation' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Inverser les fiches' })).not.toHaveProperty('disabled', true))
+    await screen.findByRole('option', { name: 'situé dans' })
+    expect(screen.getByRole('textbox', { name: 'Repère' })).toHaveProperty('value', 'Dossier/Auteur.md')
+    expect(screen.getByRole('link', { name: '← Relations à qualifier' })).toHaveProperty('pathname', '/admin/relations-a-qualifier')
+    await review(user); await user.click(screen.getByRole('button', { name: 'Créer la relation' }))
+    await screen.findByRole('heading', { name: 'Relations à qualifier', level: 1 })
+    await waitFor(() => expect(screen.getByLabelText('Compteurs globaux').textContent).toContain('1 qualifiées'))
+    expect(window.location.pathname).toBe('/admin/relations-a-qualifier')
+    expect(posts(calls)).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'Définir une relation' })).toBeNull()
+  })
   it.each([false, true])('préremplit la mention sortante/entrante (%s), crée puis conserve les références et revient à la liste', async incoming => {
     const calls = api(); const user = userEvent.setup(); await open(user, incoming)
     expect(window.location.pathname).toBe('/admin/fiches/auteur/nouvelle-relation')
@@ -107,6 +130,7 @@ describe('qualification humaine des références Obsidian', () => {
     expect(screen.getByText('PROPOSED · sans publication')).toBeTruthy()
     await user.click(screen.getByRole('button', { name: 'Créer la relation' }))
     await waitFor(() => expect(window.location.pathname).toBe(`/admin/fiches/${incoming ? 'cible' : 'auteur'}`))
+    await user.click(await screen.findByRole('button', { name: 'Examiner' }))
     await screen.findByText(/Relation éditoriale existante/)
     expect(screen.getByRole('button', { name: 'Définir une relation' })).toBeTruthy()
     const input = JSON.parse(String(posts(calls)[0]!.init!.body))
@@ -186,6 +210,7 @@ describe('qualification humaine des références Obsidian', () => {
     expect(screen.getByRole('textbox', { name: 'Repère' })).toHaveProperty('value', 'Dossier/Auteur.md')
     vi.stubGlobal('confirm', () => true)
     await user.click(screen.getByRole('link', { name: '← Homonyme' }))
+    await user.click(await screen.findByRole('button', { name: 'Examiner' }))
     await screen.findByText(/Relation éditoriale existante/)
     expect(window.location.pathname).toBe('/admin/fiches/auteur')
     expect(screen.getByRole('button', { name: 'Définir une relation' })).toBeTruthy()

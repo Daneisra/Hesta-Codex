@@ -198,6 +198,8 @@ export interface AdminEvidence {
 }
 
 export interface AdminRelation {
+  evidenceCount?: number
+  evidenceDeferred?: boolean
   id: string
   description: string | null
   status: EditorialStatus
@@ -364,3 +366,4 @@ export interface IngestionUpdateRequest {
 }
 export interface IngestionUpdateApplied { entity: IngestionAssociationEntity; updatedAt: string; revisionNumber: number }
 export * from './obsidian.js'
+export * from './reference-qualification.js'

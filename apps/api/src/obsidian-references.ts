@@ -3,12 +3,15 @@ import {
   type ObsidianGraphEdge, type ObsidianReferences, type ReferenceConnection, type ReferenceStats,
   type WikiNavigation, type WikiOccurrence, type WikiStatus,
 } from '@hesta-codex/shared'
-import type { PrismaClient } from './prisma-client/client.ts'
+import { createHash } from 'node:crypto'
+import type { EntityKind } from '@hesta-codex/shared'
+import type { Prisma, PrismaClient } from './prisma-client/client.ts'
 import { EditorialError } from './admin/editorial.js'
 
 export interface ReferenceEntity {
   id: string; slug: string; title: string; aliases: string[]; bodyMarkdown: string
   status: string; visibility: string; updatedAt: Date
+  kind?: EntityKind
 }
 export interface ReferenceOrigin { sourceId: string; path: string; entityId: string; metadata: unknown }
 export interface ReferenceService {
@@ -150,9 +153,7 @@ export function buildReferenceCatalog(entities: ReferenceEntity[], origins: Refe
         ...(origin ? { origin: { sourceId: origin.sourceId, path: origin.path, excerpt } } : {}) }
     }).sort((a, b) => a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0)
   }
-  function detail(id: string, updatedAt: string): ObsidianReferences | undefined {
-    const nav = navigation(id, updatedAt, false)
-    if (!nav) return undefined
+  function diagnosticsFor(id: string): ObsidianReferences['diagnostics'] {
     const diagnostics = new Map<string, ObsidianReferences['diagnostics'][number]>()
     for (const result of resolved.get(id) ?? []) {
       if (result.status === 'RESOLVED' && !result.anchorIssue) continue
@@ -166,30 +167,55 @@ export function buildReferenceCatalog(entities: ReferenceEntity[], origins: Refe
         UNSUPPORTED: 'Inclusion ou type de lien non pris en charge.', OUT_OF_SCOPE: 'Chemin sortant du périmètre de la Source.', RESOLVED: '',
       })[result.status] })
     }
-    return { ...nav, outgoing: connections(id, 'outgoing'), incoming: connections(id, 'incoming'),
-      stats: statsById.get(id) ?? emptyStats(), diagnostics: [...diagnostics.values()] }
+    return [...diagnostics.values()]
   }
-  return { navigation, detail, graph: () => ({ edges: [...edges.values()].sort((a, b) => a.id < b.id ? -1 : 1), stats: totalStats }) }
+  function detail(id: string, updatedAt: string): ObsidianReferences | undefined {
+    const nav = navigation(id, updatedAt, false)
+    if (!nav) return undefined
+    return { ...nav, outgoing: connections(id, 'outgoing'), incoming: connections(id, 'incoming'),
+      stats: statsById.get(id) ?? emptyStats(), diagnostics: diagnosticsFor(id) }
+  }
+  const bodyHashes = new Map(entities.map(entity => [entity.id, createHash('sha256').update(entity.bodyMarkdown).digest('hex')]))
+  // Conservative invalidation: editing the mentioning note or either confirmed identity requires review again.
+  const identities = new Map([...contexts].map(([id, origins]) => [id, [...new Set(origins.map(origin =>
+    JSON.stringify([origin.sourceId, origin.path])))].sort()]))
+  const fingerprintOccurrences = new Map<string, unknown[]>()
+  for (const [id, results] of resolved) for (const item of results) {
+    if (!item.entity) continue
+    const key = `obsidian:${id}:${item.entity.id}`, occurrences = fingerprintOccurrences.get(key) ?? []
+    occurrences.push([item.occurrence.start, item.occurrence.end, item.occurrence.target, item.occurrence.anchor, item.anchorId ?? null])
+    fingerprintOccurrences.set(key, occurrences)
+  }
+  const fingerprints = new Map([...edges.values()].map(edge => [edge.id, createHash('sha256').update(JSON.stringify([
+    edge.source, edge.target, bodyHashes.get(edge.source), identities.get(edge.source) ?? [], identities.get(edge.target) ?? [],
+    fingerprintOccurrences.get(edge.id),
+  ])).digest('hex')]))
+  return { navigation, detail, diagnostics: diagnosticsFor, fingerprints, contexts, entities: byId,
+    graph: () => ({ edges: [...edges.values()].sort((a, b) => a.id < b.id ? -1 : 1), stats: totalStats }) }
+}
+
+export async function loadReferenceSnapshot(tx: Prisma.TransactionClient) {
+  const entities = await tx.entity.findMany({ select: { id: true, slug: true, title: true, aliases: true,
+    bodyMarkdown: true, kind: true, status: true, visibility: true, updatedAt: true }, orderBy: { id: 'asc' }, take: 2001 })
+  const associations = await tx.ingestionAssociation.findMany({ where: { source: { kind: 'OBSIDIAN' },
+    externalId: { not: null }, decisions: { some: { decision: 'CONFIRMED' } } }, select: {
+    sourceId: true, externalId: true, decisions: { where: { decision: 'CONFIRMED' }, select: { entityId: true } },
+    item: { select: { receipts: { select: { metadata: true }, orderBy: [{ ingestedAt: 'desc' }, { id: 'desc' }], take: 1 } } },
+  }, orderBy: { id: 'asc' }, take: 4001 })
+  if (entities.length > 2000 || associations.length > 4000 || entities.reduce((size, entity) => size + Buffer.byteLength(entity.bodyMarkdown), 0) > 32 * 1024 * 1024) {
+    throw new EditorialError(503, 'REFERENCES_LIMIT', 'Catalogue trop volumineux pour calculer les références.')
+  }
+  return { entities, origins: associations.flatMap(association => association.decisions.map(decision => ({
+    sourceId: association.sourceId, path: association.externalId!, entityId: decision.entityId,
+    metadata: association.item.receipts[0]?.metadata,
+  }))) }
 }
 
 export function createPrismaReferenceService(prisma: PrismaClient): ReferenceService {
   async function catalog() {
     const snapshot = await prisma.$transaction(async tx => {
       await tx.$executeRawUnsafe('SET TRANSACTION READ ONLY')
-      const entities = await tx.entity.findMany({ select: { id: true, slug: true, title: true, aliases: true,
-        bodyMarkdown: true, status: true, visibility: true, updatedAt: true }, orderBy: { id: 'asc' }, take: 2001 })
-      const associations = await tx.ingestionAssociation.findMany({ where: { source: { kind: 'OBSIDIAN' },
-        externalId: { not: null }, decisions: { some: { decision: 'CONFIRMED' } } }, select: {
-        sourceId: true, externalId: true, decisions: { where: { decision: 'CONFIRMED' }, select: { entityId: true } },
-        item: { select: { receipts: { select: { metadata: true }, orderBy: [{ ingestedAt: 'desc' }, { id: 'desc' }], take: 1 } } },
-      }, orderBy: { id: 'asc' }, take: 4001 })
-      if (entities.length > 2000 || associations.length > 4000 || entities.reduce((size, entity) => size + Buffer.byteLength(entity.bodyMarkdown), 0) > 32 * 1024 * 1024) {
-        throw new EditorialError(503, 'REFERENCES_LIMIT', 'Catalogue trop volumineux pour calculer les références.')
-      }
-      return { entities, origins: associations.flatMap(association => association.decisions.map(decision => ({
-        sourceId: association.sourceId, path: association.externalId!, entityId: decision.entityId,
-        metadata: association.item.receipts[0]?.metadata,
-      }))) }
+      return loadReferenceSnapshot(tx)
     }, { isolationLevel: 'RepeatableRead', timeout: 15_000 })
     return buildReferenceCatalog(snapshot.entities, snapshot.origins)
   }

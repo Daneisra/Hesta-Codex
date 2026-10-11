@@ -14,6 +14,7 @@ import { evidencePatchSchema, relationPatchSchema, relationWorkflowSchema, sourc
 import type { AdminStore } from './store.js'
 import type { GraphStore } from '../graph.js'
 import type { ReferenceService } from '../obsidian-references.js'
+import type { QualificationService } from '../reference-qualification.js'
 import { patchSchema, validationMessage, workflowSchema } from './validation.js'
 import { createIngestionAdminRouter, type IngestionAdminStore } from '../ingestion/admin.js'
 
@@ -37,8 +38,32 @@ function editorLabel(response: { locals: Record<string, unknown> }): string {
 
 export function createAdminRouter(store: AdminStore, editorial: EditorialService,
   provenance?: ProvenanceService, manual?: ManualService, manualRelations?: ManualRelationService,
-  evidenceAdd?: EvidenceAddService, graph?: GraphStore, ingestion?: IngestionAdminStore, references?: ReferenceService) {
+  evidenceAdd?: EvidenceAddService, graph?: GraphStore, ingestion?: IngestionAdminStore, references?: ReferenceService,
+  qualification?: QualificationService) {
   const router = Router()
+  if (qualification) {
+    const identity = z.uuid().transform(value => value.toLowerCase())
+    const qualificationFilters = z.strictObject({
+      q: z.string().trim().min(1).max(100).optional(), state: z.enum(['PENDING', 'QUALIFIED', 'IGNORED']).optional(),
+      kind: z.enum(EntityKind).optional(), sourceId: identity.optional(), entityId: identity.optional(),
+      direction: z.enum(['all', 'incoming', 'outgoing']).optional(), sort: z.enum(['mentions', 'name', 'state']).optional(),
+      page: z.string().regex(/^[1-9]\d{0,3}$/).transform(Number).default(1),
+      view: z.enum(['references', 'diagnostics']).optional(),
+    }).refine(input => !input.direction || input.direction === 'all' || !!input.entityId)
+    router.get('/reference-qualifications', async (request, response) => {
+      const parsed = qualificationFilters.safeParse(request.query)
+      if (!parsed.success) { response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'Filtres de qualification invalides.' } }); return }
+      response.json(await qualification.list(parsed.data))
+    })
+    const decisionSchema = z.strictObject({ fromEntityId: identity, toEntityId: identity, fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+      expectedDecisionRevision: identity.nullable(), ignore: z.boolean() })
+    router.post('/reference-qualifications/decision', async (request, response) => {
+      const parsed = decisionSchema.safeParse(request.body)
+      if (!parsed.success) { response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'Décision invalide.' } }); return }
+      await qualification.decide(parsed.data, { discordId: adminSession(response).discordId, label: editorLabel(response) })
+      response.status(204).end()
+    })
+  }
   if (ingestion) router.use('/ingestion', createIngestionAdminRouter(ingestion))
 
   if (graph) router.get('/graph', async (_request, response) => {
@@ -135,13 +160,23 @@ export function createAdminRouter(store: AdminStore, editorial: EditorialService
       response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'Slug invalide' } })
       return
     }
-    const entity = await store.getEntity(slug)
+    const entity = await store.getEntity(slug, request.headers['x-hesta-relation-evidence'] === 'defer')
     if (!entity) {
       response.status(404).json({ error: { code: 'NOT_FOUND', message: 'Fiche introuvable' } })
       return
     }
-    const obsidianReferences = await references?.detail(entity.id, entity.updatedAt)
+    const obsidianReferences = qualification ? await qualification.detail(entity.id, entity.updatedAt)
+      : await references?.detail(entity.id, entity.updatedAt)
     response.json({ ...entity, ...(obsidianReferences ? { obsidianReferences } : {}) })
+  })
+
+  if (store.getRelationEvidence) router.get('/relations/:id/evidence', async (request, response) => {
+    if (!z.uuid().safeParse(request.params.id).success) {
+      response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'Identifiant invalide.' } }); return
+    }
+    const evidence = await store.getRelationEvidence!(request.params.id)
+    if (evidence === null) { response.status(404).json({ error: { code: 'NOT_FOUND', message: 'Relation introuvable.' } }); return }
+    response.json({ evidence })
   })
 
   router.patch('/entities/:slug', async (request, response) => {

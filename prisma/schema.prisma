@@ -80,9 +80,26 @@ model Entity {
   evidence          Evidence[]
   revisions         Revision[]
   ingestionDecisions IngestionAssociationDecision[]
+  ignoredOutgoingReferences ObsidianReferenceIgnore[] @relation("IgnoredReferenceFrom")
+  ignoredIncomingReferences ObsidianReferenceIgnore[] @relation("IgnoredReferenceTo")
 
   @@index([kind, placeKind])
   @@index([status, visibility])
+}
+
+// Editorial decisions only. Automatic references remain a read-only projection.
+model ObsidianReferenceIgnore {
+  fromEntityId String @db.Uuid
+  toEntityId String @db.Uuid
+  fingerprint String @db.Char(64)
+  revision String @default(uuid()) @db.Uuid
+  authorDiscordId String @db.VarChar(32)
+  authorLabel String @db.VarChar(200)
+  decidedAt DateTime @default(now()) @db.Timestamptz(3)
+  fromEntity Entity @relation("IgnoredReferenceFrom", fields: [fromEntityId], references: [id], onDelete: Cascade, onUpdate: Restrict)
+  toEntity Entity @relation("IgnoredReferenceTo", fields: [toEntityId], references: [id], onDelete: Cascade, onUpdate: Restrict)
+  @@id([fromEntityId, toEntityId])
+  @@index([toEntityId])
 }
 
 model RelationType {

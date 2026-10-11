@@ -4,6 +4,7 @@ import type {
   AdminSource, AdminSourcePatch, EditorialStatus, SourceKind, Visibility,
 } from '@hesta-codex/shared'
 import { AdminAddEvidence } from './AdminAddEvidence'
+import { errorStatus, getAdminJson } from './admin-http'
 
 type Target = { kind: 'relation' | 'source' | 'evidence' | 'add-entity' | 'add-relation'; id: string }
 type Mutation = (path: string, method: 'PATCH' | 'POST', body: unknown) => Promise<boolean>
@@ -125,15 +126,37 @@ function EvidenceEditor({ evidence, onSave, onCancel, onDirty, busy, disabled }:
   </form>
 }
 
-export function AdminProvenance({ entity, onNavigate, onMutate, onDirtyChange, onEditingChange, busy, disabled, error }: {
+export function AdminProvenance({ entity, onNavigate, onMutate, onDirtyChange, onEditingChange, busy, disabled, error, onAccessError }: {
   entity: AdminEntityDetail
   onNavigate: (event: MouseEvent<HTMLAnchorElement>, path: string) => void
   onMutate: Mutation; onDirtyChange: (dirty: boolean) => void; onEditingChange: (editing: boolean) => void
   busy: boolean; disabled: boolean
+  onAccessError?: (status: number) => void
   error: { status: number | null; message: string; issues?: Array<{ path: string; message: string }> } | null
 }) {
   const [active, setActive] = useState<Target | null>(null)
   const [dirty, setDirty] = useState(false)
+  const [expandedRelation, setExpandedRelation] = useState<string | null>(null)
+  const [relationSearch, setRelationSearch] = useState({ incoming: '', outgoing: '' })
+  const [relationStatus, setRelationStatus] = useState({ incoming: '', outgoing: '' })
+  const [relationPage, setRelationPage] = useState({ incoming: 1, outgoing: 1 })
+  const [loadedEvidence, setLoadedEvidence] = useState<{ entity: AdminEntityDetail; id: string; evidence: AdminEvidence[] } | null>(null)
+  const [evidenceError, setEvidenceError] = useState(false), [evidenceRetry, setEvidenceRetry] = useState(0)
+  useEffect(() => {
+    const relation = [...entity.outgoingRelations, ...entity.incomingRelations].find(item => item.id === expandedRelation)
+    if (!relation?.evidenceDeferred) return
+    const controller = new AbortController()
+    setEvidenceError(false); setLoadedEvidence(null)
+    getAdminJson<{ evidence: AdminEvidence[] }>(`/api/admin/relations/${relation.id}/evidence`, controller.signal).then(result => {
+      if (!controller.signal.aborted) setLoadedEvidence({ entity, id: relation.id, evidence: result.evidence })
+    }).catch(error => {
+      if (controller.signal.aborted) return
+      setEvidenceError(true)
+      const status = errorStatus(error)
+      if (status === 401 || status === 403) onAccessError?.(status)
+    })
+    return () => controller.abort()
+  }, [entity, expandedRelation, evidenceRetry, onAccessError])
   const start = (target: Target) => {
     if (dirty && !window.confirm('Perdre les modifications non enregistrées ?')) return
     setDirty(false); onDirtyChange(false); setActive(target); onEditingChange(true)
@@ -177,9 +200,23 @@ export function AdminProvenance({ entity, onNavigate, onMutate, onDirtyChange, o
         : editable && <button type="button" disabled={disabled || busy}
           onClick={() => start({ kind: 'evidence', id: item.id })}>Modifier la preuve</button>}
     </li>)}</ul>
-  const relationSection = (title: string, relations: AdminRelation[], direction: 'outgoing' | 'incoming') =>
-    <section className="admin-section"><h3>{title} <span className="admin-count">{relations.length}</span></h3>
-      {relations.length === 0 ? <p className="admin-muted">Aucune relation.</p> : <ul className="admin-relation-list">{relations.map((relation) => {
+  const relationSection = (title: string, relations: AdminRelation[], direction: 'outgoing' | 'incoming') => {
+    const query = relationSearch[direction].toLocaleLowerCase('fr')
+    const filtered = relations.filter(relation => (!relationStatus[direction] || relation.status === relationStatus[direction]) &&
+      [relation.entity.title, relation.entity.slug, relation.relationType.label, relation.relationType.inverseLabel ?? '', relation.relationType.code]
+        .some(value => value.toLocaleLowerCase('fr').includes(query)))
+    const pageSize = 10, page = Math.min(relationPage[direction], Math.max(1, Math.ceil(filtered.length / pageSize)))
+    return <section className="admin-section"><h3>{title} <span className="admin-count">{relations.length}</span></h3>
+      {relations.length > 10 && <div className="admin-filters"><label>Rechercher · {title}<input type="search" maxLength={100}
+        disabled={active !== null || busy} value={relationSearch[direction]} onChange={event => {
+          setRelationSearch(value => ({ ...value, [direction]: event.target.value })); setRelationPage(value => ({ ...value, [direction]: 1 }))
+        }} /></label><label>Statut · {title}<select disabled={active !== null || busy} value={relationStatus[direction]} onChange={event => {
+          setRelationStatus(value => ({ ...value, [direction]: event.target.value })); setRelationPage(value => ({ ...value, [direction]: 1 }))
+        }}><option value="">Tous</option>{Object.entries(statusLabel).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label></div>}
+      {filtered.length === 0 ? <p className="admin-muted">Aucune relation.</p> : <ul className="admin-relation-list">{filtered.slice((page - 1) * pageSize, page * pageSize).map((original) => {
+        const loaded = loadedEvidence?.entity === entity && loadedEvidence.id === original.id
+        const relation = loaded ? { ...original, evidence: loadedEvidence.evidence } : original
+        const ready = !original.evidenceDeferred || loaded
         const visible = relation.status === 'PUBLISHED' && relation.visibility === 'PUBLIC' &&
           entity.status === 'PUBLISHED' && entity.visibility === 'PUBLIC' &&
           relation.entity.status === 'PUBLISHED' && relation.entity.visibility === 'PUBLIC'
@@ -189,7 +226,15 @@ export function AdminProvenance({ entity, onNavigate, onMutate, onDirtyChange, o
         return <li key={relation.id}>
           <div className="admin-relation-line"><span>{label}</span>
             <a href={`/admin/fiches/${relation.entity.slug}`} onClick={(event) => onNavigate(event, `/admin/fiches/${relation.entity.slug}`)}>{relation.entity.title}</a>
-            <span className="admin-badge">{statusLabel[relation.status]} · {visibilityLabel[relation.visibility]}</span></div>
+            <span className="admin-badge">{statusLabel[relation.status]} · {visibilityLabel[relation.visibility]}</span>
+          <span className="admin-muted">{loaded ? relation.evidence.length : relation.evidenceCount ?? relation.evidence.length} preuve(s)</span>{' '}
+          <button type="button" aria-expanded={expandedRelation === relation.id} aria-controls={`relation-detail-${direction}-${relation.id}`}
+            disabled={busy || active !== null} onClick={() => setExpandedRelation(value => value === relation.id ? null : relation.id)}>
+            {expandedRelation === relation.id ? 'Masquer les détails' : 'Détails de la relation'}</button></div>
+          {expandedRelation === relation.id && !ready && <div id={`relation-detail-${direction}-${relation.id}`}>
+            {evidenceError ? <p role="alert">Preuves indisponibles. <button type="button" onClick={() => setEvidenceRetry(value => value + 1)}>Réessayer les preuves</button></p>
+              : <p role="status">Chargement des preuves…</p>}</div>}
+          {expandedRelation === relation.id && ready && <div id={`relation-detail-${direction}-${relation.id}`}>
           <p className="admin-muted">Type : {relation.relationType.code} · Mise à jour : {new Date(relation.updatedAt).toLocaleString('fr-FR')}</p>
           {relation.description && <p>{relation.description}</p>}
           <p className="admin-muted">{visible ? 'Cette relation est visible publiquement.' :
@@ -235,8 +280,15 @@ export function AdminProvenance({ entity, onNavigate, onMutate, onDirtyChange, o
               relation.entity.status !== 'ARCHIVED')}
           </div>)}
           {relation.evidence.length === 0 && <p className="admin-muted">Aucune preuve liée.</p>}
+          </div>}
         </li>
-      })}</ul>}</section>
+      })}</ul>}
+      {filtered.length > pageSize && <div className="admin-pagination"><button type="button" disabled={active !== null || busy || page <= 1}
+        onClick={() => { setExpandedRelation(null); setRelationPage(value => ({ ...value, [direction]: page - 1 })) }}>Précédent</button>
+        <span>{filtered.length} résultat(s) · Page {page}</span><button type="button" disabled={active !== null || busy || page * pageSize >= filtered.length}
+          onClick={() => { setExpandedRelation(null); setRelationPage(value => ({ ...value, [direction]: page + 1 })) }}>Suivant</button></div>}
+    </section>
+  }
   return <>
     <section className="admin-section"><h2>Provenance</h2>
       <p className="admin-muted">{sources.length} source(s) · {entity.evidence.length} preuve(s) directement sur la fiche. Les preuves des relations figurent sous chaque relation.</p>

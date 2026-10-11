@@ -85,6 +85,8 @@ describe('création de relation depuis l’admin', () => {
     await user.click(screen.getByRole('button', { name: 'Créer la relation' }))
     await waitFor(() => expect(window.location.pathname).toBe('/admin/fiches/barolt'))
     expect(await screen.findByText('Relation créée en proposition.')).toBeTruthy()
+    expect(screen.queryByText('Preuve initiale')).toBeNull()
+    await user.click(await screen.findByRole('button', { name: 'Détails de la relation' }))
     expect(screen.getByText('Preuve initiale')).toBeTruthy()
     expect(screen.queryByText(/Revision #1/)).toBeNull()
     const post = requests.find(({ url, init }) => url === '/api/admin/relations' && init?.method === 'POST')

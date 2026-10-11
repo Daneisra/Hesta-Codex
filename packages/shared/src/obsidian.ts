@@ -14,6 +14,7 @@ export interface WikiNavigation {
 }
 export type WikiStatus = 'RESOLVED' | 'MISSING' | 'AMBIGUOUS' | 'UNASSOCIATED' | 'UNSUPPORTED' | 'OUT_OF_SCOPE'
 export interface ReferenceConnection {
+  qualification?: import('./reference-qualification.js').ReferenceQualification
   id: string; slug: string; title: string; occurrences: number
   archived?: boolean
   origin?: { sourceId: string; path: string; excerpt: string | null }

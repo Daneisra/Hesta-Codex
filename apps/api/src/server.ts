@@ -15,6 +15,7 @@ import { createPrismaStore } from './store.js'
 import { createPrismaGraphStore } from './graph.js'
 import { createPrismaIngestionAdminStore } from './ingestion/admin.js'
 import { createPrismaReferenceService } from './obsidian-references.js'
+import { createPrismaQualificationService } from './reference-qualification.js'
 
 config({ path: resolve(import.meta.dirname, '../../../.env'), quiet: true })
 
@@ -42,6 +43,7 @@ const app = createApp(createPrismaStore(prisma), {
   provenance: createPrismaProvenanceService(prisma),
   graph,
   references,
+  qualification: createPrismaQualificationService(prisma),
   ingestion: createPrismaIngestionAdminStore(prisma),
 }, graph, references)
 const server = app.listen(port, () => {

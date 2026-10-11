@@ -4,18 +4,20 @@ import { ObsidianReferences } from './ObsidianReferences'
 import type {
   AdminEntityDetail, AdminEntityListResponse, AdminEntityPatch, AdminManualCreateRequest, AdminManualRelationRequest, AdminStats,
   AuthSessionResponse, EditorialStatus, EntityKind, Visibility,
+  QualificationFilters, ReferenceIgnoreRequest,
 } from '@hesta-codex/shared'
 import { AdminEditor } from './AdminEditor'
 import { AdminCreate } from './AdminCreate'
 import { AdminCreateRelation } from './AdminCreateRelation'
 import type { ReferenceRelationSeed } from './reference-relation'
 import { AdminProvenance } from './AdminProvenance'
-import { getAdminJson as getJson, HttpError, errorStatus } from './admin-http'
+import { getAdminJson as getJson, HttpError, errorStatus, decideReference } from './admin-http'
 import './Admin.css'
 const GraphPage = lazy(() => import('./GraphPage').then((module) => ({ default: module.GraphPage })))
 const AdminIngestion = lazy(() => import('./AdminIngestion').then(module => ({ default: module.AdminIngestion })))
+const AdminReferenceQueue = lazy(() => import('./AdminReferenceQueue').then(module => ({ default: module.AdminReferenceQueue })))
 
-type AdminRoute = { view: 'dashboard' } | { view: 'graph' } | { view: 'ingestion' } | { view: 'create' } | { view: 'relation-create'; slug: string } |
+type AdminRoute = { view: 'dashboard' } | { view: 'graph' } | { view: 'ingestion' } | { view: 'qualification' } | { view: 'create' } | { view: 'relation-create'; slug: string } |
   { view: 'entity'; slug: string } | { view: 'not-found' }
 type Load<T> = { phase: 'loading' } | { phase: 'ready'; data: T } | { phase: 'error'; status: number | null }
 const detailPath = /^\/admin\/fiches\/([a-z0-9]+(?:-[a-z0-9]+)*)\/?$/
@@ -34,6 +36,7 @@ const visibilityLabels: Record<Visibility, string> = {
 }
 
 function readRoute(): AdminRoute {
+  if (/^\/admin\/relations-a-qualifier\/?$/.test(window.location.pathname)) return { view: 'qualification' }
   if (window.location.pathname === '/admin' || window.location.pathname === '/admin/') return { view: 'dashboard' }
   if (window.location.pathname === '/admin/graphe' || window.location.pathname === '/admin/graphe/') return { view: 'graph' }
   if (window.location.pathname === '/admin/ingestion' || window.location.pathname === '/admin/ingestion/') return { view: 'ingestion' }
@@ -80,7 +83,7 @@ function StateMessage({ children }: { children: string }) {
 }
 
 function Detail({ entity, onNavigate, editing, provenanceEditing, busy, authExpired, error, onEdit, onCancel, onSave,
-  onDirtyChange, onWorkflow, onReload, onProvenanceMutation, onProvenanceEditingChange, evidenceNotice, onDefine }: {
+  onDirtyChange, onWorkflow, onReload, onProvenanceMutation, onProvenanceEditingChange, evidenceNotice, onDefine, onIgnore, onAccessError }: {
   entity: AdminEntityDetail
   onNavigate: (event: MouseEvent<HTMLAnchorElement>, path: string) => void
   editing: boolean
@@ -99,6 +102,8 @@ function Detail({ entity, onNavigate, editing, provenanceEditing, busy, authExpi
   onProvenanceEditingChange: (editing: boolean) => void
   evidenceNotice: boolean
   onDefine: (seed: ReferenceRelationSeed, fromSlug: string) => void
+  onIgnore: (input: ReferenceIgnoreRequest) => void
+  onAccessError: (status: number) => void
 }) {
   return <article className="admin-detail">
     <a className="admin-back" href="/admin" onClick={(event) => onNavigate(event, '/admin')}>← Tableau de bord</a>
@@ -154,9 +159,9 @@ function Detail({ entity, onNavigate, editing, provenanceEditing, busy, authExpi
       </section>}
     {!editing && entity.obsidianReferences?.updatedAt === entity.updatedAt &&
       <ObsidianReferences references={entity.obsidianReferences} onNavigate={onNavigate} entity={entity}
-        onDefine={onDefine} disabled={busy || authExpired || provenanceEditing} />}
+        onDefine={onDefine} onIgnore={onIgnore} disabled={busy || authExpired || provenanceEditing} />}
     <AdminProvenance entity={entity} onNavigate={onNavigate} onMutate={onProvenanceMutation} error={error}
-      onDirtyChange={onDirtyChange} onEditingChange={onProvenanceEditingChange} busy={busy} disabled={authExpired || editing} />
+      onDirtyChange={onDirtyChange} onEditingChange={onProvenanceEditingChange} busy={busy} disabled={authExpired || editing} onAccessError={onAccessError} />
     <section className="admin-section">
       <h2>Historique</h2>
       {entity.revisions.length === 0 ? <p className="admin-muted">Aucune révision.</p> : (
@@ -199,6 +204,7 @@ export function AdminApp() {
   const [createdNotice, setCreatedNotice] = useState(false)
   const [createdRelationNotice, setCreatedRelationNotice] = useState(false)
   const [relationSeed, setRelationSeed] = useState<ReferenceRelationSeed | null>(null)
+  const [qualificationFilters, setQualificationFilters] = useState<QualificationFilters>({ page: 1, state: 'PENDING' })
   const relationPending = useRef(false)
   const [evidenceNotice, setEvidenceNotice] = useState(false)
   const mainRef = useRef<HTMLElement>(null)
@@ -313,7 +319,7 @@ export function AdminApp() {
     const controller = new AbortController()
     setDetailFor(activeSlug)
     setDetail({ phase: 'loading' })
-    getJson<AdminEntityDetail>(`/api/admin/entities/${encodeURIComponent(activeSlug)}`, controller.signal)
+    getJson<AdminEntityDetail>(`/api/admin/entities/${encodeURIComponent(activeSlug)}`, controller.signal, { 'X-Hesta-Relation-Evidence': 'defer' })
       .then((data) => { if (!controller.signal.aborted) setDetail({ phase: 'ready', data }) })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return
@@ -372,6 +378,7 @@ export function AdminApp() {
       setRoute({ view: 'dashboard' })
       setRelationSeed(null)
       setSession({ phase: 'ready', data: { authenticated: false, isAdmin: false, user: null } })
+      setQualificationFilters({ page: 1, state: 'PENDING' })
     } catch { setSession({ phase: 'error', status: null }) }
   }
 
@@ -457,12 +464,13 @@ export function AdminApp() {
       mutationSucceeded(updated)
       setCreatedRelationNotice(true)
       const returnSlug = relationSeed?.returnSlug ?? updated.slug
+      const returnPath = relationSeed?.returnPath
       setRelationSeed(null)
-      const path = `/admin/fiches/${returnSlug}`
+      const path = returnPath ?? `/admin/fiches/${returnSlug}`
       currentPath.current = path
       focusAfterNavigation.current = true
       window.history.pushState(null, '', path)
-      setRoute({ view: 'entity', slug: returnSlug })
+      setRoute(returnPath ? { view: 'qualification' } : { view: 'entity', slug: returnSlug })
     } catch (error) { mutationFailed(error) }
     finally { relationPending.current = false }
   }
@@ -480,6 +488,20 @@ export function AdminApp() {
       setDetailRefresh((value) => value + 1)
       return true
     } catch (error) { mutationFailed(error); return false }
+  }
+
+  async function ignoreReference(input: ReferenceIgnoreRequest) {
+    if (relationPending.current || busy || authExpired || !isAdmin) return
+    relationPending.current = true; setBusy(true); setMutationError(null)
+    try {
+      await decideReference(input)
+      setDetailRefresh(value => value + 1)
+    } catch (error) {
+      mutationFailed(error)
+      if (errorStatus(error) === 409) setMutationError({ status: 409, message: 'Référence ou décision modifiée. La fiche a été actualisée : examinez-la avant de réessayer.' })
+      setDetailRefresh(value => value + 1)
+    }
+    finally { relationPending.current = false; setBusy(false) }
   }
 
   async function workflow(action: 'publish' | 'unpublish') {
@@ -539,6 +561,10 @@ export function AdminApp() {
           <AdminIngestion onAccessError={ingestionAccessError} onNavigate={onNavigate} />
         </Suspense>
       </>}
+      {isAdmin && route.view === 'qualification' && <Suspense fallback={<StateMessage>Chargement de la file…</StateMessage>}>
+        <AdminReferenceQueue filters={qualificationFilters} onFilters={setQualificationFilters} onNavigate={onNavigate}
+          onAccessError={ingestionAccessError} onDefine={(seed, fromSlug) => navigateTo(`/admin/fiches/${fromSlug}/nouvelle-relation`, seed)} />
+      </Suspense>}
       {isAdmin && route.view === 'dashboard' && <>
         <div className="admin-page-heading"><p className="admin-eyebrow">Pilotage éditorial</p>
           <h1>Tableau de bord</h1><p>Explorer les fiches, leurs liens, leurs sources et leur état de publication.</p>
@@ -546,6 +572,8 @@ export function AdminApp() {
             onClick={(event) => onNavigate(event, '/admin/graphe')}>Graphe éditorial</a>{' '}
           <a className="admin-primary-link" href="/admin/ingestion"
             onClick={(event) => onNavigate(event, '/admin/ingestion')}>Ingestion</a>{' '}
+          <a className="admin-primary-link" href="/admin/relations-a-qualifier"
+            onClick={event => onNavigate(event, '/admin/relations-a-qualifier')}>Relations à qualifier</a>{' '}
           <a className="admin-primary-link" href="/admin/nouvelle-fiche"
             onClick={(event) => onNavigate(event, '/admin/nouvelle-fiche')}>Nouvelle fiche</a></div>
         {stats.phase === 'loading' && <StateMessage>Chargement des statistiques…</StateMessage>}
@@ -611,6 +639,8 @@ export function AdminApp() {
         {detailFor === activeSlug && detail.phase === 'error' && <div className="admin-state" role="alert"><h1>{detail.status === 404 ? 'Fiche introuvable' : 'Fiche indisponible'}</h1>
           <a href="/admin" onClick={(event) => onNavigate(event, '/admin')}>Retour au tableau de bord</a></div>}
         {detailFor === activeSlug && detail.phase === 'ready' && <Detail entity={detail.data} onNavigate={onNavigate}
+          onAccessError={ingestionAccessError}
+          onIgnore={input => void ignoreReference(input)}
           editing={editing} provenanceEditing={provenanceEditing} busy={busy} authExpired={authExpired}
           error={mutationError} evidenceNotice={evidenceNotice}
           onDefine={(seed, fromSlug) => {

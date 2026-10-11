@@ -14,7 +14,8 @@ export interface AdminFilters {
 
 export interface AdminStore {
   listEntities(filters: AdminFilters): Promise<AdminEntityListResponse>
-  getEntity(slug: string): Promise<AdminEntityDetail | null>
+  getEntity(slug: string, deferRelationEvidence?: boolean): Promise<AdminEntityDetail | null>
+  getRelationEvidence?(id: string): Promise<AdminEvidence[] | null>
   getStats(): Promise<AdminStats>
 }
 
@@ -155,8 +156,29 @@ export function createPrismaAdminStore(prisma: PrismaClient): AdminStore {
       ])
       return { items: rows.map(listItem), total, page, pageSize }
     },
-    async getEntity(slug) {
+    async getEntity(slug, deferRelationEvidence = false) {
+      if (deferRelationEvidence) {
+        const compactRelationSelect = { ...relationSelect, evidence: false, _count: { select: { evidence: true } } } as const
+        const row = await prisma.entity.findUnique({ where: { slug }, select: { ...detailSelect,
+          outgoingRelations: { select: { ...compactRelationSelect, toEntity: { select: listSelect } }, orderBy: { id: 'asc' } },
+          incomingRelations: { select: { ...compactRelationSelect, fromEntity: { select: listSelect } }, orderBy: { id: 'asc' } },
+        } })
+        if (!row) return null
+        const detail = detailItem({ ...row, outgoingRelations: row.outgoingRelations.map(relation => ({ ...relation, evidence: [] })),
+          incomingRelations: row.incomingRelations.map(relation => ({ ...relation, evidence: [] })) })
+        for (const direction of ['outgoingRelations', 'incomingRelations'] as const) {
+          detail[direction] = detail[direction].map((relation, index) => ({ ...relation,
+            evidenceCount: row[direction][index]!._count.evidence, evidenceDeferred: true }))
+        }
+        return detail
+      }
       return readAdminEntity(prisma, slug)
+    },
+    async getRelationEvidence(id) {
+      const relation = await prisma.relation.findUnique({ where: { id }, select: {
+        evidence: { select: evidenceSelect, orderBy: { id: 'asc' } },
+      } })
+      return relation ? relation.evidence.map(evidenceItem) : null
     },
     async getStats() {
       const [statuses, visibilities, sources, relations] = await Promise.all([

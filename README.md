@@ -175,6 +175,11 @@ et les conflits. Depuis une fiche non archivée, « Ajouter une relation » cré
 inverses et symétriques sont normalisés côté API ; voir
 [docs/MANUAL-RELATIONS.md](docs/MANUAL-RELATIONS.md).
 
+La page admin **Relations à qualifier** centralise les références Obsidian résolues,
+leur qualification et les décisions d’ignorance persistantes. Les preuves des relations
+s’ouvrent à la demande dans les fiches. Voir [docs/REFERENCE-QUALIFICATION.md](docs/REFERENCE-QUALIFICATION.md),
+notamment la migration dédiée à appliquer avant le démarrage de l’API mise à jour.
+
 Depuis les références Obsidian résolues, « Définir une relation » préremplit les deux
 fiches et la provenance vérifiable dans ce même formulaire. Le type, l’énoncé et la création
 restent à confirmer humainement ; la référence automatique et le Markdown sont conservés.

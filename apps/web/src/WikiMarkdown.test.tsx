@@ -105,8 +105,8 @@ describe('références administrateur', () => {
         { target: 'Vide', anchor: null, status: 'UNASSOCIATED', message: 'Note connue sans fiche associée.', occurrences: 1 },
       ] }
     render(<ObsidianReferences references={refs} onNavigate={vi.fn()} />)
-    expect(screen.getByRole('heading', { name: 'Fiches mentionnées' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Fiches qui mentionnent cette fiche' })).toBeTruthy()
+    expect(screen.getByText('Fiches mentionnées (1)')).toBeTruthy()
+    expect(screen.getByText('Fiches qui mentionnent cette fiche (1)')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Homonyme' }).getAttribute('href')).toBe('/admin/fiches/homonyme-ville')
     expect(screen.getByText(/aucune relation éditoriale/)).toBeTruthy()
     expect(screen.getByText(/Note connue sans fiche associée/)).toBeTruthy()

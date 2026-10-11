@@ -212,7 +212,7 @@ export function AdminCreateRelation({ entity, busy, disabled, error, onCreate, o
     setReview(true)
   }
 
-  const back = `/admin/fiches/${seed?.returnSlug ?? entity.slug}`
+  const back = seed?.returnPath ?? `/admin/fiches/${seed?.returnSlug ?? entity.slug}`
   return <div className="admin-create">
     <a className="admin-back" href={back} onClick={(event) => onNavigate(event, back)}>← {seed?.returnTitle ?? entity.title}</a>
     <div className="admin-page-heading"><p className="admin-eyebrow">Graphe éditorial</p><h1>Ajouter une relation</h1>

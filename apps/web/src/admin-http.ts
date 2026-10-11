@@ -8,3 +8,10 @@ export async function getAdminJson<T>(url: string, signal: AbortSignal, headers:
   return response.json() as Promise<T>
 }
 export function errorStatus(error: unknown): number | null { return error instanceof HttpError ? error.status : null }
+
+export async function decideReference(body: import('@hesta-codex/shared').ReferenceIgnoreRequest): Promise<void> {
+  const response = await fetch('/api/admin/reference-qualifications/decision', { method: 'POST',
+    credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(body) })
+  if (!response.ok) throw new HttpError(response.status)
+}

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { AdminEntityDetail } from '@hesta-codex/shared'
 import { AdminProvenance } from './AdminProvenance'
@@ -21,7 +21,7 @@ const entity: AdminEntityDetail = {
       summary: null, tags: [], status: 'PROPOSED', visibility: 'GM', updatedAt }, evidence: [] }],
   incomingRelations: [],
 }
-function setup(options: { data?: AdminEntityDetail; result?: boolean; disabled?: boolean } = {}) {
+function setup(options: { data?: AdminEntityDetail; result?: boolean; disabled?: boolean; expand?: boolean } = {}) {
   const onMutate = vi.fn(async () => options.result ?? true)
   const onDirtyChange = vi.fn()
   const onEditingChange = vi.fn()
@@ -29,6 +29,7 @@ function setup(options: { data?: AdminEntityDetail; result?: boolean; disabled?:
   const view = render(<AdminProvenance entity={options.data ?? entity} onNavigate={onNavigate} onMutate={onMutate}
     onDirtyChange={onDirtyChange} onEditingChange={onEditingChange} busy={false}
     disabled={options.disabled ?? false} error={null} />)
+  if (options.expand !== false) fireEvent.click(screen.getAllByRole('button', { name: 'Détails de la relation' })[0]!)
   return { onMutate, onDirtyChange, onEditingChange, setDisabled(disabled: boolean) {
     view.rerender(<AdminProvenance entity={options.data ?? entity} onNavigate={onNavigate} onMutate={onMutate}
       onDirtyChange={onDirtyChange} onEditingChange={onEditingChange} busy={false} disabled={disabled} error={null} />)
@@ -37,6 +38,47 @@ function setup(options: { data?: AdminEntityDetail; result?: boolean; disabled?:
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 describe('relations et provenance admin', () => {
+  it('limite une fiche de 100 relations à dix lignes, sans rendre les preuves avant ouverture', async () => {
+    const user = userEvent.setup()
+    const relations = Array.from({ length: 100 }, (_, index) => ({ ...entity.outgoingRelations[0]!, id: `relation-${index}`,
+      entity: { ...entity.outgoingRelations[0]!.entity, id: `target-${index}`, title: `Cible ${index}`, slug: `cible-${index}` },
+      evidence: [{ ...entity.evidence[0]!, id: `proof-${index}`, claimText: `Preuve fictive ${index}` }] }))
+    setup({ data: { ...entity, outgoingRelations: relations }, expand: false })
+    expect(screen.getAllByRole('button', { name: 'Détails de la relation' })).toHaveLength(10)
+    expect(screen.queryByText('Preuve fictive 0')).toBeNull()
+    await user.click(screen.getAllByRole('button', { name: 'Détails de la relation' })[0]!)
+    expect(screen.getByText('Preuve fictive 0')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Suivant' }))
+    expect(screen.queryByText('Preuve fictive 0')).toBeNull()
+    expect(screen.getByRole('link', { name: 'Cible 10' })).toBeTruthy()
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Rechercher · Relations sortantes' }), { target: { value: 'Cible 99' } })
+    expect(screen.getAllByRole('button', { name: 'Détails de la relation' })).toHaveLength(1)
+    expect(screen.getByRole('link', { name: 'Cible 99' })).toBeTruthy()
+  })
+
+  it('charge les preuves différées uniquement à l’ouverture et garde les actions existantes', async () => {
+    const fetcher = vi.fn(async (url: string) => ({ ok: url.endsWith('/evidence'), json: async () => ({ evidence: entity.evidence }) }))
+    vi.stubGlobal('fetch', fetcher)
+    setup({ data: { ...entity, outgoingRelations: [{ ...entity.outgoingRelations[0]!, evidenceCount: 1, evidenceDeferred: true }] }, expand: false })
+    expect(fetcher).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Détails de la relation' }))
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Modifier la preuve' })).toHaveLength(2))
+    expect(fetcher.mock.calls[0]![0]).toBe('/api/admin/relations/relation-1/evidence')
+    expect(screen.getByRole('button', { name: 'Publier la relation' })).not.toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Ajouter une preuve' })).toBeTruthy()
+  })
+
+  it('un échec de chargement des preuves ne propose pas une publication avec des données partielles et peut être repris', async () => {
+    let failed = true
+    const fetcher = vi.fn(async () => ({ ok: !failed, status: failed ? 503 : 200, json: async () => ({ evidence: entity.evidence }) }))
+    vi.stubGlobal('fetch', fetcher)
+    setup({ data: { ...entity, outgoingRelations: [{ ...entity.outgoingRelations[0]!, evidenceCount: 1, evidenceDeferred: true }] } })
+    await screen.findByRole('button', { name: 'Réessayer les preuves' })
+    expect(screen.queryByRole('button', { name: 'Publier la relation' })).toBeNull()
+    failed = false; fireEvent.click(screen.getByRole('button', { name: 'Réessayer les preuves' }))
+    await screen.findByRole('button', { name: 'Publier la relation' })
+    expect(fetcher).toHaveBeenCalledTimes(2)
+  })
   it('affiche le libellé inverse depuis la fiche cible et le libellé direct pour une relation symétrique', () => {
     const directed = { ...entity.outgoingRelations[0]!, id: 'directed-in' }
     const symmetric = { ...directed, id: 'symmetric-in', relationType: {

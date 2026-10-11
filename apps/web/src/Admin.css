@@ -10,7 +10,7 @@
 .admin-logout, .admin-pagination button, .admin-state button, .admin-message button,
 .admin-edit-button, .admin-publication button, .admin-editor button, .admin-form-error button,
 .admin-evidence-list button, .admin-relation-list button, .admin-provenance-editor button,
-.admin-create button, .obsidian-references button {
+.admin-create button, .obsidian-references button, .reference-queue button {
   border: 1px solid #5b6780;
   border-radius: .45rem;
   padding: .55rem .8rem;
@@ -19,7 +19,7 @@
 }
 .admin-logout:hover, .admin-pagination button:hover, .admin-state button:hover { border-color: #d2b77e; }
 .admin-pagination button:disabled { cursor: default; opacity: .45; }
-.admin-create button:disabled, .obsidian-references button:disabled { opacity: .5; cursor: not-allowed; }
+.admin-create button:disabled, .obsidian-references button:disabled, .reference-queue button:disabled { opacity: .5; cursor: not-allowed; }
 
 .admin-main { max-width: 1480px; margin: auto; padding: clamp(1rem, 3vw, 2.5rem); }
 .admin-page-heading { margin: 1.2rem 0 2rem; }
@@ -78,7 +78,7 @@
 .admin-evidence-list p, .admin-relation-list p, .admin-revision-list p { margin: .35rem 0; }
 .admin-claim { font-weight: 650; }
 .admin-evidence-list blockquote { margin: .6rem 0; padding-left: .9rem; border-left: 2px solid #a28bbf; color: #d2d9e9; }
-.admin-relations { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.admin-relations { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; align-items: start; }
 .admin-relation-line { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .9rem; }
 .admin-relation-line a { color: #dfc992; }
 .admin-relation-list .admin-evidence-list { margin-top: .7rem; }
@@ -153,4 +153,17 @@
 .obsidian-references li { margin-block: .5rem; }
 .obsidian-references li > button { margin: .35rem 0 .35rem .65rem; }
 .obsidian-references summary { cursor: pointer; }
+.reference-rows { list-style: none; padding: 0; }
+.reference-rows > li { padding: .75rem 0; border-bottom: 1px solid var(--border, #343a49); overflow-wrap: anywhere; }
+.reference-row-heading, .reference-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
+.reference-queue { overflow-wrap: anywhere; }
+.reference-queue details { margin-block: .5rem; }
+.reference-queue summary { cursor: pointer; }
+.reference-queue .admin-filters { grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); }
+.reference-queue select, .reference-queue input { min-width: 0; max-width: 100%; }
+.qualification-counts { color: var(--text-muted, #aab4c8); }
+.admin-relations .admin-filters { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+.admin-relation-list > li { padding: .6rem .75rem; }
+.admin-relation-line > button { margin-top: 0; padding: .4rem .6rem; }
+@media (max-width: 500px) { .admin-relations .admin-filters { grid-template-columns: minmax(0, 1fr); } }
 .markdown-body [id^="obsidian-"] { scroll-margin-top: 2rem; }
