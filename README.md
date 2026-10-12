@@ -3,7 +3,8 @@
   <em>Un univers, plusieurs outils.</em><br>
   <a href="https://hesta.dannytech.fr/">Portail Hesta</a> ·
   <a href="https://cartehesta.dannytech.fr/">Carte Hesta</a> ·
-  <a href="https://pahesta.dannytech.fr/">Système PA</a>
+  <a href="https://pahesta.dannytech.fr/">Système PA</a> ·
+  <a href="https://codexhesta.dannytech.fr/">Hesta Codex</a>
 </div>
 
 # Hesta Codex
@@ -31,8 +32,8 @@ Voir [docs/STAGING-UPDATE.md](docs/STAGING-UPDATE.md), notamment l’idempotence
 Base de connaissance structurée du Monde d’Hesta. À terme, le Codex sera la source de vérité
 du lore durable et exposera des données sourcées aux autres applications. Le dépôt contient
 le socle web/API et le premier modèle PostgreSQL ; aucune fiche lore n'est créée automatiquement.
-L'interface publique permet de consulter les fiches publiées et leurs relations. L'espace
-`/admin`, protégé par Discord, permet d'inspecter et de réviser les fiches, puis de publier
+L'interface publique permet de consulter les fiches et relations à la fois publiées et publiques.
+L'espace `/admin`, protégé par Discord, permet d'inspecter et de réviser les fiches, puis de publier
 explicitement les propositions validées.
 
 ## Stack
@@ -242,9 +243,9 @@ Les routes de lecture et leurs limites sont décrites dans [docs/API.md](docs/AP
 
 ## Écosystème Hesta
 
-| Application | Responsabilité |
-| --- | --- |
-| [Hesta Hub](https://hesta.dannytech.fr/) | Portail public |
-| [Carte Hesta](https://cartehesta.dannytech.fr/) | Carte, affichage spatial, planning et expérience communautaire |
-| [Système PA](https://pahesta.dannytech.fr/) | Règles, armures et calculs |
-| Hesta Codex — ce projet | Connaissance durable, relations et provenance |
+| Application | Rôle | URL publique |
+| --- | --- | --- |
+| Hesta Hub | Portail central | [hesta.dannytech.fr](https://hesta.dannytech.fr/) |
+| Carte Hesta | Carte interactive, chronologie, planning et communauté | [cartehesta.dannytech.fr](https://cartehesta.dannytech.fr/) |
+| Système PA | Armures, règles et calculs | [pahesta.dannytech.fr](https://pahesta.dannytech.fr/) |
+| Hesta Codex — ce projet | Encyclopédie, lore, relations éditoriales et provenance | [codexhesta.dannytech.fr](https://codexhesta.dannytech.fr/) |
