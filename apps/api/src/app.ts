@@ -14,6 +14,7 @@ import type { GraphStore } from './graph.js'
 import type { IngestionAdminStore } from './ingestion/admin.js'
 import type { ReferenceService } from './obsidian-references.js'
 import type { QualificationService } from './reference-qualification.js'
+import type { EntityDeletionService } from './admin/entity-deletion.js'
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const entityKinds = new Set<string>(Object.values(EntityKind))
@@ -43,7 +44,7 @@ function parseEntityFilters(query: Record<string, unknown>): EntityFilters {
 export function createApp(store: CodexStore, privateServices?: {
   auth: AuthDependencies; admin: AdminStore; editorial: EditorialService;
   provenance?: ProvenanceService; manual?: ManualService; manualRelations?: ManualRelationService;
-  evidenceAdd?: EvidenceAddService; graph?: GraphStore; ingestion?: IngestionAdminStore; references?: ReferenceService; qualification?: QualificationService
+  evidenceAdd?: EvidenceAddService; graph?: GraphStore; ingestion?: IngestionAdminStore; references?: ReferenceService; qualification?: QualificationService; deletion?: EntityDeletionService
 }, graph?: GraphStore, references?: ReferenceService) {
   const app = express()
   app.disable('x-powered-by')
@@ -53,7 +54,7 @@ export function createApp(store: CodexStore, privateServices?: {
     app.use('/api/admin', requireAdmin(privateServices.auth), requireSameOrigin(privateServices.auth.config.origin),
       express.json({ limit: '1mb' }), createAdminRouter(privateServices.admin, privateServices.editorial,
         privateServices.provenance, privateServices.manual, privateServices.manualRelations,
-        privateServices.evidenceAdd, privateServices.graph, privateServices.ingestion, privateServices.references, privateServices.qualification))
+        privateServices.evidenceAdd, privateServices.graph, privateServices.ingestion, privateServices.references, privateServices.qualification, privateServices.deletion))
     app.use('/api/auth', (_request, response) => {
       response.status(404).json({ error: { code: 'NOT_FOUND', message: 'Endpoint not found' } })
     })

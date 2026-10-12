@@ -179,6 +179,10 @@ Le catalogue comporte 27 types éditoriaux, regroupés dans le sélecteur avec l
 inverses et symétriques. Une migration additive installe les 23 ajouts lors du déploiement,
 sans modifier les types historiques ni les relations. Voir [docs/RELATION-CATALOG.md](docs/RELATION-CATALOG.md).
 
+Le détail administrateur permet aussi une suppression définitive individuelle, avec bilan
+des dépendances et confirmation explicite. La transaction conserve les Sources et tous les
+originaux en staging ; voir [docs/ENTITY-DELETION.md](docs/ENTITY-DELETION.md).
+
 La page admin **Relations à qualifier** centralise les références Obsidian résolues,
 leur qualification et les décisions d’ignorance persistantes. Les preuves des relations
 s’ouvrent à la demande dans les fiches. Voir [docs/REFERENCE-QUALIFICATION.md](docs/REFERENCE-QUALIFICATION.md),

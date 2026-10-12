@@ -15,6 +15,7 @@ import type { AdminStore } from './store.js'
 import type { GraphStore } from '../graph.js'
 import type { ReferenceService } from '../obsidian-references.js'
 import type { QualificationService } from '../reference-qualification.js'
+import type { EntityDeletionService } from './entity-deletion.js'
 import { patchSchema, validationMessage, workflowSchema } from './validation.js'
 import { createIngestionAdminRouter, type IngestionAdminStore } from '../ingestion/admin.js'
 
@@ -39,8 +40,26 @@ function editorLabel(response: { locals: Record<string, unknown> }): string {
 export function createAdminRouter(store: AdminStore, editorial: EditorialService,
   provenance?: ProvenanceService, manual?: ManualService, manualRelations?: ManualRelationService,
   evidenceAdd?: EvidenceAddService, graph?: GraphStore, ingestion?: IngestionAdminStore, references?: ReferenceService,
-  qualification?: QualificationService) {
+  qualification?: QualificationService, deletion?: EntityDeletionService) {
   const router = Router()
+  if (deletion) {
+    router.get('/entities/:slug/deletion', async (request, response) => {
+      if (!validSlug(request.params.slug)) {
+        response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'Slug invalide.' } }); return
+      }
+      response.json(await deletion.preview(request.params.slug))
+    })
+    const deletionSchema = z.strictObject({ entityId: z.uuid().transform(value => value.toLowerCase()),
+      fingerprint: z.string().regex(/^[a-f0-9]{64}$/), confirm: z.literal(true) })
+    router.delete('/entities/:slug', async (request, response) => {
+      const parsed = deletionSchema.safeParse(request.body)
+      if (!validSlug(request.params.slug) || !parsed.success) {
+        response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'Suppression invalide : confirmation et bilan récents requis.' } }); return
+      }
+      await deletion.remove(request.params.slug, parsed.data)
+      response.status(204).end()
+    })
+  }
   if (qualification) {
     const identity = z.uuid().transform(value => value.toLowerCase())
     const qualificationFilters = z.strictObject({

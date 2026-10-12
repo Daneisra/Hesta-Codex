@@ -11,6 +11,7 @@ import { AdminCreate } from './AdminCreate'
 import { AdminCreateRelation } from './AdminCreateRelation'
 import type { ReferenceRelationSeed } from './reference-relation'
 import { AdminProvenance } from './AdminProvenance'
+import { AdminDeleteEntity } from './AdminDeleteEntity'
 import { getAdminJson as getJson, HttpError, errorStatus, decideReference } from './admin-http'
 import './Admin.css'
 const GraphPage = lazy(() => import('./GraphPage').then((module) => ({ default: module.GraphPage })))
@@ -83,7 +84,7 @@ function StateMessage({ children }: { children: string }) {
 }
 
 function Detail({ entity, onNavigate, editing, provenanceEditing, busy, authExpired, error, onEdit, onCancel, onSave,
-  onDirtyChange, onWorkflow, onReload, onProvenanceMutation, onProvenanceEditingChange, evidenceNotice, onDefine, onIgnore, onAccessError }: {
+  onDirtyChange, onWorkflow, onReload, onProvenanceMutation, onProvenanceEditingChange, evidenceNotice, onDefine, onIgnore, onAccessError, onDeletionPending, onDeleted }: {
   entity: AdminEntityDetail
   onNavigate: (event: MouseEvent<HTMLAnchorElement>, path: string) => void
   editing: boolean
@@ -104,6 +105,8 @@ function Detail({ entity, onNavigate, editing, provenanceEditing, busy, authExpi
   onDefine: (seed: ReferenceRelationSeed, fromSlug: string) => void
   onIgnore: (input: ReferenceIgnoreRequest) => void
   onAccessError: (status: number) => void
+  onDeletionPending: (pending: boolean) => void
+  onDeleted: (title: string) => void
 }) {
   return <article className="admin-detail">
     <a className="admin-back" href="/admin" onClick={(event) => onNavigate(event, '/admin')}>← Tableau de bord</a>
@@ -122,6 +125,8 @@ function Detail({ entity, onNavigate, editing, provenanceEditing, busy, authExpi
       {!editing && !provenanceEditing && entity.status !== 'ARCHIVED' &&
         <a className="admin-primary-link admin-add-relation" href={`/admin/fiches/${entity.slug}/nouvelle-relation`}
           onClick={(event) => onNavigate(event, `/admin/fiches/${entity.slug}/nouvelle-relation`)}>Ajouter une relation</a>}
+      <AdminDeleteEntity key={entity.id} entity={entity} disabled={busy || authExpired || editing || provenanceEditing}
+        onPending={onDeletionPending} onDeleted={onDeleted} onAccessError={onAccessError} />
     </div>
     {error && <div className="admin-form-error" role="alert">{error.message}
       {error.status === 409 && error.code?.endsWith('_MODIFIED') &&
@@ -202,10 +207,12 @@ export function AdminApp() {
   const [mutationError, setMutationError] = useState<{ status: number | null; message: string;
     code?: string; issues?: Array<{ path: string; message: string }> } | null>(null)
   const [createdNotice, setCreatedNotice] = useState(false)
+  const [deletedNotice, setDeletedNotice] = useState<string | null>(null)
   const [createdRelationNotice, setCreatedRelationNotice] = useState(false)
   const [relationSeed, setRelationSeed] = useState<ReferenceRelationSeed | null>(null)
   const [qualificationFilters, setQualificationFilters] = useState<QualificationFilters>({ page: 1, state: 'PENDING' })
   const relationPending = useRef(false)
+  const deletionPending = useCallback((pending: boolean) => { relationPending.current = pending; setBusy(pending) }, [])
   const [evidenceNotice, setEvidenceNotice] = useState(false)
   const mainRef = useRef<HTMLElement>(null)
   const focusAfterNavigation = useRef(false)
@@ -238,6 +245,7 @@ export function AdminApp() {
       setEditDirty(false)
       setAuthExpired(false)
       setCreatedNotice(false)
+      setDeletedNotice(null)
       setCreatedRelationNotice(false)
       setRelationSeed(null)
       setEvidenceNotice(false)
@@ -346,6 +354,7 @@ export function AdminApp() {
       setEditDirty(false)
       setAuthExpired(false)
       setCreatedNotice(false)
+      setDeletedNotice(null)
       setCreatedRelationNotice(false)
       setEvidenceNotice(false)
       setMutationError(null)
@@ -379,6 +388,7 @@ export function AdminApp() {
       setRelationSeed(null)
       setSession({ phase: 'ready', data: { authenticated: false, isAdmin: false, user: null } })
       setQualificationFilters({ page: 1, state: 'PENDING' })
+      setDeletedNotice(null)
     } catch { setSession({ phase: 'error', status: null }) }
   }
 
@@ -427,6 +437,16 @@ export function AdminApp() {
     setMutationError(null)
     setBusy(false)
     setDataRefresh((value) => value + 1)
+  }
+
+  function entityDeleted(title: string) {
+    setDetail({ phase: 'loading' }); setDetailFor(null); setRelationSeed(null)
+    setList({ phase: 'loading' }); setStats({ phase: 'loading' })
+    setEditing(false); setProvenanceEditing(false); setEditDirty(false); setMutationError(null)
+    setCreatedNotice(false); setCreatedRelationNotice(false); setEvidenceNotice(false)
+    setDeletedNotice(title); setPage(1); setDataRefresh(value => value + 1)
+    currentPath.current = '/admin'; focusAfterNavigation.current = true
+    window.history.pushState(null, '', '/admin'); setRoute({ view: 'dashboard' })
   }
 
   async function save(input: AdminEntityPatch) {
@@ -566,6 +586,7 @@ export function AdminApp() {
           onAccessError={ingestionAccessError} onDefine={(seed, fromSlug) => navigateTo(`/admin/fiches/${fromSlug}/nouvelle-relation`, seed)} />
       </Suspense>}
       {isAdmin && route.view === 'dashboard' && <>
+        {deletedNotice && <p className="admin-message" role="status">Fiche « {deletedNotice} » supprimée définitivement.</p>}
         <div className="admin-page-heading"><p className="admin-eyebrow">Pilotage éditorial</p>
           <h1>Tableau de bord</h1><p>Explorer les fiches, leurs liens, leurs sources et leur état de publication.</p>
           <a className="admin-primary-link" href="/admin/graphe"
@@ -639,6 +660,7 @@ export function AdminApp() {
         {detailFor === activeSlug && detail.phase === 'error' && <div className="admin-state" role="alert"><h1>{detail.status === 404 ? 'Fiche introuvable' : 'Fiche indisponible'}</h1>
           <a href="/admin" onClick={(event) => onNavigate(event, '/admin')}>Retour au tableau de bord</a></div>}
         {detailFor === activeSlug && detail.phase === 'ready' && <Detail entity={detail.data} onNavigate={onNavigate}
+          onDeletionPending={deletionPending} onDeleted={entityDeleted}
           onAccessError={ingestionAccessError}
           onIgnore={input => void ignoreReference(input)}
           editing={editing} provenanceEditing={provenanceEditing} busy={busy} authExpired={authExpired}

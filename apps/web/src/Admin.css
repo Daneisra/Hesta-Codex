@@ -167,3 +167,10 @@
 .admin-relation-line > button { margin-top: 0; padding: .4rem .6rem; }
 @media (max-width: 500px) { .admin-relations .admin-filters { grid-template-columns: minmax(0, 1fr); } }
 .markdown-body [id^="obsidian-"] { scroll-margin-top: 2rem; }
+.admin-delete-button { margin-left: .65rem; border: 1px solid #a65a63; border-radius: .45rem; padding: .55rem .8rem; background: #291723; color: #ffb8be; cursor: pointer; }
+.admin-delete-button:disabled { opacity: .5; cursor: not-allowed; }
+.admin-delete-dialog { width: min(36rem, calc(100vw - 2rem)); box-sizing: border-box; max-height: calc(100dvh - 2rem); overflow: auto; padding: 1.5rem; border: 1px solid #a65a63; border-radius: .7rem; background: #111a2a; color: #eef2fb; overflow-wrap: anywhere; }
+.admin-delete-dialog::backdrop { background: rgb(0 0 0 / 70%); }
+.admin-delete-dialog button:not(.admin-delete-button) { border: 1px solid #5b6780; border-radius: .45rem; padding: .55rem .8rem; background: #152137; color: #eef2fb; cursor: pointer; }
+.admin-delete-dialog .admin-editor-actions { display: flex; flex-wrap: wrap; gap: .7rem; margin-top: 1rem; }
+.admin-delete-dialog .admin-delete-button { margin-left: 0; }

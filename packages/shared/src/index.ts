@@ -14,6 +14,13 @@ export interface RelationTypeItem {
   symmetric: boolean
 }
 
+export interface AdminEntityDeletionPlan {
+  id: string; slug: string; title: string; status: EditorialStatus; fingerprint: string
+  counts: { relations: number; directEvidence: number; relationEvidence: number; revisions: number
+    associationDecisions: number; associations: number; referenceIgnores: number }
+}
+export interface AdminEntityDeletionRequest { entityId: string; fingerprint: string; confirm: true }
+
 export type EntityKind =
   | 'PERSON'
   | 'PLACE'
