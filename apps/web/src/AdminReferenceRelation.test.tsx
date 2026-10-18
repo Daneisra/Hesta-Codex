@@ -100,17 +100,24 @@ async function review(user: ReturnType<typeof userEvent.setup>, code = 'located_
 }
 
 describe('qualification humaine des références Obsidian', () => {
-  it('propose les 27 types regroupés, leurs 20 inverses et les sept symétries sans choisir automatiquement', async () => {
+  it('propose les 32 types regroupés, leurs 25 inverses et les sept symétries sans choisir automatiquement', async () => {
     const catalogue = relationTypeDefinitions.map((type, index) => ({ ...type, id: `catalogue-${index}` }))
     api({ catalogue: [...catalogue].reverse() }); const user = userEvent.setup(); await open(user)
     const select = screen.getByRole('combobox', { name: 'Type et sens' }) as HTMLSelectElement
     expect([...select.querySelectorAll('optgroup')].map(group => group.label)).toEqual(relationCategories.map(group => group.label))
-    expect([...select.options].filter(option => option.value)).toHaveLength(47)
+    expect([...select.options].filter(option => option.value)).toHaveLength(57)
     expect([...select.options].filter(option => option.textContent?.includes('symétrique'))).toHaveLength(7)
     expect(select.value).toBe('')
     await user.selectOptions(select, 'worshipped_by')
     expect(select.value).toBe('worshipped_by')
     expect(screen.getByRole('option', { name: 'est vénéré par' })).toBeTruthy()
+    for (const [code, label] of [
+      ['protects', 'protège'], ['protected_by', 'est protégé par'],
+      ['works_for', 'travaille pour'], ['employs', 'emploie'],
+      ['previously_owned', 'a possédé'], ['previously_owned_by', 'a appartenu à'],
+      ['previously_used', 'a utilisé'], ['previously_used_by', 'a été utilisé par'],
+      ['can_become', 'peut devenir'], ['possible_transformation_of', 'est une transformation possible de'],
+    ] as const) expect(screen.getByRole('option', { name: label })).toHaveProperty('value', code)
   })
 
   it('un choix inhabituel affiche un avertissement dans le formulaire et le récapitulatif sans bloquer la confirmation humaine', async () => {
@@ -129,20 +136,20 @@ describe('qualification humaine des références Obsidian', () => {
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ relationCode: 'capital_of', visibility: 'GM' }))
   })
 
-  it('crée un nouveau type depuis la file centrale sans changer la provenance ni le parcours de confirmation', async () => {
+  it('crée une ancienne possession par son inverse depuis la file sans changer la provenance ni la confirmation', async () => {
     window.history.replaceState(null, '', '/admin/relations-a-qualifier')
     const catalogue = relationTypeDefinitions.map((type, index) => ({ ...type, id: `catalogue-${index}` }))
     const calls = api({ catalogue }), user = userEvent.setup(); render(<App />)
     await user.click(await screen.findByRole('button', { name: 'Définir une relation' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Inverser les fiches' })).not.toHaveProperty('disabled', true))
-    await screen.findByRole('option', { name: 'a été créé par' })
-    await review(user, 'created_by'); expect(posts(calls)).toHaveLength(0)
-    expect(screen.getByText('Homonyme → created → Homonyme')).toBeTruthy()
+    await screen.findByRole('option', { name: 'a appartenu à' })
+    await review(user, 'previously_owned_by'); expect(posts(calls)).toHaveLength(0)
+    expect(screen.getByText('Homonyme → previously_owned → Homonyme')).toBeTruthy()
     await user.click(screen.getByRole('button', { name: 'Créer la relation' }))
     await screen.findByRole('heading', { name: 'Relations à qualifier', level: 1 })
     await waitFor(() => expect(screen.getByLabelText('Compteurs globaux').textContent).toContain('1 qualifiées'))
     expect(JSON.parse(String(posts(calls)[0]!.init!.body))).toMatchObject({ fromEntityId: ownerId, toEntityId: targetId,
-      relationCode: 'created_by', visibility: 'GM', source: { sourceId: source.id },
+      relationCode: 'previously_owned_by', visibility: 'GM', source: { sourceId: source.id },
       evidence: { locator: proof.locator, sourceExcerpt: excerpt, visibility: 'GM' } })
     expect(posts(calls)).toHaveLength(1)
   })

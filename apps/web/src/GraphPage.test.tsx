@@ -87,7 +87,7 @@ describe('exploration du graphe', () => {
     expect(within(screen.getByRole('complementary', { name: 'Détails du graphe' })).getByText('Ville → est la capitale de → Continent')).toBeTruthy()
   })
 
-  it('les 27 types gardent leurs libellés directs et inverses dans la projection des connexions', () => {
+  it('tous les types gardent leurs libellés directs et inverses dans la projection des connexions', () => {
     for (const type of relationTypeDefinitions) {
       const data: GraphResponse = { nodes: fixture.nodes, edges: [{ id: 'relation', source: 'a', target: 'b',
         type: type.code, label: type.label, inverseLabel: type.inverseLabel, symmetric: type.symmetric }] }

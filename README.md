@@ -176,8 +176,9 @@ et les conflits. Depuis une fiche non archivée, « Ajouter une relation » cré
 inverses et symétriques sont normalisés côté API ; voir
 [docs/MANUAL-RELATIONS.md](docs/MANUAL-RELATIONS.md).
 
-Le catalogue comporte 27 types éditoriaux, regroupés dans le sélecteur avec leurs sens
-inverses et symétriques. Une migration additive installe les 23 ajouts lors du déploiement,
+Le catalogue comporte 32 types éditoriaux (57 formulations), regroupés dans le sélecteur
+avec leurs sens inverses et symétriques. Deux migrations additives installent les 23 puis
+les 5 ajouts lors du déploiement,
 sans modifier les types historiques ni les relations. Voir [docs/RELATION-CATALOG.md](docs/RELATION-CATALOG.md).
 
 Le détail administrateur permet aussi une suppression définitive individuelle, avec bilan

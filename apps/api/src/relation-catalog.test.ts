@@ -9,15 +9,17 @@ import type { PrismaClient } from './prisma-client/client.ts'
 const migrations = new URL('../../../prisma/migrations/', import.meta.url)
 const migrationName = '20261011120000_editorial_relation_catalog'
 const migrationSql = await readFile(new URL(`${migrationName}/migration.sql`, migrations), 'utf8')
+const additionalMigration = await readFile(new URL('20261018000000_additional_editorial_relations/migration.sql', migrations), 'utf8')
+const newCodes = ['works_for', 'protects', 'can_become', 'previously_owned', 'previously_used']
 const additions = relationTypeDefinitions.filter(type => !originalRelationCodes.some(code => code === type.code))
 const original = relationTypeDefinitions.filter(type => originalRelationCodes.some(code => code === type.code))
 const id = (number: number) => `00000000-0000-4000-8000-${String(number).padStart(12, '0')}`
 
-test('catalogue has 27 types, 7 symmetric types, unique direct/inverse codes and the unchanged four original definitions', () => {
-  assert.equal(relationCatalog.length, 27); assert.equal(additions.length, 23)
+test('catalogue has 32 types, 7 symmetric types, unique direct/inverse codes and the unchanged four original definitions', () => {
+  assert.equal(relationCatalog.length, 32); assert.equal(additions.length, 28)
   assert.equal(relationCatalog.filter(type => type.symmetric).length, 7)
   const codes = relationCatalog.flatMap(type => [type.code, ...(type.inverseCode ? [type.inverseCode] : [])])
-  assert.equal(codes.length, 47); assert.equal(new Set(codes).size, codes.length)
+  assert.equal(codes.length, 57); assert.equal(new Set(codes).size, codes.length)
   for (const type of relationCatalog) {
     assert.match(type.code, /^[a-z][a-z0-9_]*$/); assert.ok(type.code.length <= 64 && type.label.length <= 200)
     assert.equal(type.symmetric, type.inverseCode === null); assert.equal(type.symmetric, type.inverseLabel === null)
@@ -29,11 +31,18 @@ test('catalogue has 27 types, 7 symmetric types, unique direct/inverse codes and
     { code: 'member_of', label: 'membre de', inverseCode: 'has_member', inverseLabel: 'compte parmi ses membres', symmetric: false },
     { code: 'allied_with', label: 'allié à', inverseCode: null, inverseLabel: null, symmetric: true },
   ])
-  const serialized = migrationSql.match(/new_types CONSTANT jsonb := '([\s\S]*?)'::jsonb/)![1]!.replaceAll("''", "'")
-  const sqlTypes = JSON.parse(serialized) as Array<typeof additions[number] & { id: string }>
-  assert.deepEqual(sqlTypes.map(type => ({ code: type.code, label: type.label, inverseCode: type.inverseCode,
-    inverseLabel: type.inverseLabel, symmetric: type.symmetric })), additions)
-  assert.equal(new Set(sqlTypes.map(type => type.id)).size, 23)
+  const ids: string[] = []
+  for (const [sql, expected] of [
+    [migrationSql, additions.filter(type => !newCodes.includes(type.code))],
+    [additionalMigration, additions.filter(type => newCodes.includes(type.code))],
+  ] as const) {
+    const serialized = sql.match(/new_types CONSTANT jsonb := '([\s\S]*?)'::jsonb/)![1]!.replaceAll("''", "'")
+    const sqlTypes = JSON.parse(serialized) as Array<typeof additions[number] & { id: string }>
+    assert.deepEqual(sqlTypes.map(type => ({ code: type.code, label: type.label, inverseCode: type.inverseCode,
+      inverseLabel: type.inverseLabel, symmetric: type.symmetric })), expected)
+    ids.push(...sqlTypes.map(type => type.id))
+  }
+  assert.equal(new Set(ids).size, 28)
 })
 
 test('grouping is stable, uses actual database UUIDs/labels, preserves custom types and never offers absent types', () => {
@@ -57,6 +66,25 @@ test('kind warnings respect inverse orientation, supernatural actors, symmetry a
   assert.equal(relationKindWarning('created', 'ORGANIZATION', 'ARTIFACT'), null)
   assert.equal(relationKindWarning('capital_of', 'OTHER', 'CONCEPT'), null)
   assert.equal(relationKindWarning('custom', 'CONCEPT', 'PLACE'), null)
+})
+
+test('requested vocabulary distinguishes past possession/use, general protection, employment and possible transformations', () => {
+  const expected = [
+    ['works_for', 'travaille pour', 'employs', 'emploie', 'PERSON', 'PERSON'],
+    ['protects', 'protège', 'protected_by', 'est protégé par', 'ORGANIZATION', 'PLACE'],
+    ['can_become', 'peut devenir', 'possible_transformation_of', 'est une transformation possible de', 'SPECIES', 'CONCEPT'],
+    ['previously_owned', 'a possédé', 'previously_owned_by', 'a appartenu à', 'PERSON', 'ARTIFACT'],
+    ['previously_used', 'a utilisé', 'previously_used_by', 'a été utilisé par', 'PERSON', 'ARTIFACT'],
+  ] as const
+  for (const [code, label, inverseCode, inverseLabel, from, to] of expected) {
+    assert.deepEqual(relationTypeDefinitions.find(type => type.code === code), { code, label, inverseCode, inverseLabel, symmetric: false })
+    assert.equal(relationKindWarning(code, from, to), null)
+    assert.equal(relationKindWarning(inverseCode, to, from), null)
+  }
+  assert.equal(relationKindWarning('protects', 'PERSON', 'PERSON'), null)
+  assert.equal(relationKindWarning('can_become', 'CREATURE', 'CREATURE'), null)
+  assert.equal(relationTypeDefinitions.find(type => type.code === 'uses')?.inverseLabel, 'est utilisé par')
+  assert.equal(relationTypeDefinitions.find(type => type.code === 'owns')?.inverseLabel, 'appartient à')
 })
 
 async function database() {
@@ -90,7 +118,7 @@ async function seedAdapter(db: PGlite) {
   await installRelationCatalog(prisma)
 }
 
-test('PostgreSQL installs only the 23 additions twice, preserving all 130 entities, proofs, revisions, associations and three existing relations', async () => {
+test('PostgreSQL installs the 23 then five additions twice, preserving all 130 entities, proofs, revisions, associations and three existing relations', async () => {
   const db = await database()
   try {
     await db.exec(`
@@ -113,11 +141,16 @@ test('PostgreSQL installs only the 23 additions twice, preserving all 130 entiti
     const tables = ['Entity', 'Relation', 'Source', 'Evidence', 'Revision', 'IngestionBatch', 'IngestionItem', 'IngestionReceipt', 'IngestionAssociation', 'IngestionAssociationDecision']
     const before = await snapshot(db, tables), originalTypes = (await db.query<{ id: string }>('SELECT * FROM "RelationType" ORDER BY id')).rows
     await db.exec(migrationSql)
+    const previousTypes = (await db.query<{ id: string }>('SELECT * FROM "RelationType" ORDER BY id')).rows
+    assert.equal(previousTypes.length, 27)
+    await db.exec(additionalMigration)
     const installed = await snapshot(db, ['RelationType'])
-    assert.equal(installed[0]!.length, 27)
+    assert.equal(installed[0]!.length, 32)
+    assert.deepEqual((await db.query('SELECT * FROM "RelationType" WHERE id = ANY($1::uuid[]) ORDER BY id', [previousTypes.map(row => row.id)])).rows, previousTypes)
     assert.deepEqual((await db.query('SELECT * FROM "RelationType" WHERE id = ANY($1::uuid[]) ORDER BY id', [originalTypes.map(row => row.id)])).rows, originalTypes)
     assert.deepEqual(await snapshot(db, tables), before)
-    await db.exec(migrationSql); assert.deepEqual(await snapshot(db, ['RelationType']), installed)
+    await db.exec(migrationSql); await db.exec(additionalMigration)
+    assert.deepEqual(await snapshot(db, ['RelationType']), installed)
     await seedAdapter(db); assert.deepEqual(await snapshot(db, ['RelationType']), installed)
     assert.deepEqual(await snapshot(db, tables), before)
   } finally { await db.close() }
@@ -130,9 +163,34 @@ test('PostgreSQL migration and seed are idempotent even when a new code already 
     // A compatible code already exists: its candidate migration UUID is irrelevant, even if occupied elsewhere.
     await db.query('INSERT INTO "RelationType" (id,code,label,"updatedAt") VALUES ($1,$2,$3,CURRENT_TIMESTAMP)',
       ['d706ed9d-0ccb-4df1-8a6e-000000000001', 'custom', 'Type fictif personnalisé'])
+    await db.query('INSERT INTO "RelationType" (id,code,label,"updatedAt") VALUES ($1,$2,$3,CURRENT_TIMESTAMP)',
+      ['cb9415c6-f258-4d92-aaf2-000000000001', 'another_custom', 'Autre type fictif'])
     const seeded = await snapshot(db, ['RelationType'])
-    await db.exec(migrationSql); await seedAdapter(db)
+    await db.exec(migrationSql); await db.exec(additionalMigration); await seedAdapter(db)
     assert.deepEqual(await snapshot(db, ['RelationType']), seeded)
+  } finally { await db.close() }
+})
+
+test('PostgreSQL atomically rejects new direct/inverse conflicts, incompatible definitions and occupied migration UUIDs', async () => {
+  const db = await database()
+  try {
+    await db.exec(migrationSql)
+    for (const [code, inverse, label] of [['protected_by', null, 'Collision fictive'], ['custom', 'protects', 'Collision fictive'],
+      ['custom', 'protected_by', 'Collision fictive'], ['previously_used', 'previously_used_by', 'Définition incompatible']] as const) {
+      await db.query('INSERT INTO "RelationType" (id,code,label,"inverseCode","inverseLabel","symmetric","updatedAt") VALUES ($1,$2,$3,$4,$5,false,CURRENT_TIMESTAMP)',
+        [id(4000), code, label, inverse, inverse ? 'Inverse fictif' : null])
+      const before = await snapshot(db, ['RelationType'])
+      await assert.rejects(db.exec(additionalMigration), /Conflicting relation code|Existing relation definition differs/)
+      assert.deepEqual(await snapshot(db, ['RelationType']), before)
+      await assert.rejects(seedAdapter(db), /Conflicting relation code|Existing relation definition differs/)
+      assert.deepEqual(await snapshot(db, ['RelationType']), before)
+      await db.query('DELETE FROM "RelationType" WHERE id = $1', [id(4000)])
+    }
+    await db.query('INSERT INTO "RelationType" (id,code,label,"updatedAt") VALUES ($1,$2,$3,CURRENT_TIMESTAMP)',
+      ['cb9415c6-f258-4d92-aaf2-000000000005', 'custom', 'UUID occupé'])
+    const before = await snapshot(db, ['RelationType'])
+    await assert.rejects(db.exec(additionalMigration), /duplicate key/)
+    assert.deepEqual(await snapshot(db, ['RelationType']), before)
   } finally { await db.close() }
 })
 
