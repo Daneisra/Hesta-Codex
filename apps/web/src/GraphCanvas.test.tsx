@@ -5,24 +5,28 @@ import type { ComponentProps, Ref } from 'react'
 import type { GraphEdge, GraphNode, GraphResponse } from '@hesta-codex/shared'
 import { GraphCanvas } from './GraphCanvas'
 import { indexGraph, neighborhoodDistances } from './graph-model'
+import type { VisualConnection } from './graph-connections'
 import { positionStorageKey, serializePositions } from './graph-positions'
 
 type PositionedNode = GraphNode & { x?: number; y?: number; fx?: number; fy?: number }
 type RenderedGraph = {
-  graphData: { nodes: PositionedNode[]; links: GraphEdge[] }
+  graphData: { nodes: PositionedNode[]; links: VisualConnection[] }
   onNodeClick: (node: PositionedNode) => void
   onNodeDragEnd: (node: PositionedNode) => void
   onNodeHover: (node: PositionedNode | null) => void
-  onLinkHover: (edge: GraphEdge | null) => void
-  onLinkClick: (edge: GraphEdge) => void
+  onLinkHover: (edge: VisualConnection | null) => void
+  onLinkClick: (edge: VisualConnection) => void
   onBackgroundClick: () => void
   onZoom: () => void
   onEngineStop: () => void
   onEngineTick: () => void
   nodeColor: (node: PositionedNode) => string
-  linkWidth: (edge: GraphEdge) => number
-  linkVisibility: (edge: GraphEdge) => boolean
-  linkDirectionalArrowLength: (edge: GraphEdge) => number
+  linkWidth: (edge: VisualConnection) => number
+  linkVisibility: (edge: VisualConnection) => boolean
+  linkDirectionalArrowLength: (edge: VisualConnection) => number
+  linkCanvasObject: (edge: VisualConnection, context: CanvasRenderingContext2D) => void
+  linkCurvature: (edge: VisualConnection) => number
+  nodeVal: (node: PositionedNode) => number
   nodeCanvasObject: (node: PositionedNode, context: CanvasRenderingContext2D, scale: number) => void
   onRenderFramePost: (context: CanvasRenderingContext2D, scale: number) => void
 }
@@ -47,6 +51,7 @@ const fixture: GraphResponse = { nodes: ['a', 'b', 'c', 'd'].map((id) => ({
 ] }
 const index = indexGraph(fixture)
 const latest = () => graphMock.props as RenderedGraph
+const link = (edge: GraphEdge) => latest().graphData.links.find(connection => connection.members.some(member => member.id === edge.id))!
 function props(): ComponentProps<typeof GraphCanvas> {
   return { data: fixture, index, totalIndex: index, selectedId: 'a', selectedEdgeId: '', isolated: false,
     focusRequest: { id: 'a', token: 1 }, distances: neighborhoodDistances(index, 'a', 1), depth: 1,
@@ -236,17 +241,17 @@ describe('graph canvas interactions', () => {
     expect(latest().nodeColor(node)).toMatch(/30$/)
     act(() => latest().onNodeHover(node))
     expect(latest().nodeColor(node)).toBe('#8eafb9')
-    expect(latest().linkWidth(fixture.edges[1]!)).toBe(1.35)
-    expect(latest().linkWidth(fixture.edges[0]!)).toBe(.8)
+    expect(latest().linkWidth(link(fixture.edges[1]!))).toBe(1.35)
+    expect(latest().linkWidth(link(fixture.edges[0]!))).toBe(.55)
     act(() => latest().onNodeHover(null))
-    expect(latest().linkWidth(fixture.edges[0]!)).toBe(1.35)
+    expect(latest().linkWidth(link(fixture.edges[0]!))).toBe(1.35)
     expect(latest().nodeColor(node)).toMatch(/30$/)
     act(() => latest().onNodeHover(node))
     fireEvent.pointerOut(area)
     expect(latest().nodeColor(node)).toMatch(/30$/)
     expect(document.querySelector('.graph-hover')).toBeNull()
     // The engine can still report objects at its previous pointer coordinates during a zoom.
-    act(() => { latest().onNodeHover(node); latest().onLinkHover(fixture.edges[1]!) })
+    act(() => { latest().onNodeHover(node); latest().onLinkHover(link(fixture.edges[1]!)) })
     expect(latest().nodeColor(node)).toMatch(/30$/)
     expect(document.querySelector('.graph-hover')).toBeNull()
     fireEvent.pointerOver(area)
@@ -259,7 +264,7 @@ describe('graph canvas interactions', () => {
     const input = props()
     render(<GraphCanvas {...input} selectedId="" focusRequest={null} />)
     const node = latest().graphData.nodes[0]!
-    for (const interrupt of [() => latest().onLinkClick(fixture.edges[0]!),
+    for (const interrupt of [() => latest().onLinkClick(link(fixture.edges[0]!)),
       () => latest().onBackgroundClick(), () => latest().onZoom()]) {
       act(() => latest().onNodeClick(node))
       act(interrupt)
@@ -279,13 +284,13 @@ describe('graph canvas interactions', () => {
     expect(context.setLineDash).toHaveBeenCalledWith([3, 3])
     expect(context.strokeRect).toHaveBeenCalledTimes(1)
     expect(context.restore).toHaveBeenCalledTimes(1)
-    expect(latest().linkDirectionalArrowLength(fixture.edges[0]!)).toBe(0)
+    expect(latest().linkDirectionalArrowLength(link(fixture.edges[0]!))).toBe(0)
     expect(screen.getByRole('checkbox', { name: 'Afficher les flèches' })).toHaveProperty('checked', false)
     await userEvent.setup().click(screen.getByRole('checkbox', { name: 'Afficher les flèches' }))
-    expect(latest().linkDirectionalArrowLength(fixture.edges[0]!)).toBe(0)
+    expect(latest().linkDirectionalArrowLength(link(fixture.edges[0]!))).toBe(0)
     await userEvent.setup().click(screen.getByRole('checkbox', { name: 'Afficher les relations éditoriales' }))
-    expect(latest().linkDirectionalArrowLength(fixture.edges[0]!)).toBe(4)
-    expect(latest().linkDirectionalArrowLength(fixture.edges[1]!)).toBe(0)
+    expect(latest().linkDirectionalArrowLength(link(fixture.edges[0]!))).toBe(4)
+    expect(latest().linkDirectionalArrowLength(link(fixture.edges[1]!))).toBe(0)
   })
 
   it('keeps references without arrowheads even on hover until the display option is explicitly enabled', async () => {
@@ -293,16 +298,16 @@ describe('graph canvas interactions', () => {
     const data = { ...fixture, edges: [reference] }, input = props()
     render(<GraphCanvas {...input} data={data} index={indexGraph(data)} selectedId="" focusRequest={null} distances={new Map()} />)
     fireEvent.pointerOver(screen.getByRole('group', { name: /Graphe interactif/ }))
-    expect(latest().linkDirectionalArrowLength(reference)).toBe(0)
-    expect(latest().linkWidth(reference)).toBe(.55)
+    expect(latest().linkDirectionalArrowLength(link(reference))).toBe(0)
+    expect(latest().linkWidth(link(reference))).toBe(.55)
     act(() => latest().onNodeHover(latest().graphData.nodes[0]!))
-    expect(latest().linkDirectionalArrowLength(reference)).toBe(0)
+    expect(latest().linkDirectionalArrowLength(link(reference))).toBe(0)
     const user = userEvent.setup()
     await user.click(screen.getByText('Exploration'))
     await user.click(screen.getByRole('checkbox', { name: 'Afficher les flèches' }))
-    expect(latest().linkDirectionalArrowLength(reference)).toBe(4)
+    expect(latest().linkDirectionalArrowLength(link(reference))).toBe(4)
     act(() => latest().onNodeHover(null))
-    expect(latest().linkDirectionalArrowLength(reference)).toBe(0)
+    expect(latest().linkDirectionalArrowLength(link(reference))).toBe(0)
   })
 
   it('changes only rendering without rebuilding data, reheating physics, reframing or saving a preference', async () => {
@@ -326,7 +331,7 @@ describe('graph canvas interactions', () => {
     expect(screen.getByRole('checkbox', { name: 'Afficher les flèches' })).toHaveProperty('checked', true)
     expect(screen.getByRole('checkbox', { name: 'Afficher les relations éditoriales' })).toHaveProperty('checked', true)
     await user.click(screen.getByRole('checkbox', { name: 'Afficher les flèches' }))
-    expect(latest().linkDirectionalArrowLength(fixture.edges[0]!)).toBe(0)
+    expect(latest().linkDirectionalArrowLength(link(fixture.edges[0]!))).toBe(0)
     cleanup()
     render(<GraphCanvas {...input} scope="admin" />)
     expect(screen.getByRole('checkbox', { name: 'Afficher les flèches' })).toHaveProperty('checked', false)
@@ -334,32 +339,32 @@ describe('graph canvas interactions', () => {
   })
 
   it.each(['public', 'admin'] as const)('hides editorial strokes by default in %s while preserving Obsidian links, neighbors and details', async scope => {
-    const reference = { ...fixture.edges[0]!, id: 'reference', origin: 'OBSIDIAN' as const }
+    const reference = { ...fixture.edges[0]!, id: 'reference', target: 'd', origin: 'OBSIDIAN' as const }
     const data = { ...fixture, edges: [...fixture.edges, reference] }, input = props()
     render(<GraphCanvas {...input} scope={scope} data={data} index={indexGraph(data)} />)
     expect(latest().graphData.links).toHaveLength(3)
-    expect(latest().linkVisibility(fixture.edges[0]!)).toBe(false)
-    expect(latest().linkVisibility(fixture.edges[1]!)).toBe(false)
-    expect(latest().linkVisibility(reference)).toBe(true)
-    expect(latest().linkDirectionalArrowLength(reference)).toBe(0)
+    expect(latest().linkVisibility(link(fixture.edges[0]!))).toBe(false)
+    expect(latest().linkVisibility(link(fixture.edges[1]!))).toBe(false)
+    expect(latest().linkVisibility(link(reference))).toBe(true)
+    expect(latest().linkDirectionalArrowLength(link(reference))).toBe(0)
     fireEvent.pointerOver(screen.getByRole('group', { name: /Graphe interactif/ }))
     act(() => latest().onNodeHover(latest().graphData.nodes[1]!))
-    expect(latest().linkVisibility(fixture.edges[0]!)).toBe(false)
+    expect(latest().linkVisibility(link(fixture.edges[0]!))).toBe(false)
     expect(latest().nodeColor(latest().graphData.nodes[0]!)).not.toMatch(/30$/)
     const user = userEvent.setup()
     await user.click(screen.getByRole('checkbox', { name: 'Afficher les relations éditoriales' }))
-    expect(latest().linkVisibility(fixture.edges[0]!)).toBe(true)
-    expect(latest().linkVisibility(fixture.edges[1]!)).toBe(true)
-    expect(latest().linkVisibility(reference)).toBe(true)
-    expect(latest().linkDirectionalArrowLength(fixture.edges[0]!)).toBe(0)
+    expect(latest().linkVisibility(link(fixture.edges[0]!))).toBe(true)
+    expect(latest().linkVisibility(link(fixture.edges[1]!))).toBe(true)
+    expect(latest().linkVisibility(link(reference))).toBe(true)
+    expect(latest().linkDirectionalArrowLength(link(fixture.edges[0]!))).toBe(0)
     act(() => latest().onNodeHover(null))
-    act(() => latest().onLinkHover(fixture.edges[0]!))
+    act(() => latest().onLinkHover(link(fixture.edges[0]!)))
     expect(document.querySelector('.graph-hover')).not.toBeNull()
     await user.click(screen.getByRole('checkbox', { name: 'Afficher les relations éditoriales' }))
-    expect(latest().linkVisibility(fixture.edges[0]!)).toBe(false)
-    expect(latest().linkVisibility(reference)).toBe(true)
+    expect(latest().linkVisibility(link(fixture.edges[0]!))).toBe(false)
+    expect(latest().linkVisibility(link(reference))).toBe(true)
     expect(document.querySelector('.graph-hover')).toBeNull()
-    act(() => latest().onLinkHover(fixture.edges[0]!))
+    act(() => latest().onLinkHover(link(fixture.edges[0]!)))
     expect(document.querySelector('.graph-hover')).toBeNull()
   })
 
@@ -370,5 +375,34 @@ describe('graph canvas interactions', () => {
     expect(Math.abs(latest().graphData.nodes[0]!.x!)).toBeLessThan(100)
     expect(graphMock.methods.d3ReheatSimulation).toHaveBeenCalledTimes(1)
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Ajuster à l’écran' }))
+  })
+
+  it('draws a mixed reciprocal pair once, keeps a stable radius, exposes a real member and draws reverse arrows only on request', async () => {
+    const forward: GraphEdge = { ...fixture.edges[0]!, id: 'mention-a', origin: 'OBSIDIAN', occurrences: 3 }
+    const reverse: GraphEdge = { ...forward, id: 'mention-b', source: 'b', target: 'a', occurrences: 5 }
+    const data = { ...fixture, edges: [fixture.edges[0]!, forward, reverse] }, input = props()
+    const { rerender } = render(<GraphCanvas {...input} data={{ ...fixture, edges: [forward] }} totalIndex={indexGraph({ ...fixture, edges: [forward] })} />)
+    const radius = latest().nodeVal(latest().graphData.nodes[0]!)
+    rerender(<GraphCanvas {...input} data={data} index={indexGraph(data)} totalIndex={indexGraph(data)} />)
+    expect(latest().graphData.links).toHaveLength(1)
+    expect(latest().nodeVal(latest().graphData.nodes[0]!)).toBe(radius)
+    const connection = latest().graphData.links[0]!
+    expect(connection.members).toHaveLength(3)
+    expect(latest().linkCurvature(connection)).toBe(0)
+    expect(latest().linkVisibility(connection)).toBe(true)
+    act(() => latest().onLinkClick(connection))
+    expect(input.onSelectEdge).toHaveBeenCalledWith('mention-a')
+    const context = { save: vi.fn(), restore: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), closePath: vi.fn(), fill: vi.fn() }
+    latest().linkCanvasObject(connection, context as unknown as CanvasRenderingContext2D)
+    expect(context.fill).not.toHaveBeenCalled()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('checkbox', { name: 'Afficher les flèches' }))
+    expect(latest().linkDirectionalArrowLength(connection)).toBe(4)
+    latest().linkCanvasObject(connection, context as unknown as CanvasRenderingContext2D)
+    expect(context.fill).toHaveBeenCalledTimes(1)
+    await user.click(screen.getByRole('checkbox', { name: 'Afficher les relations éditoriales' }))
+    expect(latest().graphData.links).toHaveLength(1)
+    expect(latest().nodeVal(latest().graphData.nodes[0]!)).toBe(radius)
+    expect(data.edges[1]!.source).toBe('a'); expect(data.edges[2]!.source).toBe('b')
   })
 })

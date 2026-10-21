@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { configureGraphPhysics, graphPhysics, settleGraphLayout, type PhysicsEngine } from './graph-physics'
 import { syntheticGraph } from './graph-synthetic'
+import { groupGraphConnections } from './graph-connections'
 import { forceSimulation, forceManyBody, forceLink, type Force } from 'd3-force-3d'
 
 describe('graph physics', () => {
@@ -47,5 +48,17 @@ describe('graph physics', () => {
     for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) {
       expect(Math.hypot(nodes[i]!.x - nodes[j]!.x, nodes[i]!.y - nodes[j]!.y)).toBeGreaterThan(8)
     }
+  })
+
+  it('gives the same layout when reciprocal/parallel facts are projected to one physical link per pair', () => {
+    const data = syntheticGraph(), nodes = data.nodes.slice(0, 12)
+    const edges = data.edges.filter(edge => nodes.some(node => node.id === edge.source) && nodes.some(node => node.id === edge.target))
+    const duplicated = [...edges, ...edges.map(edge => ({ ...edge, id: edge.id + '-reverse', source: edge.target, target: edge.source }))]
+    const run = (input: typeof edges) => {
+      const links = groupGraphConnections({ nodes, edges: input }), positioned = nodes.map(node => ({ ...node, x: 0, y: 0 }))
+      settleGraphLayout(positioned, links.map(link => ({ ...link })), { nodes, edges: links })
+      return positioned.map(node => [node.x, node.y])
+    }
+    expect(run(duplicated)).toEqual(run(edges))
   })
 })

@@ -63,8 +63,12 @@ fines et translucides en vue globale ; les pointillés apparaissent sur les réf
 mises en évidence par survol ou sélection. Les flèches sont désactivées par défaut et
 réactivables dans « Exploration ». Les traits des relations éditoriales sont eux aussi
 masqués par défaut ; une option distincte permet de les réafficher, dorés et continus.
-Les références suivent
-une légère courbe pour distinguer deux types de lien entre les mêmes fiches. Recherche, voisinage,
+Le Canvas regroupe les références réciproques et les relations entre les mêmes identifiants
+en une seule connexion visuelle droite, après filtrage. Activer les relations éditoriales
+enrichit ce trait sans en ajouter un second. Un clic expose toutes les références et relations
+dans leurs sens d'origine ; les occurrences et les données source sont conservées.
+Les compteurs de connexions uniques sont distincts des références dirigées, occurrences et
+relations éditoriales ; aucune migration ni écriture ne découle de ce regroupement. Recherche, voisinage,
 isolation, zoom, déplacement, disposition et ouverture des fiches utilisent les index existants.
 Le filtre « Type de connexion » permet de choisir les références Obsidian. Les filtres de statut
 et de visibilité de relation masquent ces références, qui n'ont aucun statut éditorial propre.

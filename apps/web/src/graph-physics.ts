@@ -1,14 +1,19 @@
 import { forceCollide, forceX, forceY, forceSimulation, forceManyBody, forceLink, forceCenter, type Force, type SimulationNode } from 'd3-force-3d'
-import type { GraphResponse } from '@hesta-codex/shared'
-import { indexGraph, nodeRadius } from './graph-model'
+import type { GraphNode } from '@hesta-codex/shared'
+import { nodeRadius } from './graph-model'
+import { distinctNeighbors } from './graph-connections'
+
+type PhysicsGraph = { nodes: readonly GraphNode[]; edges: ReadonlyArray<{ source: string; target: string }> }
 
 const endpoint = (value: unknown): string => typeof value === 'object' && value !== null && 'id' in value
   ? String(value.id) : String(value)
 const pair = (source: unknown, target: unknown) => [endpoint(source), endpoint(target)].sort().join('\u0000')
 
-export function graphPhysics(data: GraphResponse) {
-  const index = indexGraph(data), pairs = new Map<string, number>()
+export function graphPhysics(data: PhysicsGraph) {
+  const index = { neighbors: new Map(data.nodes.map(node => [node.id, new Set<string>()])) }, pairs = new Map<string, number>()
   for (const edge of data.edges) {
+    if (!index.neighbors.has(edge.source) || !index.neighbors.has(edge.target)) continue
+    index.neighbors.get(edge.source)!.add(edge.target); index.neighbors.get(edge.target)!.add(edge.source)
     const key = pair(edge.source, edge.target)
     pairs.set(key, (pairs.get(key) ?? 0) + 1)
   }
@@ -26,9 +31,9 @@ export interface PhysicsEngine {
 }
 
 /** Tune the existing D3 simulation, without changing graph data or editorial orientation. */
-export function configureGraphPhysics(engine: PhysicsEngine, data: GraphResponse) {
+export function configureGraphPhysics(engine: PhysicsEngine, data: PhysicsGraph) {
   const settings = graphPhysics(data)
-  const degree = (id: string) => settings.index.neighbors.get(id)?.size ?? 0
+  const degree = (id: string) => distinctNeighbors(settings.index, id)
   engine.d3Force('charge')?.strength(node => settings.charge * (degree(String(node.id)) ? 1 : .45))
     .distanceMax(settings.reach).theta(.9)
   engine.d3Force('link')?.distance(settings.distance).strength(link => {
@@ -37,7 +42,7 @@ export function configureGraphPhysics(engine: PhysicsEngine, data: GraphResponse
     return .38 / Math.sqrt(1 + Math.min(degree(endpoint(edge.source)), degree(endpoint(edge.target)))) /
       (settings.pairs.get(pair(edge.source, edge.target)) ?? 1)
   })
-  engine.d3Force('collision', forceCollide(node => nodeRadius(settings.index.incidentEdges.get(String(node.id))?.length ?? 0) +
+  engine.d3Force('collision', forceCollide(node => nodeRadius(degree(String(node.id))) +
     settings.collisionGap).strength(.8).iterations(2))
   const containment = (node: { id?: string | number }) => degree(String(node.id)) ? .012 : .035
   engine.d3Force('x', forceX(0).strength(containment))
@@ -50,7 +55,7 @@ export function initializeGraphLayout(nodes: SimulationNode[]) {
 }
 
 /** Reduced motion: settle offscreen, then let the Canvas render stationary coordinates. */
-export function settleGraphLayout(nodes: SimulationNode[], links: Array<{ source: unknown; target: unknown }>, data: GraphResponse) {
+export function settleGraphLayout(nodes: SimulationNode[], links: Array<{ source: unknown; target: unknown }>, data: PhysicsGraph) {
   const simulation = forceSimulation(nodes, 2).stop()
     .force('charge', forceManyBody()).force('link', forceLink(links).id(node => node.id!)).force('center', forceCenter())
     .alphaDecay(.04).velocityDecay(.42)

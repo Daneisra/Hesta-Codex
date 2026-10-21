@@ -72,7 +72,8 @@ sans modifier le panneau ni l'URL.
 Le panneau affiche résumé, sens des relations, comptes entrants/sortants, connexions
 symétriques et navigation vers les voisins. Le total de relations porte uniquement sur
 le graphe autorisé chargé ; les relations affichées avec les filtres sont comptées séparément.
-Le rayon des nœuds varie légèrement avec ce total, de 2,8 à 6 unités Canvas au maximum.
+Le rayon des nœuds varie avec le nombre de voisins distincts du graphe chargé, de 2,8 à
+6 unités Canvas au maximum. Mentions réciproques et faits multiples ne grossissent plus un nœud.
 Pour une arête directionnelle, le libellé inverse apparaît depuis sa cible ; une arête
 symétrique utilise le même libellé aux deux extrémités. Le survol révèle un libellé textuel
 sans utiliser les infobulles HTML de la bibliothèque. Le Canvas accepte pan, zoom, drag et
@@ -101,7 +102,35 @@ déclaré directement comme dépendance du web ; aucune bibliothèque de rendu s
 | Commandes | Barre occupant une bande du graphe, filtres développés | Barre flottante compacte, menu « Exploration », panneaux masquables |
 | Surface | Graphe encadré dans la page | Plein écran natif, sans en-tête ni panneaux imposés |
 
-La densité compte les paires de fiches distinctes, indépendamment des arcs parallèles.
+### Une connexion visuelle par paire de fiches
+
+Après les filtres et l'isolation, `graph-connections.ts` regroupe les arêtes par paire
+**non orientée d'identifiants**, jamais par titre. A → B et B → A, plusieurs occurrences,
+références et relations éditoriales entre les mêmes fiches partagent un seul trait droit.
+Une auto-connexion éventuelle garde une boucle. L'identifiant visuel reste déterministe,
+indépendant de l'ordre des arêtes ; chaque membre conserve son UUID, son sens et ses métadonnées.
+Cette projection ne modifie ni l'API, ni le Markdown, ni les relations ou les preuves en base.
+
+La simulation reçoit une seule liaison par paire, y compris lorsque son trait est masqué.
+La taille des nœuds, la priorité des étiquettes et les collisions utilisent les voisins
+distincts. La multiplicité n'augmente donc ni la traction entre deux fiches ni leur rayon.
+Les positions sauvegardées restent valides ; « Réinitialiser la disposition » reste disponible.
+
+Au clic, le panneau affiche tous les membres de la connexion sélectionnée, dans leur sens
+d'origine, avec les occurrences des références et les libellés des relations. Cette liste
+n'est pas limitée aux huit connexions du résumé d'une fiche. Les compteurs séparent les
+**connexions uniques**, les **références dirigées**, leurs **occurrences** et les **relations
+éditoriales**. Les compteurs du catalogue complet conservent leur sens précédent.
+
+Les relations éditoriales restent masquées par défaut. Lorsqu'elles sont activées, une
+connexion contenant une telle relation devient dorée, sans ajouter un trait aux références
+déjà représentées. Les détails permettent toujours de distinguer les deux origines.
+Les flèches sont optionnelles : un lien dirigé inverse garde son sens, et deux directions
+opposées peuvent afficher deux pointes sur le **même trait**. Un membre symétrique n'ajoute
+pas de pointe. Les directions des références restent limitées au voisinage mis en évidence.
+Regrouper après filtrage empêche de réintroduire un membre exclu par un filtre ou par l'API autorisée.
+
+La densité compte les paires de fiches distinctes, indépendamment des arcs détaillés.
 Les options « Afficher les relations éditoriales » et « Afficher les flèches » sont
 décochées à chaque ouverture du graphe, public comme administrateur. Les références Obsidian
 restent visibles dans l'administration, sous forme de traits fins. Activer les traits des
@@ -109,9 +138,9 @@ relations n'active pas les flèches : celles-ci demandent une action distincte. 
 symétrique ne reçoit jamais de flèche ; les références Obsidian n'en reçoivent que sur le
 voisinage mis en évidence lorsque l'option des flèches est active.
 
-Ce sont uniquement des options de dessin : les arêtes restent dans la simulation, les
+Ce sont uniquement des options de dessin : les connexions regroupées restent dans la simulation, les
 voisinages, les filtres, l'isolation et les détails. Les compteurs indiquent donc les
-connexions « disponibles » dans le réseau filtré, y compris celles dont les traits sont
+connexions uniques dans le réseau filtré, y compris celles dont les traits sont
 masqués. Le graphe public commence avec ses nœuds sans traits ; l'option permet d'afficher
 ses relations publiques. Tant que le Canvas reste affiché, les options restent identiques
 pendant l'exploration, les filtres et le plein écran. Elles ne sont ni enregistrées dans le
@@ -121,9 +150,8 @@ Les données, permissions et positions sont inchangées ; masquer un trait ne r�
 la simulation et ne modifie pas le cadrage.
 
 Répulsion, portée et distance des liens augmentent de manière bornée avec cette densité
-et le nombre de nœuds. La force des liens est réduite pour les fiches très connectées et
-divisée entre les arcs parallèles : une référence et une relation entre les mêmes fiches
-ne resserrent pas artificiellement le réseau. Des collisions et un rappel faible sur les
+et le nombre de nœuds. La force des liens est réduite pour les fiches très connectées ; une
+seule liaison physique représente chaque paire de fiches. Des collisions et un rappel faible sur les
 axes X/Y retiennent les composantes déconnectées ; les fiches sans connexion ont un rappel
 légèrement plus fort. La simulation s'arrête après 180 ticks, au plus 6 secondes, avec
 amortissement et refroidissement ; survol et sélection ne la réchauffent pas.
@@ -287,6 +315,18 @@ Les captures et l'instrumentation Canvas confirment l'absence de traits éditori
 le maintien des références fines et la réactivation des options, sans nouvelle lecture API
 du graphe, écriture, débordement horizontal ou erreur JavaScript. La vue immersive de repli
 a été utilisée ; aucun contrôle sur des données de production n'a été effectué.
+
+Validation du regroupement par paire, le 21 octobre 2026 : **777 tests réussis
+(443 API + 334 web)**, soit douze tests supplémentaires. Lint, typecheck, build,
+Prisma validate/generate et `git diff --check` passent. Les tests couvrent les sens
+réciproques, occurrences, homonymes, filtres, absence de mutation, invariance des forces
+et du rayon, flèches inverses et détail complet de la connexion sélectionnée.
+Une fixture fictive de 130 fiches contient 592 références dirigées et 120 relations,
+soit 712 liens détaillés regroupés en 376 connexions uniques. Avec les relations masquées,
+296 traits représentent les 592 références réciproques. Le contrôle Edge à 1920 × 1080,
+3840 × 2160, 768 × 1024 et 390 × 844 vérifie par instrumentation Canvas l'absence
+de traits doublés, le changement des options et l'absence d'erreur JavaScript ou d'écriture.
+La recette utilise la vue immersive de repli et une API locale simulée, sans base réelle.
 
 Le graphe charge toujours le réseau entier dans une réponse. Les index des graphes chargé, filtré et
 éventuellement isolé sont mémorisés ; le voisinage coûte au plus O(nœuds + arêtes), et

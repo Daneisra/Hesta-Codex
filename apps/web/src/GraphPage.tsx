@@ -7,6 +7,7 @@ import { emptyFilters, filterGraph, indexGraph, indexGraphSearch, isolateNeighbo
   nodeMatchesFilters, searchIndexedGraph, type GraphData, type NeighborhoodDepth } from './graph-model'
 import { allGraphGroups, graphStateUrl, readGraphState, resolveGraphState, type GraphUrlState } from './graph-url'
 import './Graph.css'
+import { connectionCounts, groupGraphConnections } from './graph-connections'
 
 export { visibleConnections } from './graph-model'
 
@@ -174,6 +175,9 @@ export function GraphPage({ endpoint, admin = false, onOpenNode }: {
     : visibleGraph ? indexGraph(visibleGraph) : null, [visibleGraph, baseGraph, baseIndex])
   const selected = visibleIndex?.nodes.get(selectedId) ?? null
   const selectedEdge = visibleIndex?.edges.get(selectedEdgeId) ?? null
+  const visualCounts = useMemo(() => ({ visible: visibleGraph ? groupGraphConnections(visibleGraph).length : 0,
+    loaded: data ? groupGraphConnections(data).length : 0,
+    ...connectionCounts(visibleGraph?.edges ?? []) }), [visibleGraph, data])
 
   const commitState = useCallback((change: (previous: GraphUrlState) => GraphUrlState, replace = false) => {
     const next = canonicalize(change(explorationRef.current))
@@ -316,8 +320,10 @@ export function GraphPage({ endpoint, admin = false, onOpenNode }: {
       <h1>{admin ? 'Graphe éditorial' : 'Graphe du Codex'}</h1>
       <p>{admin ? 'Fiches, relations éditoriales et références textuelles Obsidian.' : 'Fiches et relations publiées, visibles de tous.'}</p></div>
       {data && visibleGraph && <p className="graph-count" role="status">
-        {visibleGraph.nodes.length} fiche{visibleGraph.nodes.length > 1 ? 's' : ''} · {visibleGraph.edges.length} {admin ? `connexion${visibleGraph.edges.length > 1 ? 's' : ''}` : `relation${visibleGraph.edges.length > 1 ? 's' : ''}`} disponible{visibleGraph.edges.length > 1 ? 's' : ''}
-        <small> sur {data.nodes.length} fiches · {data.edges.length} {admin ? 'connexions' : 'relations'} chargées</small>
+        {visibleGraph.nodes.length} fiche{visibleGraph.nodes.length > 1 ? 's' : ''} · {visualCounts.visible} connexion{visualCounts.visible > 1 ? 's' : ''} unique{visualCounts.visible > 1 ? 's' : ''}
+        <small> sur {data.nodes.length} fiches · {visualCounts.loaded} connexion{visualCounts.loaded > 1 ? 's' : ''} unique{visualCounts.loaded > 1 ? 's' : ''} chargée{visualCounts.loaded > 1 ? 's' : ''}</small>
+        <small>{admin && <>{visualCounts.references} référence{visualCounts.references > 1 ? 's' : ''} Obsidian · {visualCounts.occurrences} occurrence{visualCounts.occurrences > 1 ? 's' : ''} · </>}
+          {visualCounts.relations} relation{visualCounts.relations > 1 ? 's' : ''} éditoriale{visualCounts.relations > 1 ? 's' : ''} disponible{visualCounts.relations > 1 ? 's' : ''}</small>
       </p>}</div>
     {referenceStats && data && <details className="graph-reference-summary"><summary>Références Obsidian et compteurs</summary><p className="graph-reference-stats">
       Obsidian : {referenceStats.occurrences} occurrences · {referenceStats.resolved} références uniques résolues

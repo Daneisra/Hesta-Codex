@@ -1,7 +1,8 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import ForceGraph2D from 'react-force-graph-2d'
 import type { ForceGraphMethods, NodeObject } from 'react-force-graph-2d'
-import type { GraphEdge, GraphNode, GraphResponse } from '@hesta-codex/shared'
+import type { GraphNode, GraphResponse } from '@hesta-codex/shared'
+import { connectionCounts, connectionDirections, distinctNeighbors, groupGraphConnections, type VisualConnection } from './graph-connections'
 import { groupFor, neighborhoodDistances, nodeRadius, type GraphIndex, type NeighborhoodDepth } from './graph-model'
 import { layoutGraphLabels, shortLabel, type LabelCandidate } from './graph-labels'
 import { clearPositions, loadPositions, savePositions, validPosition, type GraphScope } from './graph-positions'
@@ -40,7 +41,7 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
   const areaRef = useRef<HTMLDivElement>(null)
   const fitButtonRef = useRef<HTMLButtonElement>(null)
   const resetFocus = useRef(false)
-  const graphRef = useRef<ForceGraphMethods<Node, GraphEdge> | undefined>(undefined)
+  const graphRef = useRef<ForceGraphMethods<Node, VisualConnection> | undefined>(undefined)
   const pendingFocus = useRef<string | null>(null)
   const issuedFocusRequest = useRef<FocusRequest>(null)
   const fitted = useRef(false)
@@ -70,6 +71,9 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
   }, [])
   useEffect(() => { if (selectedId && focusRequest?.id === selectedId) setMoreOpen(true) }, [selectedId, focusRequest])
   useEffect(() => { if (immersive) setMoreOpen(false) }, [immersive])
+  const connections = useMemo(() => groupGraphConnections(data), [data])
+  const connectionIndex = useMemo(() => new Map(connections.map(connection => [connection.id, connection])), [connections])
+  const physicsData = useMemo(() => ({ nodes: data.nodes, edges: connections }), [data.nodes, connections])
   // ForceGraph mutates coordinates and link endpoints. Keep the API response untouched.
   const graphData = useMemo(() => ({ nodes: data.nodes.map((node) => {
     // Keep session-local coordinates (including dragged positions) through filters and isolation.
@@ -79,13 +83,13 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
     Object.assign(positioned, node)
     layoutNodes.current.set(node.id, positioned)
     return positioned
-  }), links: data.edges.map((edge) => ({ ...edge })) }), [data])
+  }), links: connections.map((edge) => ({ ...edge })) }), [data, connections])
   const positionedNodes = useMemo(() => new Map(graphData.nodes.map((node) => [node.id, node])), [graphData.nodes])
   const labelText = useMemo(() => new Map(data.nodes.map(node => [node.id, shortLabel(node.title)])), [data.nodes])
   const hoverNode = index.nodes.get(hoveredNodeId)
-  const hoveredEdge = index.edges.get(hoveredEdgeId)
-  const hoverEdge = hoveredEdge && (showEditorialLinks || hoveredEdge.origin === 'OBSIDIAN') ? hoveredEdge : undefined
-  const activeEdgeId = hoverEdge?.id || selectedEdgeId
+  const hoveredEdge = connectionIndex.get(hoveredEdgeId)
+  const hoverEdge = hoveredEdge && hoveredEdge.members.some(edge => showEditorialLinks || edge.origin === 'OBSIDIAN') ? hoveredEdge : undefined
+  const activeEdgeId = hoverEdge?.members[0]?.id || selectedEdgeId
   const highlightedDistances = useMemo(() => hoverNode
     ? neighborhoodDistances(index, hoverNode.id, 1) : distances, [hoverNode, index, distances])
   const highlighted = useMemo(() => {
@@ -101,13 +105,21 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
     return { ids, edges }
   }, [data.edges, highlightedDistances, activeEdgeId, hoverNode, index])
   const hasHighlight = highlighted.ids.size > 0
+  const highlightedConnections = useMemo(() => new Set(connections.filter(connection =>
+    connection.members.some(edge => highlighted.edges.has(edge.id))).map(connection => connection.id)), [connections, highlighted.edges])
+  const presentation = useMemo(() => new Map(connections.map(connection => {
+    const references = connection.members.some(edge => edge.origin === 'OBSIDIAN')
+    const editorial = showEditorialLinks && connection.members.some(edge => edge.origin !== 'OBSIDIAN')
+    return [connection.id, { visible: references || editorial, editorial,
+      ...connectionDirections(connection, showEditorialLinks, highlightedConnections.has(connection.id)) }]
+  })), [connections, showEditorialLinks, highlightedConnections])
   const labelCandidates = useMemo(() => graphData.nodes.map(node => {
     const id = String(node.id)
-    return { node, text: labelText.get(id) ?? '', radius: nodeRadius(totalIndex.incidentEdges.get(id)?.length ?? 0),
+    return { node, text: labelText.get(id) ?? '', radius: nodeRadius(distinctNeighbors(totalIndex, id)),
       priority: id === selectedId ? 0 : id === hoveredNodeId ? 1 : distances.get(id) === 1 ||
         highlightedDistances.get(id) === 1 ? 2 : searchMatches.has(id) ? 3 : 4 } satisfies LabelCandidate
   }).sort((a, b) => a.priority - b.priority ||
-    (totalIndex.incidentEdges.get(String(b.node.id))?.length ?? 0) - (totalIndex.incidentEdges.get(String(a.node.id))?.length ?? 0) ||
+    distinctNeighbors(totalIndex, String(b.node.id)) - distinctNeighbors(totalIndex, String(a.node.id)) ||
     String(a.node.id).localeCompare(String(b.node.id))),
   [graphData.nodes, labelText, totalIndex, selectedId, hoveredNodeId, distances, highlightedDistances, searchMatches])
 
@@ -133,10 +145,10 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
 
   useEffect(() => {
     if (!canvasReady || !graphRef.current?.d3Force) return
-    configureGraphPhysics(graphRef.current as unknown as PhysicsEngine, data)
-    if (reducedMotion) settleGraphLayout(graphData.nodes, graphData.links.map(edge => ({ ...edge })), data)
+    configureGraphPhysics(graphRef.current as unknown as PhysicsEngine, physicsData)
+    if (reducedMotion) settleGraphLayout(graphData.nodes, graphData.links.map(edge => ({ ...edge })), physicsData)
     graphRef.current.d3ReheatSimulation()
-  }, [data, graphData, canvasReady, reducedMotion])
+  }, [physicsData, graphData, canvasReady, reducedMotion])
 
   const focus = useCallback((id: string) => {
     const node = positionedNodes.get(id)
@@ -171,7 +183,7 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
     if (canvasReady && (changedIsolation || resized && !selectedId)) graphRef.current?.zoomToFit(motionDuration(450), 50)
   }, [size, isolated, selectedId, canvasReady])
 
-  const radiusFor = useCallback((id: string) => nodeRadius(totalIndex.incidentEdges.get(id)?.length ?? 0), [totalIndex])
+  const radiusFor = useCallback((id: string) => nodeRadius(distinctNeighbors(totalIndex, id)), [totalIndex])
   const resetLayout = useCallback(() => {
     const cleared = clearPositions(scope)
     savedPositions.current.clear()
@@ -186,11 +198,14 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
     lastClick.current = null
     pendingFocus.current = null
     fitAfterReset.current = true
-    if (reducedMotion) settleGraphLayout(graphData.nodes, graphData.links.map(edge => ({ ...edge })), data)
+    if (reducedMotion) settleGraphLayout(graphData.nodes, graphData.links.map(edge => ({ ...edge })), physicsData)
     graphRef.current?.d3ReheatSimulation()
-  }, [scope, reducedMotion, graphData, data])
-  const relationText = hoverEdge ? `${index.nodes.get(hoverEdge.source)?.title ?? ''} ${hoverEdge.symmetric ? '↔' : '→'} ` +
-    `${hoverEdge.label} ${hoverEdge.symmetric ? '↔' : '→'} ${index.nodes.get(hoverEdge.target)?.title ?? ''}` : ''
+  }, [scope, reducedMotion, graphData, physicsData])
+  const hoveredMember = hoverEdge?.members[0]
+  const hoverCounts = hoverEdge ? connectionCounts(hoverEdge.members) : null
+  const relationText = hoverEdge && hoveredMember ? hoverEdge.members.length === 1
+    ? `${index.nodes.get(hoveredMember.source)?.title ?? ''} ${hoveredMember.symmetric ? '↔' : '→'} ${hoveredMember.label} ${hoveredMember.symmetric ? '↔' : '→'} ${index.nodes.get(hoveredMember.target)?.title ?? ''}`
+    : `${index.nodes.get(hoverEdge.fromId)?.title ?? ''} ↔ ${index.nodes.get(hoverEdge.toId)?.title ?? ''} · ${hoverCounts!.references} références Obsidian · ${hoverCounts!.relations} relations éditoriales` : ''
 
   return <div className="graph-main">
     <div className="graph-controls" aria-label="Contrôles du graphe">
@@ -243,18 +258,33 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
         // The library renders tooltip labels as HTML; all lore text stays in Canvas or React text.
         nodeLabel={() => ''} linkLabel={() => ''}
         // Rendering only: hidden editorial links still contribute to layout, counts and neighborhoods.
-        linkVisibility={(edge) => edge.origin === 'OBSIDIAN' || showEditorialLinks}
-        linkColor={(edge) => hasHighlight && !highlighted.edges.has(String(edge.id))
-          ? 'rgba(142, 157, 177, .045)' : edge.origin === 'OBSIDIAN'
-            ? highlighted.edges.has(String(edge.id)) ? 'rgba(151, 185, 202, .72)' : 'rgba(142, 165, 181, .18)'
-            : highlighted.edges.has(String(edge.id)) ? 'rgba(204, 185, 147, .85)' : 'rgba(204, 185, 147, .38)'}
-        linkLineDash={(edge) => edge.origin === 'OBSIDIAN' && highlighted.edges.has(String(edge.id)) ? [3, 3] : null}
-        // Separate a textual mention from an editorial relation joining the same fiches.
-        linkCurvature={(edge) => edge.source === edge.target ? .3 : edge.origin === 'OBSIDIAN' ? .06 : 0}
-        linkWidth={(edge) => highlighted.edges.has(String(edge.id)) ? 1.35 : edge.origin === 'OBSIDIAN' ? .55 : .8}
-        linkDirectionalArrowLength={(edge) => !showArrows || edge.symmetric ||
-          (edge.origin === 'OBSIDIAN' ? !highlighted.edges.has(String(edge.id)) : !showEditorialLinks) ? 0 : 4}
-        linkDirectionalArrowColor={(edge) => edge.origin === 'OBSIDIAN' ? 'rgba(151, 185, 202, .72)' : '#c4b38c'}
+        linkVisibility={(edge) => presentation.get(edge.id)?.visible ?? false}
+        linkColor={(edge) => hasHighlight && !highlightedConnections.has(edge.id)
+          ? 'rgba(142, 157, 177, .045)' : !presentation.get(edge.id)?.editorial
+            ? highlightedConnections.has(edge.id) ? 'rgba(151, 185, 202, .72)' : 'rgba(142, 165, 181, .18)'
+            : highlightedConnections.has(edge.id) ? 'rgba(204, 185, 147, .85)' : 'rgba(204, 185, 147, .38)'}
+        linkLineDash={(edge) => !presentation.get(edge.id)?.editorial && highlightedConnections.has(edge.id) ? [3, 3] : null}
+        linkCurvature={(edge) => edge.fromId === edge.toId ? .3 : 0}
+        linkWidth={(edge) => highlightedConnections.has(edge.id) ? 1.35 : presentation.get(edge.id)?.editorial ? .8 : .55}
+        linkDirectionalArrowLength={(edge) => showArrows && presentation.get(edge.id)?.forward ? 4 : 0}
+        linkDirectionalArrowRelPos={(edge) => presentation.get(edge.id)?.reverse ? .65 : .5}
+        linkDirectionalArrowColor={(edge) => presentation.get(edge.id)?.editorial ? '#c4b38c' : 'rgba(151, 185, 202, .72)'}
+        linkCanvasObjectMode={() => 'after'}
+        linkCanvasObject={(edge, context) => {
+          const style = presentation.get(edge.id)
+          if (!showArrows || !style?.reverse) return
+          const from = positionedNodes.get(edge.toId), to = positionedNodes.get(edge.fromId)
+          if (typeof from?.x !== 'number' || typeof from.y !== 'number' || typeof to?.x !== 'number' || typeof to.y !== 'number') return
+          const dx = to.x - from.x, dy = to.y - from.y, length = Math.hypot(dx, dy)
+          if (!Number.isFinite(length) || length < 12) return
+          const unitX = dx / length, unitY = dy / length, at = style.forward ? .65 : .5
+          const x = from.x + dx * at, y = from.y + dy * at
+          context.save(); context.beginPath(); context.moveTo(x, y)
+          context.lineTo(x - unitX * 4 - unitY * 2, y - unitY * 4 + unitX * 2)
+          context.lineTo(x - unitX * 4 + unitY * 2, y - unitY * 4 - unitX * 2)
+          context.closePath(); context.fillStyle = style.editorial ? '#c4b38c' : 'rgba(151, 185, 202, .72)'
+          context.fill(); context.restore()
+        }}
         onNodeHover={(node) => { setHoveredNodeId(pointerInside.current && node ? String(node.id) : '') }}
         onLinkHover={(edge) => { setHoveredEdgeId(pointerInside.current && edge ? String(edge.id) : '') }}
         onNodeClick={(node) => {
@@ -269,7 +299,10 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
             onSelectNode(id)
           }
         }}
-        onLinkClick={(edge) => { lastClick.current = null; onSelectEdge(String(edge.id)) }}
+        onLinkClick={(edge) => { lastClick.current = null
+          const member = edge.members.find(member => showEditorialLinks || member.origin === 'OBSIDIAN')
+          if (member) onSelectEdge(member.id)
+        }}
         onBackgroundClick={() => { lastClick.current = null }}
         onZoom={() => { lastClick.current = null }}
         onNodeDragEnd={(node) => {
