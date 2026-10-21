@@ -117,6 +117,7 @@
   border-radius: .6rem; background: #171e28; box-shadow: 0 8px 24px #0006; }
 .graph-exploration:not([open]) > div { display: none; }
 .graph-exploration .graph-depth { display: grid; min-width: 0; }
+.graph-display-option { display: flex; align-items: center; gap: .45rem; color: #d4deeb; font-size: .83rem; }
 .graph-controls button:disabled { opacity: .4; }
 .graph-filter-drawer[hidden], .graph-detail-drawer[hidden] { display: none !important; }
 .graph-filter-drawer { padding: .75rem; margin-bottom: .75rem; border: 1px solid #2d3847; border-radius: .7rem; background: #151d28; }

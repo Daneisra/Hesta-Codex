@@ -17,7 +17,7 @@ de sélectionner une fiche au clavier ; le panneau affiche ses connexions et per
   Les références textuelles admin portent `origin: "OBSIDIAN"`, `type: "OBSIDIAN_REFERENCE"`
   et `occurrences`, sans statut/visibilité éditoriale. La réponse admin inclut `obsidianStats`.
 - Chaque Relation est renvoyée une fois. Une relation symétrique reste une seule arête ; les
-  relations directionnelles portent une flèche. `inverseLabel` sert au panneau quand le nœud
+  relations directionnelles peuvent porter une flèche si l'affichage est activé. `inverseLabel` sert au panneau quand le nœud
   sélectionné est à l'extrémité entrante.
 - Les nœuds et relations éditoriales sont triés par UUID ; les références Obsidian ajoutées
   sont triées par identifiant dérivé. La réponse reste stable et conserve les nœuds isolés.
@@ -95,12 +95,31 @@ déclaré directement comme dépendance du web ; aucune bibliothèque de rendu s
 | --- | --- | --- |
 | Réseau dense | Forces par défaut ; noyau compact et petits groupes éloignés | Répulsion et distance adaptées à la densité, collisions et rappel doux vers le centre |
 | Nœuds | Rayons 4–9, couleurs plus saturées | Rayons 2,8–6, palette douce par catégorie |
-| Références | Traits bleus pointillés, flèches permanentes | Traits fins et translucides ; direction et pointillés sur le voisinage mis en évidence |
+| Références | Traits bleus pointillés, flèches permanentes | Traits fins et translucides ; pointillés sur le voisinage mis en évidence, flèches optionnelles |
+| Relations éditoriales | Traits dorés et flèches permanents | Traits masqués par défaut ; traits et flèches réactivables séparément dans « Exploration » |
 | Étiquettes | Plus nombreuses, chacune avec un fond | Densité adaptée au zoom ; fond réservé aux étiquettes prioritaires |
 | Commandes | Barre occupant une bande du graphe, filtres développés | Barre flottante compacte, menu « Exploration », panneaux masquables |
 | Surface | Graphe encadré dans la page | Plein écran natif, sans en-tête ni panneaux imposés |
 
 La densité compte les paires de fiches distinctes, indépendamment des arcs parallèles.
+Les options « Afficher les relations éditoriales » et « Afficher les flèches » sont
+décochées à chaque ouverture du graphe, public comme administrateur. Les références Obsidian
+restent visibles dans l'administration, sous forme de traits fins. Activer les traits des
+relations n'active pas les flèches : celles-ci demandent une action distincte. Une relation
+symétrique ne reçoit jamais de flèche ; les références Obsidian n'en reçoivent que sur le
+voisinage mis en évidence lorsque l'option des flèches est active.
+
+Ce sont uniquement des options de dessin : les arêtes restent dans la simulation, les
+voisinages, les filtres, l'isolation et les détails. Les compteurs indiquent donc les
+connexions « disponibles » dans le réseau filtré, y compris celles dont les traits sont
+masqués. Le graphe public commence avec ses nœuds sans traits ; l'option permet d'afficher
+ses relations publiques. Tant que le Canvas reste affiché, les options restent identiques
+pendant l'exploration, les filtres et le plein écran. Elles ne sont ni enregistrées dans le
+navigateur ni partagées dans l'URL ; si une vue sans résultat remplace le Canvas, les options
+reviennent à leur valeur par défaut lorsqu'il réapparaît.
+Les données, permissions et positions sont inchangées ; masquer un trait ne réchauffe pas
+la simulation et ne modifie pas le cadrage.
+
 Répulsion, portée et distance des liens augmentent de manière bornée avec cette densité
 et le nombre de nœuds. La force des liens est réduite pour les fiches très connectées et
 divisée entre les arcs parallèles : une référence et une relation entre les mêmes fiches
@@ -259,6 +278,16 @@ revue visuelle du réseau réel après déploiement autorisé.
 
 ## Limites et suite
 
+Validation du masquage visuel, le 21 octobre 2026 : **765 tests réussis (443 API + 322 web)**.
+Lint, typecheck, build, Prisma validate/generate et `git diff --check` passent. Le build
+conserve son avertissement existant sur un chunk principal supérieur à 500 kB.
+Une fixture entièrement fictive de 130 fiches, 296 références et 120 relations éditoriales
+a été contrôlée dans Edge à 1920 × 1080, 3840 × 2160, 768 × 1024 et 390 × 844.
+Les captures et l'instrumentation Canvas confirment l'absence de traits éditoriaux par défaut,
+le maintien des références fines et la réactivation des options, sans nouvelle lecture API
+du graphe, écriture, débordement horizontal ou erreur JavaScript. La vue immersive de repli
+a été utilisée ; aucun contrôle sur des données de production n'a été effectué.
+
 Le graphe charge toujours le réseau entier dans une réponse. Les index des graphes chargé, filtré et
 éventuellement isolé sont mémorisés ; le voisinage coûte au plus O(nœuds + arêtes), et
 le dessin consulte des Map/Set sans reconstruire le réseau à chaque frame.
@@ -271,8 +300,9 @@ Le Canvas lui-même n'offre pas de parcours clavier nœud par nœud ; ses
 contrôles textuels assurent cette navigation. Les couleurs regroupent les types de fiches
 sans changer leur modèle. Les références Obsidian enrichissent le contrat admin sans migration
 ni modification des règles de publication. Elles sont bleu gris, très fines et translucides
-en vue globale, puis pointillées et fléchées au survol ou à la sélection ; les relations
-éditoriales restent dorées, avec une légende et une option dans « Type de connexion ».
+en vue globale, puis pointillées au survol ou à la sélection. Les flèches restent optionnelles ;
+les relations éditoriales sont masquées par défaut et dorées lorsqu'elles sont réaffichées.
+La légende et le filtre « Type de connexion » restent disponibles.
 Les filtres de statut/visibilité de relation les
 masquent. Les compteurs globaux restent indépendants des filtres et distinguent occurrences,
 références uniques et arcs ; voir [OBSIDIAN-REFERENCES.md](OBSIDIAN-REFERENCES.md).

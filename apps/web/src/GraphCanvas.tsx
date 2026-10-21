@@ -59,6 +59,8 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
   const [hoveredEdgeId, setHoveredEdgeId] = useState('')
   const pointerInside = useRef(false)
   const [moreOpen, setMoreOpen] = useState(Boolean(selectedId))
+  const [showArrows, setShowArrows] = useState(false)
+  const [showEditorialLinks, setShowEditorialLinks] = useState(false)
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false)
   useEffect(() => {
     const media = window.matchMedia?.('(prefers-reduced-motion: reduce)')
@@ -81,7 +83,8 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
   const positionedNodes = useMemo(() => new Map(graphData.nodes.map((node) => [node.id, node])), [graphData.nodes])
   const labelText = useMemo(() => new Map(data.nodes.map(node => [node.id, shortLabel(node.title)])), [data.nodes])
   const hoverNode = index.nodes.get(hoveredNodeId)
-  const hoverEdge = index.edges.get(hoveredEdgeId)
+  const hoveredEdge = index.edges.get(hoveredEdgeId)
+  const hoverEdge = hoveredEdge && (showEditorialLinks || hoveredEdge.origin === 'OBSIDIAN') ? hoveredEdge : undefined
   const activeEdgeId = hoverEdge?.id || selectedEdgeId
   const highlightedDistances = useMemo(() => hoverNode
     ? neighborhoodDistances(index, hoverNode.id, 1) : distances, [hoverNode, index, distances])
@@ -201,6 +204,10 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
       </button>
       <details className="graph-exploration" open={moreOpen} onToggle={event => setMoreOpen(event.currentTarget.open)}>
       <summary>Exploration</summary><div>
+      <label className="graph-display-option"><input type="checkbox" checked={showEditorialLinks}
+        onChange={event => { setShowEditorialLinks(event.target.checked); setHoveredEdgeId('') }} /> Afficher les relations éditoriales</label>
+      <label className="graph-display-option"><input type="checkbox" checked={showArrows}
+        onChange={event => setShowArrows(event.target.checked)} /> Afficher les flèches</label>
       <button type="button" onClick={() => { fitted.current = true; graphRef.current?.centerAt(0, 0, motionDuration(400)) }}>Recentrer</button>
       <label className="graph-depth">Profondeur du voisinage<select value={depth} disabled={!selectedId}
         onChange={(event) => { const value = Number(event.target.value)
@@ -235,6 +242,8 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
         }}
         // The library renders tooltip labels as HTML; all lore text stays in Canvas or React text.
         nodeLabel={() => ''} linkLabel={() => ''}
+        // Rendering only: hidden editorial links still contribute to layout, counts and neighborhoods.
+        linkVisibility={(edge) => edge.origin === 'OBSIDIAN' || showEditorialLinks}
         linkColor={(edge) => hasHighlight && !highlighted.edges.has(String(edge.id))
           ? 'rgba(142, 157, 177, .045)' : edge.origin === 'OBSIDIAN'
             ? highlighted.edges.has(String(edge.id)) ? 'rgba(151, 185, 202, .72)' : 'rgba(142, 165, 181, .18)'
@@ -243,7 +252,8 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
         // Separate a textual mention from an editorial relation joining the same fiches.
         linkCurvature={(edge) => edge.source === edge.target ? .3 : edge.origin === 'OBSIDIAN' ? .06 : 0}
         linkWidth={(edge) => highlighted.edges.has(String(edge.id)) ? 1.35 : edge.origin === 'OBSIDIAN' ? .55 : .8}
-        linkDirectionalArrowLength={(edge) => edge.symmetric || (edge.origin === 'OBSIDIAN' && !highlighted.edges.has(String(edge.id))) ? 0 : 4}
+        linkDirectionalArrowLength={(edge) => !showArrows || edge.symmetric ||
+          (edge.origin === 'OBSIDIAN' ? !highlighted.edges.has(String(edge.id)) : !showEditorialLinks) ? 0 : 4}
         linkDirectionalArrowColor={(edge) => edge.origin === 'OBSIDIAN' ? 'rgba(151, 185, 202, .72)' : '#c4b38c'}
         onNodeHover={(node) => { setHoveredNodeId(pointerInside.current && node ? String(node.id) : '') }}
         onLinkHover={(edge) => { setHoveredEdgeId(pointerInside.current && edge ? String(edge.id) : '') }}

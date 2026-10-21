@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useImperativeHandle, type Ref } from 'react'
-import { relationTypeDefinitions, type AdminGraphResponse, type GraphResponse } from '@hesta-codex/shared'
+import { relationTypeDefinitions, type AdminGraphResponse, type GraphEdge, type GraphResponse } from '@hesta-codex/shared'
 import { GraphPage, visibleConnections } from './GraphPage'
 import { emptyFilters, filterGraph, graphGroups, searchGraph } from './graph-model'
 
@@ -11,9 +11,10 @@ const interactionMock = vi.hoisted(() => ({ renderCount: 0, methods: {
 } }))
 
 vi.mock('react-force-graph-2d', () => ({ default: ({ ref, graphData, onNodeClick, onLinkClick,
-  onNodeHover, onLinkHover, nodeLabel, linkLabel }: {
+  onNodeHover, onLinkHover, nodeLabel, linkLabel, linkVisibility }: {
   ref?: Ref<typeof interactionMock.methods>
-  graphData: { nodes: Array<{ id: string; title: string; slug: string; x?: number; y?: number }>; links: Array<{ id: string }> }
+  graphData: { nodes: Array<{ id: string; title: string; slug: string; x?: number; y?: number }>; links: GraphEdge[] }
+  linkVisibility: (edge: GraphEdge) => boolean
   onNodeClick: (node: { id: string; slug: string }, event: MouseEvent) => void
   onLinkClick: (edge: { id: string }) => void
   onNodeHover: (node: { id: string } | null) => void
@@ -28,7 +29,7 @@ vi.mock('react-force-graph-2d', () => ({ default: ({ ref, graphData, onNodeClick
   <span data-testid="tooltip-content">{nodeLabel(graphData.nodes[0]!)}{linkLabel(graphData.links[0]!)}</span>
   {graphData.nodes.map((node) => <button key={node.id} onMouseEnter={() => onNodeHover(node)}
     onMouseLeave={() => onNodeHover(null)} onClick={() => onNodeClick(node, new MouseEvent('pointerup'))}>{node.title}</button>)}
-  {graphData.links.map((edge) => <button key={edge.id} onMouseEnter={() => onLinkHover(edge)}
+  {graphData.links.filter(linkVisibility).map((edge) => <button key={edge.id} onMouseEnter={() => onLinkHover(edge)}
     onMouseLeave={() => onLinkHover(null)} onClick={() => onLinkClick(edge)}>{edge.id}</button>)}
 </div> } }))
 
@@ -83,6 +84,9 @@ describe('exploration du graphe', () => {
     expect(screen.getByRole('button', { name: /Continent → a pour capitale → Ville/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Continent ↔ est frontalier de ↔ Ville/ })).toBeTruthy()
     expect(screen.getByText(/1 référence Obsidian · 2 relations éditoriales/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'capital' })).toBeNull()
+    if (!screen.getByText('Exploration').closest('details')?.open) await user.click(screen.getByText('Exploration'))
+    await user.click(screen.getByRole('checkbox', { name: 'Afficher les relations éditoriales' }))
     await user.click(screen.getByRole('button', { name: 'capital' }))
     expect(within(screen.getByRole('complementary', { name: 'Détails du graphe' })).getByText('Ville → est la capitale de → Continent')).toBeTruthy()
   })
@@ -375,7 +379,7 @@ describe('exploration du graphe', () => {
     render(<GraphPage endpoint="/api/v1/graph" onOpenNode={vi.fn()} />)
     expect(await screen.findByText('Impossible de charger le graphe.')).toBeTruthy()
     await user.click(screen.getByRole('button', { name: 'Réessayer' }))
-    expect(await screen.findByText('5 fiches · 3 relations affichées', { exact: false })).toBeTruthy()
+    expect(await screen.findByText('5 fiches · 3 relations disponibles', { exact: false })).toBeTruthy()
     cleanup()
     vi.stubGlobal('fetch', vi.fn(async () => response({}, 401)))
     render(<GraphPage endpoint="/api/admin/graph" admin onOpenNode={vi.fn()} />)
@@ -387,7 +391,7 @@ describe('exploration du graphe', () => {
     vi.stubGlobal('fetch', fetchMock)
     const user = userEvent.setup()
     render(<GraphPage endpoint="/api/v1/graph" onOpenNode={vi.fn()} />)
-    await screen.findByText('5 fiches · 3 relations affichées', { exact: false })
+    await screen.findByText('5 fiches · 3 relations disponibles', { exact: false })
     const search = screen.getByRole('searchbox', { name: 'Rechercher une fiche' })
     await user.type(search, 'CITÉ DU PORT')
     expect(screen.getByRole('button', { name: /Ville \/ville/ })).toBeTruthy()
@@ -407,7 +411,7 @@ describe('exploration du graphe', () => {
     vi.stubGlobal('fetch', vi.fn(async () => response(fixture)))
     const user = userEvent.setup()
     render(<GraphPage endpoint="/api/v1/graph" onOpenNode={vi.fn()} />)
-    await screen.findByText('5 fiches · 3 relations affichées', { exact: false })
+    await screen.findByText('5 fiches · 3 relations disponibles', { exact: false })
     await openAdvanced(user)
     await user.selectOptions(screen.getByRole('combobox', { name: 'Type de fiche' }), 'PLACE')
     expect(screen.getByText('2 nœuds, 1 arêtes')).toBeTruthy()
@@ -449,6 +453,8 @@ describe('exploration du graphe', () => {
     const user = userEvent.setup()
     render(<GraphPage endpoint="/api/v1/graph" onOpenNode={vi.fn()} />)
     await screen.findByText('5 nœuds, 3 arêtes')
+    await user.click(screen.getByText('Exploration'))
+    await user.click(screen.getByRole('checkbox', { name: 'Afficher les relations éditoriales' }))
     await user.click(screen.getByRole('button', { name: 'located' }))
     expect(screen.getByText('Relation sélectionnée')).toBeTruthy()
     await openAdvanced(user)
@@ -627,6 +633,8 @@ describe('exploration du graphe', () => {
     await user.click(screen.getByRole('button', { name: /^Ville$/ }))
     expect(window.location.search).toBe('?fiche=ville')
     expect(interactionMock.methods.centerAt).not.toHaveBeenCalled()
+    if (!screen.getByText('Exploration').closest('details')?.open) await user.click(screen.getByText('Exploration'))
+    await user.click(screen.getByRole('checkbox', { name: 'Afficher les relations éditoriales' }))
     await user.hover(screen.getByRole('button', { name: 'located' }))
     expect(document.querySelector('.graph-hover')?.textContent).toBe('Ville → situé dans → Continent')
     expect(document.querySelector('.graph-hover')?.closest('[role="img"]')).toBeNull()

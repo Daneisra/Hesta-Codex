@@ -59,8 +59,10 @@ pas cette action. Le parcours et ses limites sont décrits dans
 
 Le graphe admin ajoute une arête dirigée par couple de fiches source/destination, avec
 `origin: "OBSIDIAN"`, `type: "OBSIDIAN_REFERENCE"` et `occurrences`. Ces arêtes sont bleu gris,
-fines et translucides en vue globale ; pointillés et flèches apparaissent sur les références
-mises en évidence par survol ou sélection. Les relations éditoriales restent dorées et continues.
+fines et translucides en vue globale ; les pointillés apparaissent sur les références
+mises en évidence par survol ou sélection. Les flèches sont désactivées par défaut et
+réactivables dans « Exploration ». Les traits des relations éditoriales sont eux aussi
+masqués par défaut ; une option distincte permet de les réafficher, dorés et continus.
 Les références suivent
 une légère courbe pour distinguer deux types de lien entre les mêmes fiches. Recherche, voisinage,
 isolation, zoom, déplacement, disposition et ouverture des fiches utilisent les index existants.

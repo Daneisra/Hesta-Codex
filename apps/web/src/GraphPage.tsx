@@ -316,7 +316,7 @@ export function GraphPage({ endpoint, admin = false, onOpenNode }: {
       <h1>{admin ? 'Graphe éditorial' : 'Graphe du Codex'}</h1>
       <p>{admin ? 'Fiches, relations éditoriales et références textuelles Obsidian.' : 'Fiches et relations publiées, visibles de tous.'}</p></div>
       {data && visibleGraph && <p className="graph-count" role="status">
-        {visibleGraph.nodes.length} fiche{visibleGraph.nodes.length > 1 ? 's' : ''} · {visibleGraph.edges.length} {admin ? `connexion${visibleGraph.edges.length > 1 ? 's' : ''}` : `relation${visibleGraph.edges.length > 1 ? 's' : ''}`} affichée{visibleGraph.edges.length > 1 ? 's' : ''}
+        {visibleGraph.nodes.length} fiche{visibleGraph.nodes.length > 1 ? 's' : ''} · {visibleGraph.edges.length} {admin ? `connexion${visibleGraph.edges.length > 1 ? 's' : ''}` : `relation${visibleGraph.edges.length > 1 ? 's' : ''}`} disponible{visibleGraph.edges.length > 1 ? 's' : ''}
         <small> sur {data.nodes.length} fiches · {data.edges.length} {admin ? 'connexions' : 'relations'} chargées</small>
       </p>}</div>
     {referenceStats && data && <details className="graph-reference-summary"><summary>Références Obsidian et compteurs</summary><p className="graph-reference-stats">

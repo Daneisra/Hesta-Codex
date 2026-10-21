@@ -21,6 +21,7 @@ type RenderedGraph = {
   onEngineTick: () => void
   nodeColor: (node: PositionedNode) => string
   linkWidth: (edge: GraphEdge) => number
+  linkVisibility: (edge: GraphEdge) => boolean
   linkDirectionalArrowLength: (edge: GraphEdge) => number
   nodeCanvasObject: (node: PositionedNode, context: CanvasRenderingContext2D, scale: number) => void
   onRenderFramePost: (context: CanvasRenderingContext2D, scale: number) => void
@@ -270,7 +271,7 @@ describe('graph canvas interactions', () => {
     expect(input.onSelectNode).toHaveBeenCalledTimes(6)
   })
 
-  it('uses dashed distant rings and a search outline while preserving direction and symmetry', () => {
+  it('uses dashed distant rings and a search outline while keeping arrowheads optional and symmetric links undirected', async () => {
     render(<GraphCanvas {...props()} depth={2} distances={neighborhoodDistances(index, 'a', 2)} searchMatches={new Set(['c'])} />)
     const context = { save: vi.fn(), restore: vi.fn(), beginPath: vi.fn(), arc: vi.fn(),
       stroke: vi.fn(), setLineDash: vi.fn(), strokeRect: vi.fn(), fillText: vi.fn() }
@@ -278,11 +279,16 @@ describe('graph canvas interactions', () => {
     expect(context.setLineDash).toHaveBeenCalledWith([3, 3])
     expect(context.strokeRect).toHaveBeenCalledTimes(1)
     expect(context.restore).toHaveBeenCalledTimes(1)
+    expect(latest().linkDirectionalArrowLength(fixture.edges[0]!)).toBe(0)
+    expect(screen.getByRole('checkbox', { name: 'Afficher les flèches' })).toHaveProperty('checked', false)
+    await userEvent.setup().click(screen.getByRole('checkbox', { name: 'Afficher les flèches' }))
+    expect(latest().linkDirectionalArrowLength(fixture.edges[0]!)).toBe(0)
+    await userEvent.setup().click(screen.getByRole('checkbox', { name: 'Afficher les relations éditoriales' }))
     expect(latest().linkDirectionalArrowLength(fixture.edges[0]!)).toBe(4)
     expect(latest().linkDirectionalArrowLength(fixture.edges[1]!)).toBe(0)
   })
 
-  it('keeps references subtle globally and restores direction when their neighborhood is highlighted', () => {
+  it('keeps references without arrowheads even on hover until the display option is explicitly enabled', async () => {
     const reference = { ...fixture.edges[0]!, origin: 'OBSIDIAN' as const }
     const data = { ...fixture, edges: [reference] }, input = props()
     render(<GraphCanvas {...input} data={data} index={indexGraph(data)} selectedId="" focusRequest={null} distances={new Map()} />)
@@ -290,9 +296,71 @@ describe('graph canvas interactions', () => {
     expect(latest().linkDirectionalArrowLength(reference)).toBe(0)
     expect(latest().linkWidth(reference)).toBe(.55)
     act(() => latest().onNodeHover(latest().graphData.nodes[0]!))
+    expect(latest().linkDirectionalArrowLength(reference)).toBe(0)
+    const user = userEvent.setup()
+    await user.click(screen.getByText('Exploration'))
+    await user.click(screen.getByRole('checkbox', { name: 'Afficher les flèches' }))
     expect(latest().linkDirectionalArrowLength(reference)).toBe(4)
     act(() => latest().onNodeHover(null))
     expect(latest().linkDirectionalArrowLength(reference)).toBe(0)
+  })
+
+  it('changes only rendering without rebuilding data, reheating physics, reframing or saving a preference', async () => {
+    const input = props(), before = structuredClone(fixture)
+    const { rerender } = render(<GraphCanvas {...input} scope="admin" />)
+    const data = latest().graphData
+    const coords = data.nodes.map(node => ({ x: node.x, y: node.y, fx: node.fx, fy: node.fy }))
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('checkbox', { name: 'Afficher les flèches' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Afficher les relations éditoriales' }))
+    expect(latest().graphData).toBe(data)
+    expect(data.nodes.map(node => ({ x: node.x, y: node.y, fx: node.fx, fy: node.fy }))).toEqual(coords)
+    expect(graphMock.methods.d3ReheatSimulation).not.toHaveBeenCalled()
+    expect(graphMock.methods.zoomToFit).not.toHaveBeenCalled()
+    expect(input.onSelectNode).not.toHaveBeenCalled()
+    expect(input.onSelectEdge).not.toHaveBeenCalled()
+    expect(localStorage.length).toBe(0)
+    expect(fixture).toEqual(before)
+    rerender(<GraphCanvas {...input} scope="admin" immersive />)
+    await user.click(screen.getByText('Exploration'))
+    expect(screen.getByRole('checkbox', { name: 'Afficher les flèches' })).toHaveProperty('checked', true)
+    expect(screen.getByRole('checkbox', { name: 'Afficher les relations éditoriales' })).toHaveProperty('checked', true)
+    await user.click(screen.getByRole('checkbox', { name: 'Afficher les flèches' }))
+    expect(latest().linkDirectionalArrowLength(fixture.edges[0]!)).toBe(0)
+    cleanup()
+    render(<GraphCanvas {...input} scope="admin" />)
+    expect(screen.getByRole('checkbox', { name: 'Afficher les flèches' })).toHaveProperty('checked', false)
+    expect(screen.getByRole('checkbox', { name: 'Afficher les relations éditoriales' })).toHaveProperty('checked', false)
+  })
+
+  it.each(['public', 'admin'] as const)('hides editorial strokes by default in %s while preserving Obsidian links, neighbors and details', async scope => {
+    const reference = { ...fixture.edges[0]!, id: 'reference', origin: 'OBSIDIAN' as const }
+    const data = { ...fixture, edges: [...fixture.edges, reference] }, input = props()
+    render(<GraphCanvas {...input} scope={scope} data={data} index={indexGraph(data)} />)
+    expect(latest().graphData.links).toHaveLength(3)
+    expect(latest().linkVisibility(fixture.edges[0]!)).toBe(false)
+    expect(latest().linkVisibility(fixture.edges[1]!)).toBe(false)
+    expect(latest().linkVisibility(reference)).toBe(true)
+    expect(latest().linkDirectionalArrowLength(reference)).toBe(0)
+    fireEvent.pointerOver(screen.getByRole('group', { name: /Graphe interactif/ }))
+    act(() => latest().onNodeHover(latest().graphData.nodes[1]!))
+    expect(latest().linkVisibility(fixture.edges[0]!)).toBe(false)
+    expect(latest().nodeColor(latest().graphData.nodes[0]!)).not.toMatch(/30$/)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('checkbox', { name: 'Afficher les relations éditoriales' }))
+    expect(latest().linkVisibility(fixture.edges[0]!)).toBe(true)
+    expect(latest().linkVisibility(fixture.edges[1]!)).toBe(true)
+    expect(latest().linkVisibility(reference)).toBe(true)
+    expect(latest().linkDirectionalArrowLength(fixture.edges[0]!)).toBe(0)
+    act(() => latest().onNodeHover(null))
+    act(() => latest().onLinkHover(fixture.edges[0]!))
+    expect(document.querySelector('.graph-hover')).not.toBeNull()
+    await user.click(screen.getByRole('checkbox', { name: 'Afficher les relations éditoriales' }))
+    expect(latest().linkVisibility(fixture.edges[0]!)).toBe(false)
+    expect(latest().linkVisibility(reference)).toBe(true)
+    expect(document.querySelector('.graph-hover')).toBeNull()
+    act(() => latest().onLinkHover(fixture.edges[0]!))
+    expect(document.querySelector('.graph-hover')).toBeNull()
   })
 
   it('allows a fresh layout even when no node was manually fixed', async () => {
