@@ -173,6 +173,22 @@ test('every new direct/inverse or symmetric type uses the existing transactional
   }
 })
 
+test('desire, search, custody and ownership coexist only when explicitly created, with separate proofs', async () => {
+  const catalogue = relationTypeDefinitions.map((type, index) => ({ ...type,
+    id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}` }))
+  const db = memoryDatabase(catalogue)
+  for (const [index, code] of ['covets', 'seeks', 'holds', 'owns'].entries()) {
+    await db.service.create(manualRelationSchema.parse({ ...input, relationCode: code,
+      source: { ...input.source, data: { ...input.source.data, externalId: `synthetic-${code}` } } }))
+    assert.equal(db.state().relations.length, index + 1)
+    assert.equal(db.state().evidence.length, index + 1)
+    assert.equal(db.state().relations[index]!.relationTypeId, catalogue.find(type => type.code === code)!.id)
+    assert.equal(db.state().evidence[index]!.relationId, db.state().relations[index]!.id)
+  }
+  assert.ok(db.state().relations.every(relation => relation.status === 'PROPOSED' && relation.visibility === 'GM'))
+  assert.deepEqual(db.globalWrites, []); assert.deepEqual(db.state().revisions, [])
+})
+
 test('inverse code resolves to the same physical edge without an inverse row', async () => {
   for (const [direct, inverse] of [
     ['located_in', 'contains'], ['member_of', 'has_member'], ['parent_of', 'child_of'],

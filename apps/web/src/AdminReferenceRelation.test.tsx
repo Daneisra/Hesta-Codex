@@ -100,12 +100,12 @@ async function review(user: ReturnType<typeof userEvent.setup>, code = 'located_
 }
 
 describe('qualification humaine des références Obsidian', () => {
-  it('propose les 32 types regroupés, leurs 25 inverses et les sept symétries sans choisir automatiquement', async () => {
+  it('propose les 35 types regroupés, leurs 28 inverses et les sept symétries sans choisir automatiquement', async () => {
     const catalogue = relationTypeDefinitions.map((type, index) => ({ ...type, id: `catalogue-${index}` }))
     api({ catalogue: [...catalogue].reverse() }); const user = userEvent.setup(); await open(user)
     const select = screen.getByRole('combobox', { name: 'Type et sens' }) as HTMLSelectElement
     expect([...select.querySelectorAll('optgroup')].map(group => group.label)).toEqual(relationCategories.map(group => group.label))
-    expect([...select.options].filter(option => option.value)).toHaveLength(57)
+    expect([...select.options].filter(option => option.value)).toHaveLength(63)
     expect([...select.options].filter(option => option.textContent?.includes('symétrique'))).toHaveLength(7)
     expect(select.value).toBe('')
     await user.selectOptions(select, 'worshipped_by')
@@ -117,7 +117,26 @@ describe('qualification humaine des références Obsidian', () => {
       ['previously_owned', 'a possédé'], ['previously_owned_by', 'a appartenu à'],
       ['previously_used', 'a utilisé'], ['previously_used_by', 'a été utilisé par'],
       ['can_become', 'peut devenir'], ['possible_transformation_of', 'est une transformation possible de'],
+      ['covets', 'convoite'], ['coveted_by', 'est convoité par'],
+      ['seeks', 'recherche'], ['sought_by', 'est recherché par'],
+      ['holds', 'détient'], ['held_by', 'est détenu par'],
     ] as const) expect(screen.getByRole('option', { name: label })).toHaveProperty('value', code)
+  })
+
+  it('confirme humainement une convoitise inverse sans changer le sens ni la provenance', async () => {
+    const catalogue = relationTypeDefinitions.map((type, index) => ({ ...type, id: `catalogue-${index}` }))
+    api({ catalogue }); const create = vi.fn(), user = userEvent.setup()
+    render(<AdminCreateRelation entity={owner} seed={seed} busy={false} disabled={false} error={null}
+      onCreate={create} onClearError={vi.fn()} onDirtyChange={vi.fn()} onNavigate={vi.fn()} />)
+    await screen.findByRole('option', { name: 'est convoité par' })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Inverser les fiches' })).not.toHaveProperty('disabled', true))
+    await review(user, 'coveted_by')
+    expect(create).not.toHaveBeenCalled()
+    expect(screen.getByText('Homonyme → covets → Homonyme')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Créer la relation' }))
+    expect(create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ fromEntityId: ownerId, toEntityId: targetId,
+      relationCode: 'coveted_by', visibility: 'GM', source: { mode: 'existing', sourceId: source.id },
+      evidence: expect.objectContaining({ locator: proof.locator, sourceExcerpt: excerpt, visibility: 'GM' }) }))
   })
 
   it('un choix inhabituel affiche un avertissement dans le formulaire et le récapitulatif sans bloquer la confirmation humaine', async () => {
