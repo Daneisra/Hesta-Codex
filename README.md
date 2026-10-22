@@ -9,6 +9,8 @@
 
 # Hesta Codex
 
+[![Production](https://img.shields.io/badge/HESTA-en_ligne-c8aa67)](https://codexhesta.dannytech.fr/) ![Version](https://img.shields.io/github/package-json/v/Daneisra/Hesta-Codex?color=4f78a8) [![CI](https://github.com/Daneisra/Hesta-Codex/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Daneisra/Hesta-Codex/actions/workflows/ci.yml) [![Déploiement](https://github.com/Daneisra/Hesta-Codex/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/Daneisra/Hesta-Codex/actions/workflows/deploy.yml) ![React 19](https://img.shields.io/badge/React-19-61dafb) ![TypeScript 6](https://img.shields.io/badge/TypeScript-6-3178c6) ![Node.js 22](https://img.shields.io/badge/Node.js-22-43853d) ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Prisma_7-4169e1)
+
 M3 commence avec un **convertisseur Obsidian local en lecture seule** :
 `npm run --silent lore:obsidian:prepare -- --help`. Il prépare des lots staging v1
 validés, sans connexion PostgreSQL, réseau ni création éditoriale. Inspection `--dry-run`,
