@@ -159,3 +159,7 @@ verrouille la ligne cible avant de comparer les preuves et d'insérer l'`Evidenc
 sérialise deux ajouts concurrents par cette API. Une Source nouvelle est créée dans la même
 transaction. Le contenu, les dates de mise à jour et les Revision des fiches et relations
 restent inchangés ; seule la nouvelle Evidence (et sa Source éventuelle) est ajoutée.
+
+## Frontière avec Carte Hesta — intégration à définir
+
+Les UUID actuels du Codex ne constituent pas encore un registre partagé avec Carte Hesta. Le prochain chantier doit inventorier les sources des lieux, personnages et événements, puis définir une correspondance stable et les relations avec la chronologie. Un nom, un titre ou un slug ne doit pas devenir une clé implicite entre applications. Les coordonnées, marqueurs, sessions et disponibilités restent propres à Carte Hesta ; les règles d'armure restent dans Système PA. Toute migration future doit conserver provenance, permissions, données existantes et possibilité de retour arrière. Aucun changement de schéma ni migration n'est introduit ici.
