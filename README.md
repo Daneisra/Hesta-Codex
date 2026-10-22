@@ -246,8 +246,8 @@ Les routes de lecture et leurs limites sont décrites dans [docs/API.md](docs/AP
 
 | Application | Rôle | URL publique |
 | --- | --- | --- |
-| Hesta Hub | Portail central | [hesta.dannytech.fr](https://hesta.dannytech.fr/) |
-| Carte Hesta | Carte interactive, chronologie, planning et communauté | [cartehesta.dannytech.fr](https://cartehesta.dannytech.fr/) |
+| Hesta Hub | Portail central, communauté et support général | [hesta.dannytech.fr](https://hesta.dannytech.fr/) |
+| Carte Hesta | Carte interactive, lieux, chronologie, planning et administration | [cartehesta.dannytech.fr](https://cartehesta.dannytech.fr/) |
 | Système PA | Armures, règles et calculs | [pahesta.dannytech.fr](https://pahesta.dannytech.fr/) |
 | Hesta Codex — ce projet | Encyclopédie, lore, relations éditoriales et provenance | [codexhesta.dannytech.fr](https://codexhesta.dannytech.fr/) |
 
