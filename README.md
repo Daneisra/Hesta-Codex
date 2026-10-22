@@ -250,3 +250,13 @@ Les routes de lecture et leurs limites sont décrites dans [docs/API.md](docs/AP
 | Carte Hesta | Carte interactive, chronologie, planning et communauté | [cartehesta.dannytech.fr](https://cartehesta.dannytech.fr/) |
 | Système PA | Armures, règles et calculs | [pahesta.dannytech.fr](https://pahesta.dannytech.fr/) |
 | Hesta Codex — ce projet | Encyclopédie, lore, relations éditoriales et provenance | [codexhesta.dannytech.fr](https://codexhesta.dannytech.fr/) |
+
+## Place dans l'écosystème et prochaine intégration
+
+Le [Portail Hesta](https://hesta.dannytech.fr/) centralise la communauté, Discord, le support général et l'accès aux applications. [Carte Hesta](https://cartehesta.dannytech.fr/) utilise désormais son [dépôt officiel public](https://github.com/Daneisra/Carte-Hesta) et ses [Issues de bugs](https://github.com/Daneisra/Carte-Hesta/issues/new/choose). [Système PA](https://pahesta.dannytech.fr/) conserve son indépendance fonctionnelle.
+
+Hesta Codex est consacré aux connaissances et doit devenir le référentiel canonique du lore durable après qualification éditoriale. La connexion aux lieux, personnages, événements et à la chronologie de Carte Hesta reste à développer : inventorier les sources, définir les identifiants stables et les relations, valider les contrats de lecture et leurs permissions, puis migrer progressivement sans perte. Aucun connecteur, import ni changement de publication n'est réalisé par cette harmonisation.
+
+La [roadmap globale du Hub](https://github.com/Daneisra/Hesta-Hub/blob/main/ROADMAP.md) porte ce prochain chantier. Les limites du modèle actuel restent documentées dans [DATA-MODEL.md](docs/DATA-MODEL.md).
+
+Pour les corrections transverses, utiliser une branche et une PR sans fusion : la CI fonctionne sur les branches et PR, mais Deploy ne s'exécute automatiquement qu'après une CI réussie provenant d'un push sur main. Ne pas confondre une PR validée et une livraison.
