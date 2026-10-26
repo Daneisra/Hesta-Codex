@@ -1,4 +1,4 @@
-import type { AdminEntityDetail, RelationTypeItem } from '@hesta-codex/shared'
+import { canonicalRelationEndpoints, type AdminEntityDetail, type RelationTypeItem } from '@hesta-codex/shared'
 import { Prisma, type PrismaClient } from '../prisma-client/client.ts'
 import { createInitialEvidence, resolveCreationSource } from './creation-provenance.js'
 import { EditorialError } from './editorial.js'
@@ -42,10 +42,7 @@ export function createPrismaManualRelationService(prisma: PrismaClient): ManualR
           throw new EditorialError(409, 'ENTITY_ARCHIVED', 'Une fiche archivée ne peut pas recevoir de nouvelle relation.')
         }
 
-        const inverse = !type.symmetric && input.relationCode === type.inverseCode
-        let fromId = inverse ? selectedTo.id : selectedFrom.id
-        let toId = inverse ? selectedFrom.id : selectedTo.id
-        if (type.symmetric && fromId > toId) [fromId, toId] = [toId, fromId]
+        const { fromEntityId: fromId, toEntityId: toId } = canonicalRelationEndpoints(type, input.relationCode, selectedFrom.id, selectedTo.id)
         const already = await tx.relation.findFirst({ where: { relationTypeId: type.id,
           OR: type.symmetric
             ? [{ fromEntityId: fromId, toEntityId: toId }, { fromEntityId: toId, toEntityId: fromId }]

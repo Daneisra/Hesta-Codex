@@ -260,6 +260,8 @@ export interface AdminRelationPatch {
   description: string | null
   visibility: Visibility
   expectedUpdatedAt: string
+  relationCode?: string
+  reverse?: boolean
 }
 
 export interface AdminSourcePatch {
@@ -375,3 +377,4 @@ export interface IngestionUpdateApplied { entity: IngestionAssociationEntity; up
 export * from './obsidian.js'
 export * from './reference-qualification.js'
 export * from './relation-catalog.js'
+export { canonicalRelationEndpoints } from './relation-direction.js'

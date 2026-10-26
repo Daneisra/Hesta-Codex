@@ -2,8 +2,50 @@
 
 Les administrateurs autorisés inspectent et corrigent les données importées depuis une fiche
 `/admin/fiches/:slug`. Depuis v0.5b, ils peuvent aussi créer une Relation avec Source et Evidence
-initiales ; voir [MANUAL-RELATIONS.md](MANUAL-RELATIONS.md). Aucune suppression n'est disponible.
-Les champs d'identité des liens et des preuves restent immuables.
+initiales ; voir [MANUAL-RELATIONS.md](MANUAL-RELATIONS.md). Les relations existantes peuvent
+changer de type ou être inversées, en conservant leur identifiant et leurs preuves.
+La suppression individuelle d'une fiche est décrite dans [ENTITY-DELETION.md](ENTITY-DELETION.md).
+Les identifiants des liens et l'identité/cible des preuves restent immuables.
+
+## Corriger une relation existante
+
+Depuis `/admin/fiches/:slug`, le bouton **Modifier la relation** est directement visible
+sur chaque ligne des relations sortantes ou entrantes. Il ouvre le même éditeur, même si
+les preuves différées ne peuvent pas être chargées. Les fiches archivées et les relations
+archivées restent en lecture seule.
+
+Le champ **Type et sens** reprend les formulations directes/inverses du catalogue réel.
+**Inverser les fiches** permet de corriger qui agit sur qui. La phrase **Après** et les deux
+slugs rendent le sens explicite, y compris pour des homonymes. Pour un type symétrique,
+inverser les fiches est sans objet et le bouton est désactivé.
+
+Un changement de type ou de sens demande **Vérifier la modification**, puis **Confirmer la
+modification** après le récapitulatif avant/après. Annuler et revenir au formulaire restent
+possibles. Une correction de description/visibilité seule garde l'action Enregistrer existante.
+Le refus serveur conserve la saisie ; la confirmation est protégée contre les doubles clics.
+
+L'API `PATCH /api/admin/relations/:id` conserve le corps obligatoire `description`, `visibility`,
+`expectedUpdatedAt`, et accepte désormais `relationCode` et `reverse` facultatifs. `reverse`
+échange les extrémités **du sens stocké**, indépendamment de la fiche depuis laquelle on édite.
+Le code inverse est ensuite normalisé comme à la création ; deux inversions équivalentes
+ne modifient pas la relation. Les types symétriques sont normalisés sans créer de seconde ligne.
+Le client ne peut fournir ni nouveaux UUID d'extrémités, ni `relationTypeId`, ni `status`.
+
+Une transaction met à jour la ligne existante sans recréer la relation. Son ID, ses preuves,
+ses Sources, les révisions Entity, les associations et tout le staging sont conservés.
+Les énoncés des preuves ne sont **pas réécrits automatiquement** : l'éditeur doit vérifier
+leur cohérence et peut les corriger via Modifier la preuve. Aucun contenu de lore n'est fabriqué.
+Une correction de type/sens sur une relation publiée la remet en `PROPOSED`, sans changer sa
+visibilité, puis demande une nouvelle publication explicite. Les modifications de métadonnées
+seules conservent le comportement précédent. Une lecture équivalente est sans écriture.
+
+Le timestamp initial reste figé pendant l'édition : une version concurrente donne
+`409 RELATION_MODIFIED`. Les doublons donnent `409 RELATION_CONFLICT`, y compris les anciennes
+relations symétriques dans l'autre sens. Le contrôle applicatif est doublé de l'unicité SQL ;
+aucune fusion n'est automatique et un échec annule aussi la description et la visibilité.
+Type inconnu : `404 RELATION_TYPE_NOT_FOUND` ; code ambigu : `409 RELATION_TYPE_AMBIGUOUS`.
+Les protections admin Discord, Origin exacte et `Cache-Control: no-store` restent inchangées.
+Cette correction ne nécessite aucune migration et ne modifie pas les références Obsidian.
 
 ## Enrichissement v0.5c
 
@@ -51,7 +93,7 @@ une relation archivée est consultable mais non modifiable.
 
 | Objet | Champs éditables | Champs immuables dans ce jalon |
 | --- | --- | --- |
-| Relation | `description` (null ou texte élagué ≤ 10 000 caractères), `visibility` | Extrémités, sens, type, statut hors actions de publication |
+| Relation | `description` (null ou texte élagué ≤ 10 000 caractères), `visibility`, `relationCode` (facultatif, ≤ 64), `reverse` (booléen facultatif) | ID, paire de fiches hors permutation, statut fourni par le client |
 | Source | `kind`, `label` (1–250), `externalId` (null ou 1–250 sans espaces périphériques), `url` (null ou HTTP(S)), `authorLabel` (null ou ≤ 200), `publishedAt` (null ou ISO 8601 avec fuseau), `visibility` | ID, metadata, dérivation |
 | Evidence | `claimText` (1–10 000), `sourceExcerpt` (null ou ≤ 100 000), `locator` (null ou ≤ 250), timestamps (null ou entiers ≥ 0), `confidence` (null ou 0–1, trois décimales au plus), `visibility` | ID, Source, cible Entity ou Relation |
 
@@ -81,3 +123,18 @@ Les preuves existantes reçoivent initialement leur `createdAt`, puis la colonne
 La migration ne touche aucune autre table ni les autres champs des preuves. Elle sera appliquée
 par `prisma migrate deploy` lors d'un déploiement ultérieur ; aucun développement local ne
 l'applique au VPS.
+
+## Validation de la correction du type et du sens — 26 octobre 2026
+
+Les suites complètes réussissent : **796 tests**, dont **453 API** et **343 web**
+(19 tests ajoutés). Sous Windows, les workers Vitest ont été exécutés avec
+`--pool threads --maxWorkers 2`, le démarrage du pool `forks` expirant sur cet hôte.
+Lint, typecheck, build, Prisma validate/generate et `git diff --check` sont concluants.
+Le build conserve un avertissement sur le chunk principal de 509,40 kB.
+
+Un essai navigateur sur des données entièrement fictives, à 1920 × 1080 et
+390 × 844, vérifie l'action visible sur la ligne compacte, l'inversion, l'aperçu,
+l'absence d'écriture avant confirmation, puis le rafraîchissement du sens entrant.
+Aucun débordement horizontal ni erreur JavaScript n'a été détecté.
+Les tests transactionnels utilisent une base PGlite en mémoire ; aucune base réelle
+n'est sollicitée. Cette correction n'ajoute aucune migration.

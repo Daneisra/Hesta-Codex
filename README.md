@@ -210,8 +210,10 @@ publication sont distinctes de l'enregistrement et demandent confirmation. Seule
 `PUBLISHED + PUBLIC` apparaissent dans l'API et la bibliothèque publiques ; les relations
 importées restent privées tant qu'elles ne sont pas publiées séparément.
 
-v0.4c permet aussi de corriger la description et la visibilité d'une relation, puis de la
-publier ou la retirer ; ses deux fiches doivent être publiées et publiques pour qu'elle
+L'administration permet aussi de corriger le type et le sens d'une relation via « Modifier
+la relation », visible sur chaque ligne, avec inversion des fiches et confirmation avant/après.
+Les preuves sont conservées ; une correction de type/sens remet une relation publiée en Proposée.
+La description et la visibilité restent éditables. Ses deux fiches doivent être publiées et publiques pour qu'elle
 apparaisse dans le Codex public. Les champs éditoriaux des sources et preuves peuvent être
 corrigés. Leur identité et leurs cibles restent fixes. Ces corrections utilisent
 `expectedUpdatedAt` et ne produisent pas encore de `Revision` dédiée.

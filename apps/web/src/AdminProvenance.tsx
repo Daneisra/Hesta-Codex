@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent, type MouseEvent } from 'react'
 import type {
-  AdminEntityDetail, AdminEvidence, AdminEvidenceAddRequest, AdminEvidencePatch, AdminRelation, AdminRelationPatch,
+  AdminEntityDetail, AdminEvidence, AdminEvidenceAddRequest, AdminEvidencePatch, AdminRelation,
   AdminSource, AdminSourcePatch, EditorialStatus, SourceKind, Visibility,
 } from '@hesta-codex/shared'
 import { AdminAddEvidence } from './AdminAddEvidence'
+import { AdminEditRelation } from './AdminEditRelation'
 import { errorStatus, getAdminJson } from './admin-http'
 
 type Target = { kind: 'relation' | 'source' | 'evidence' | 'add-entity' | 'add-relation'; id: string }
@@ -33,27 +34,6 @@ function VisibilityField({ value, change }: { value: Visibility; change: (value:
   return <label>Visibilité<select value={value} onChange={(event) => change(event.target.value as Visibility)}>
     {visibilities.map((visibility) => <option key={visibility} value={visibility}>{visibilityLabel[visibility]}</option>)}
   </select></label>
-}
-
-function RelationEditor({ relation, onSave, onCancel, onDirty, busy, disabled }: {
-  relation: AdminRelation; onSave: (body: AdminRelationPatch) => Promise<boolean>
-  onCancel: () => void; onDirty: (dirty: boolean) => void; busy: boolean; disabled: boolean
-}) {
-  const [description, setDescription] = useState(relation.description ?? '')
-  const [visibility, setVisibility] = useState(relation.visibility)
-  useEffect(() => { onDirty(description.trim() !== (relation.description ?? '') || visibility !== relation.visibility) },
-    [description, visibility, relation, onDirty])
-  async function submit(event: FormEvent) {
-    event.preventDefault()
-    await onSave({ description: description.trim() || null, visibility, expectedUpdatedAt: relation.updatedAt })
-  }
-  return <form className="admin-editor-grid admin-provenance-editor" onSubmit={(event) => void submit(event)}>
-    <label className="admin-editor-wide">Description<textarea value={description} maxLength={10_000}
-      onChange={(event) => setDescription(event.target.value)} rows={4} /></label>
-    <VisibilityField value={visibility} change={setVisibility} />
-    <div className="admin-editor-actions admin-editor-wide"><button type="button" onClick={onCancel}>Annuler</button>
-      <button className="admin-primary-button" type="submit" disabled={busy || disabled}>Enregistrer</button></div>
-  </form>
 }
 
 function SourceEditor({ source, onSave, onCancel, onDirty, busy, disabled }: {
@@ -228,9 +208,16 @@ export function AdminProvenance({ entity, onNavigate, onMutate, onDirtyChange, o
             <a href={`/admin/fiches/${relation.entity.slug}`} onClick={(event) => onNavigate(event, `/admin/fiches/${relation.entity.slug}`)}>{relation.entity.title}</a>
             <span className="admin-badge">{statusLabel[relation.status]} · {visibilityLabel[relation.visibility]}</span>
           <span className="admin-muted">{loaded ? relation.evidence.length : relation.evidenceCount ?? relation.evidence.length} preuve(s)</span>{' '}
+          {relation.status !== 'ARCHIVED' && entity.status !== 'ARCHIVED' && relation.entity.status !== 'ARCHIVED' &&
+            <button type="button" disabled={disabled || busy || active !== null}
+              onClick={() => { setExpandedRelation(relation.id); start({ kind: 'relation', id: relation.id }) }}>Modifier la relation</button>}
           <button type="button" aria-expanded={expandedRelation === relation.id} aria-controls={`relation-detail-${direction}-${relation.id}`}
             disabled={busy || active !== null} onClick={() => setExpandedRelation(value => value === relation.id ? null : relation.id)}>
             {expandedRelation === relation.id ? 'Masquer les détails' : 'Détails de la relation'}</button></div>
+          {active?.kind === 'relation' && active.id === relation.id && <AdminEditRelation relation={relation}
+            from={direction === 'outgoing' ? entity : relation.entity} to={direction === 'outgoing' ? relation.entity : entity}
+            onSave={body => save(`/api/admin/relations/${relation.id}`, body)} onCancel={cancel} onDirty={changeDirty}
+            busy={busy} disabled={disabled} onAccessError={onAccessError} />}
           {expandedRelation === relation.id && !ready && <div id={`relation-detail-${direction}-${relation.id}`}>
             {evidenceError ? <p role="alert">Preuves indisponibles. <button type="button" onClick={() => setEvidenceRetry(value => value + 1)}>Réessayer les preuves</button></p>
               : <p role="status">Chargement des preuves…</p>}</div>}
@@ -241,11 +228,6 @@ export function AdminProvenance({ entity, onNavigate, onMutate, onDirtyChange, o
             relation.status === 'PUBLISHED' && relation.visibility === 'PUBLIC'
               ? 'Cette relation est publiée mais reste invisible publiquement car l’une de ses fiches n’est pas publique.'
               : 'Cette relation reste invisible dans la bibliothèque publique.'}</p>
-          {active?.kind === 'relation' && active.id === relation.id
-            ? <RelationEditor relation={relation} onSave={(body) => save(`/api/admin/relations/${relation.id}`, body)}
-              onCancel={cancel} onDirty={changeDirty} busy={busy} disabled={disabled} />
-            : relation.status !== 'ARCHIVED' && <button type="button" disabled={disabled || busy}
-              onClick={() => start({ kind: 'relation', id: relation.id })}>Modifier la relation</button>}
           {relation.status === 'PROPOSED' && relation.evidence.length === 0 &&
             <p className="admin-muted">Une preuve liée directement à cette relation est requise pour la publier.</p>}
           {(relation.status === 'PROPOSED' || relation.status === 'PUBLISHED') && <div className="admin-publication">
