@@ -1,4 +1,4 @@
-import type { AdminEvidencePatch, AdminRelationPatch, AdminSourcePatch, AdminWorkflowRequest } from '@hesta-codex/shared'
+import { canonicalRelationEndpoints, type AdminEvidencePatch, type AdminRelationPatch, type AdminSourcePatch, type AdminWorkflowRequest } from '@hesta-codex/shared'
 import { Prisma, type PrismaClient } from '../prisma-client/client.ts'
 import { EditorialError } from './editorial.js'
 
@@ -28,23 +28,60 @@ function result(id: string, updatedAt: Date, status?: string): Result {
 
 export function createPrismaProvenanceService(prisma: PrismaClient): ProvenanceService {
   return {
-    patchRelation(id, input) {
-      return prisma.$transaction(async (tx) => {
+    async patchRelation(id, input) {
+      try { return await prisma.$transaction(async (tx) => {
         const row = await tx.relation.findUnique({ where: { id }, select: {
           id: true, description: true, visibility: true, status: true, updatedAt: true,
+          fromEntityId: true, toEntityId: true, relationTypeId: true,
+          relationType: { select: { code: true } },
+          fromEntity: { select: { status: true } }, toEntity: { select: { status: true } },
         } })
         if (!row) throw new EditorialError(404, 'NOT_FOUND', 'Relation introuvable')
         expectFresh(row.updatedAt, input.expectedUpdatedAt, 'relation')
         if (row.status === 'ARCHIVED') throw new EditorialError(409, 'INVALID_STATUS', 'Relation archivée en lecture seule.')
-        if (row.description === input.description && row.visibility === input.visibility) return result(id, row.updatedAt, row.status)
+        let endpoints: ReturnType<typeof canonicalRelationEndpoints> | undefined
+        if (input.relationCode !== undefined || input.reverse) {
+          const code = input.relationCode ?? row.relationType.code
+          const types = await tx.relationType.findMany({ where: { OR: [{ code }, { inverseCode: code }] },
+            select: { id: true, code: true, inverseCode: true, symmetric: true } })
+          if (!types.length) throw new EditorialError(404, 'RELATION_TYPE_NOT_FOUND', 'Type de relation introuvable.')
+          if (types.length > 1) throw new EditorialError(409, 'RELATION_TYPE_AMBIGUOUS', 'Code de relation ambigu dans le catalogue.')
+          const type = types[0]!
+          const from = input.reverse ? row.toEntityId : row.fromEntityId, to = input.reverse ? row.fromEntityId : row.toEntityId
+          const next = canonicalRelationEndpoints(type, code, from, to)
+          const unchangedSymmetric = type.symmetric && type.id === row.relationTypeId
+          if (!unchangedSymmetric && (next.fromEntityId !== row.fromEntityId || next.toEntityId !== row.toEntityId || next.relationTypeId !== row.relationTypeId)) {
+            if (from === to) throw new EditorialError(400, 'RELATION_SELF_REFERENCE', 'Une fiche ne peut pas être liée à elle-même.')
+            if (row.fromEntity.status === 'ARCHIVED' || row.toEntity.status === 'ARCHIVED') {
+              throw new EditorialError(409, 'ENTITY_ARCHIVED', 'Une fiche archivée ne peut pas recevoir de correction de relation.')
+            }
+            const duplicate = await tx.relation.findFirst({ where: { id: { not: id }, relationTypeId: type.id,
+              OR: type.symmetric ? [{ fromEntityId: next.fromEntityId, toEntityId: next.toEntityId },
+                { fromEntityId: next.toEntityId, toEntityId: next.fromEntityId }]
+                : [{ fromEntityId: next.fromEntityId, toEntityId: next.toEntityId }] }, select: { id: true } })
+            if (duplicate) throw new EditorialError(409, 'RELATION_CONFLICT', 'Cette relation existe déjà. Aucune fusion automatique n’a été effectuée.')
+            endpoints = next
+          }
+        }
+        if (!endpoints && row.description === input.description && row.visibility === input.visibility) return result(id, row.updatedAt, row.status)
+        const status = endpoints && row.status === 'PUBLISHED' ? 'PROPOSED' : row.status
         const updatedAt = nextUpdatedAt(row.updatedAt)
         const changed = await tx.relation.updateMany({
           where: { id, updatedAt: row.updatedAt, status: row.status },
-          data: { description: input.description, visibility: input.visibility, updatedAt },
+          data: { description: input.description, visibility: input.visibility, updatedAt,
+            ...(endpoints ? { ...endpoints, status } : {}) },
         })
         if (changed.count !== 1) throw modified.relation()
-        return result(id, updatedAt, row.status)
-      })
+        return result(id, updatedAt, status)
+      }) } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          throw new EditorialError(409, 'RELATION_CONFLICT', 'Cette relation existe déjà. Aucune modification n’a été enregistrée.')
+        }
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
+          throw new EditorialError(409, 'RELATION_REFERENCE_CHANGED', 'Une fiche ou un type de relation a changé. Rechargez la fiche.')
+        }
+        throw error
+      }
     },
     publishRelation(id, input) {
       return prisma.$transaction(async (tx) => {

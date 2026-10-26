@@ -38,6 +38,37 @@ function setup(options: { data?: AdminEntityDetail; result?: boolean; disabled?:
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 describe('relations et provenance admin', () => {
+  it('propose la modification dès la ligne compacte, même si les preuves différées sont indisponibles', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 503 })))
+    const user = userEvent.setup(), { onMutate } = setup({ expand: false, data: { ...entity,
+      outgoingRelations: [{ ...entity.outgoingRelations[0]!, evidenceDeferred: true, evidenceCount: 1 }] } })
+    expect(screen.getByRole('button', { name: 'Modifier la relation' })).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Modifier la relation' }))
+    expect(screen.getByRole('form', { name: 'Modifier le type et le sens de la relation' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Inverser les fiches' })).toHaveProperty('disabled', false)
+    await screen.findByText(/Preuves indisponibles/)
+    expect(onMutate).not.toHaveBeenCalled()
+  })
+
+  it('corrige le sens canonique depuis une fiche qui reçoit la relation', async () => {
+    const work = { id: 'work', code: 'works_for', label: 'travaille pour', inverseCode: 'employs', inverseLabel: 'emploie', symmetric: false }
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => [work] })))
+    const user = userEvent.setup(), data = { ...entity, title: 'Fiche fictive A', slug: 'fiche-a', outgoingRelations: [],
+      incomingRelations: [{ ...entity.outgoingRelations[0]!, relationType: work,
+        entity: { ...entity.outgoingRelations[0]!.entity, kind: 'PERSON' as const, title: 'Fiche fictive B', slug: 'fiche-b' } }] }
+    const { onMutate } = setup({ data, expand: false })
+    await user.click(screen.getByRole('button', { name: 'Modifier la relation' }))
+    expect(screen.getByRole('form', { name: 'Modifier le type et le sens de la relation' }).textContent)
+      .toContain('Fiche fictive B travaille pour Fiche fictive A')
+    await user.click(screen.getByRole('button', { name: 'Inverser les fiches' }))
+    expect(screen.getByRole('status').textContent).toContain('Fiche fictive A travaille pour Fiche fictive B')
+    await user.click(screen.getByRole('button', { name: 'Vérifier la modification' }))
+    expect(onMutate).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Confirmer la modification' }))
+    expect(onMutate).toHaveBeenCalledWith('/api/admin/relations/relation-1', 'PATCH', expect.objectContaining({
+      relationCode: 'works_for', reverse: true, expectedUpdatedAt }))
+  })
+
   it('limite une fiche de 100 relations à dix lignes, sans rendre les preuves avant ouverture', async () => {
     const user = userEvent.setup()
     const relations = Array.from({ length: 100 }, (_, index) => ({ ...entity.outgoingRelations[0]!, id: `relation-${index}`,
@@ -99,7 +130,7 @@ describe('relations et provenance admin', () => {
     expect(screen.getByText('Autre preuve')).toBeTruthy()
   })
 
-  it('édite seulement la description et la visibilité de la relation avec expectedUpdatedAt', async () => {
+  it('conserve l’édition simple de description/visibilité avec expectedUpdatedAt', async () => {
     const user = userEvent.setup()
     const { onMutate, onDirtyChange } = setup()
     await user.click(screen.getByRole('button', { name: 'Modifier la relation' }))

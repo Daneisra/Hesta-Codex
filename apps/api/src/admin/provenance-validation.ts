@@ -9,6 +9,7 @@ const confidence = z.number().min(0).max(1)
 
 export const relationPatchSchema = z.strictObject({
   description: nullableText(10_000), visibility: z.enum(Visibility), expectedUpdatedAt,
+  relationCode: z.string().regex(/^[a-z][a-z0-9_]*$/).max(64).optional(), reverse: z.boolean().optional(),
 })
 
 export const sourceFieldsSchema = z.strictObject({

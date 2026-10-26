@@ -259,3 +259,16 @@ test('all provenance mutations enforce admin session, exact Origin, no-store, st
   }
   assert.deepEqual(calls.slice(-5), ['patchRelation', 'publishRelation', 'unpublishRelation', 'patchSource', 'patchEvidence'])
 })
+
+test('relation type/direction corrections use the same admin, Origin and strict identity protections', async () => {
+  const body = { ...relationPatch, relationCode: 'works_for', reverse: true }
+  const path = `/api/admin/relations/${relationId}`, admin = `hesta_codex_session=${'a'.repeat(43)}`
+  assert.equal((await request(path, body, undefined, config.origin)).status, 401)
+  assert.equal((await request(path, body, `hesta_codex_session=${'b'.repeat(43)}`, config.origin)).status, 403)
+  assert.equal((await request(path, body, admin, 'https://evil.example')).status, 403)
+  for (const invalid of [{ ...body, fromEntityId: sourceId }, { ...body, status: 'PUBLISHED' }, { ...body, reverse: 'true' }]) {
+    assert.equal((await request(path, invalid, admin, config.origin)).status, 400)
+  }
+  const response = await request(path, body, admin, config.origin)
+  assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'no-store')
+})

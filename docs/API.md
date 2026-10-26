@@ -80,7 +80,7 @@ portent `Cache-Control: no-store`.
 | `PATCH /api/admin/entities/:slug` | Remplace les champs éditables de la fiche ; retourne la fiche et ses révisions à jour. |
 | `POST /api/admin/entities/:slug/publish` | Publie une fiche `PROPOSED` sourcée ; retourne la fiche à jour. |
 | `POST /api/admin/entities/:slug/unpublish` | Retire une fiche `PUBLISHED` de la publication ; retourne la fiche à jour. |
-| `PATCH /api/admin/relations/:id` | Modifie `description` et `visibility` ; retourne `{ id, updatedAt, status }`. |
+| `PATCH /api/admin/relations/:id` | Modifie `description`, `visibility` et, facultativement, `relationCode`/`reverse` ; conserve l'ID et les preuves. Un changement de type/sens retire une relation publiée. Retourne `{ id, updatedAt, status }`. |
 | `POST /api/admin/relations/:id/publish` | Publie une relation `PROPOSED` avec une Evidence directement liée ; retourne `{ id, updatedAt, status }`. |
 | `POST /api/admin/relations/:id/unpublish` | Retire une relation `PUBLISHED` de la publication ; retourne `{ id, updatedAt, status }`. |
 | `PATCH /api/admin/sources/:id` | Modifie les champs éditoriaux de la Source ; retourne `{ id, updatedAt }`. |
@@ -150,8 +150,14 @@ modifiés via le formulaire. Une fiche absente donne `404`, une version obsolèt
 `422 EVIDENCE_REQUIRED`. Les routes de correction de provenance exigent des UUID et des JSON
 complets et stricts avec `expectedUpdatedAt`. Une version périmée donne respectivement
 `409 RELATION_MODIFIED`, `SOURCE_MODIFIED` ou `EVIDENCE_MODIFIED`. Une collision de
-`(Source.kind, Source.externalId)` donne `409 SOURCE_CONFLICT`. Les champs d'identité et de cible
-ne sont pas éditables. Les routes de création admin sont limitées aux fiches et relations ;
+`(Source.kind, Source.externalId)` donne `409 SOURCE_CONFLICT`. Les identifiants et les cibles
+des preuves ne sont pas éditables. Pour une Relation, `relationCode` (code direct ou inverse)
+et `reverse` (permutation de la paire existante dans son sens stocké) sont facultatifs.
+La normalisation est identique à la création ; la modification reste atomique, refuse les
+doublons (`409 RELATION_CONFLICT`) et les fiches archivées. Un changement de type/sens remet
+une relation `PUBLISHED` en `PROPOSED`. Aucun `fromEntityId`, `toEntityId`, `relationTypeId`
+ou `status` n'est accepté dans ce PATCH. Voir [PROVENANCE-WORKFLOW.md](PROVENANCE-WORKFLOW.md).
+Les routes de création admin sont limitées aux fiches et relations ;
 elles refusent les champs inconnus, le statut et les IDs de provenance injectés par le client.
 Un slug déjà utilisé donne `409 ENTITY_CONFLICT`, une Source inexistante `404 SOURCE_NOT_FOUND`,
 et un identifiant externe de Source déjà utilisé `409 SOURCE_CONFLICT`. La création de Relation
