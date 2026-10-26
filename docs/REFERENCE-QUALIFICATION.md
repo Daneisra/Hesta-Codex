@@ -16,6 +16,58 @@ Les états sont calculés dans cet ordre :
 
 Recherche par titre, alias ou slug (insensible à la casse et aux accents), filtres d’état, type de fiche, Source et fiche de référence ; direction entrante/sortante relative à cette dernière ; tri par mentions décroissantes, nom ou état. Les égalités sont départagées par UUID, sans dépendre de l’ordre des résultats SQL. Pages de 50 lignes. Les compteurs **globaux** sont calculés avant filtrage ; le total de résultats et la pagination reflètent les filtres. Après création ou décision, un nouveau GET actualise les compteurs, sans rechargement du navigateur. Les filtres restent en mémoire pendant l’aller-retour au formulaire ; un rechargement complet retrouve les décisions en base et réinitialise les filtres.
 
+### Modifier une relation déjà qualifiée
+
+Chaque relation éditoriale existante est visible directement sur la ligne, avec son
+type, ses deux fiches, son sens réel, son statut et sa visibilité. Le bouton
+**Modifier la relation** ouvre le même éditeur que sur les fiches : choix du type,
+inversion des fiches, aperçu avant/après et confirmation d'une correction du type
+ou du sens. S'il existe plusieurs relations entre les mêmes fiches, chacune possède
+son propre bouton. Les slugs permettent de distinguer les homonymes.
+
+Le sens éditorial peut être opposé à celui de la mention Obsidian : ces deux sens
+sont affichés séparément. Avant toute édition, un GET admin recharge la fiche et
+la relation choisie par son UUID, avec les preuves différées. Aucune lecture privée
+supplémentaire n'est lancée pour les lignes qui ne sont pas ouvertes. Une relation
+disparue, rattachée à une autre paire ou devenue archivée ne permet pas de correction.
+
+La sauvegarde réutilise `PATCH /api/admin/relations/:id` et son `expectedUpdatedAt`.
+Elle conserve l'UUID et les preuves ; les garanties de doublons, de concurrence,
+de transaction et de retour en `PROPOSED` après correction sémantique d'une relation
+publiée restent celles du [workflow de provenance](PROVENANCE-WORKFLOW.md).
+Aucune relation n'est recréée. Les mentions et décisions d'ignorance ne changent pas.
+
+Les filtres, la pagination, l'actualisation et les autres actions de la file sont
+bloqués pendant l'édition. Une saisie modifiée est protégée à l'annulation, au
+rechargement, à la navigation et à la déconnexion ; une mutation en cours bloque
+la navigation. En cas de refus, le brouillon reste affiché. Après succès, un nouveau
+GET actualise les relations et les compteurs en conservant les filtres. Une inversion
+conserve l'état « Qualifiée », puisqu'une relation existe toujours entre les deux UUID.
+
+Si un onglet ouvert avant un déploiement affiche encore l'ancien formulaire
+« Description / Visibilité », effectuer **Ctrl + F5** ou fermer puis rouvrir l'onglet.
+Le nouveau formulaire comporte « Type et sens » et « Inverser les fiches ». Un contrôle
+de santé API réussi ne suffit pas à vérifier la version web : comparer également
+le bundle JavaScript indiqué par le HTML public avec le build déployé.
+
+Validation locale de cet accès direct, le 26 octobre 2026 : **813 tests réussis
+(453 API + 360 web)**, dont 17 nouveaux tests d'interface. Lint, typecheck, build,
+Prisma validate/generate et `git diff --check` sont concluants. La première suite
+web complète a obtenu 359 succès et un dépassement du délai DOM d'une seconde dans
+un ancien test de fiche. Les 360 tests web ont ensuite tous réussi avec une
+configuration temporaire hors dépôt : pool `threads`, deux workers, attente DOM
+de 10 secondes et délais de test/hooks de 15 secondes, sans exclusion ni modification
+des assertions. La configuration permanente des tests reste inchangée.
+
+Le build a été essayé dans Edge avec 130 fiches et 296 mentions uniques fictives,
+à 1920 × 1080 et 390 × 844 : action visible, lecture courante différée, correction
+confirmée explicitement, même UUID de relation, filtres conservés, actualisation du
+sens éditorial et maintien de l'éditeur sur les fiches. Aucun débordement horizontal
+ni erreur JavaScript détecté ; aucune preuve n'est chargée par l'éditeur de la file.
+Les deux sauvegardes de cet essai visent seulement l'API simulée locale. Aucun
+coffre, base réelle, secret ou contenu réel du lore n'est utilisé dans les fixtures.
+L'avertissement existant de taille du bundle principal demeure (509,44 kB).
+
 L’onglet paginé **Diagnostics techniques** sépare les destinations absentes, ambiguës, sans fiche associée (notamment notes vides), les liens non pris en charge et les problèmes d’ancre. Aucun choix arbitraire de UUID ou bouton de création n’y figure. Un diagnostic d’ancre peut coexister avec une paire résolue. Les compteurs de diagnostics comptent les diagnostics uniques par note, pas les occurrences ni les paires. Le compteur « références uniques résolues » sur une fiche conserve sa définition existante incluant les ancres ; le compteur central compte les paires dirigées.
 
 ## Décisions persistantes et concurrence

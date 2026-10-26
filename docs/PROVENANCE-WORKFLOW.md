@@ -124,7 +124,11 @@ La migration ne touche aucune autre table ni les autres champs des preuves. Elle
 par `prisma migrate deploy` lors d'un déploiement ultérieur ; aucun développement local ne
 l'applique au VPS.
 
-## Validation de la correction du type et du sens — 26 octobre 2026
+## Validation initiale de la correction du type et du sens — 26 octobre 2026
+
+Cet éditeur est également accessible directement depuis les relations existantes
+de la [file « Relations à qualifier »](REFERENCE-QUALIFICATION.md#modifier-une-relation-déjà-qualifiée),
+y compris lorsqu'une paire est déjà qualifiée.
 
 Les suites complètes réussissent : **796 tests**, dont **453 API** et **343 web**
 (19 tests ajoutés). Sous Windows, les workers Vitest ont été exécutés avec

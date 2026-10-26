@@ -583,6 +583,7 @@ export function AdminApp() {
       </>}
       {isAdmin && route.view === 'qualification' && <Suspense fallback={<StateMessage>Chargement de la file…</StateMessage>}>
         <AdminReferenceQueue filters={qualificationFilters} onFilters={setQualificationFilters} onNavigate={onNavigate}
+          onDirtyChange={setEditDirty} onPendingChange={deletionPending}
           onAccessError={ingestionAccessError} onDefine={(seed, fromSlug) => navigateTo(`/admin/fiches/${fromSlug}/nouvelle-relation`, seed)} />
       </Suspense>}
       {isAdmin && route.view === 'dashboard' && <>
