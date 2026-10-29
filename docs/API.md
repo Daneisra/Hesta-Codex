@@ -53,6 +53,11 @@ Toutes les routes `/api/admin/**` exigent une session active et un Discord ID pr
 `DISCORD_ADMIN_IDS` : `401` sans session, `403` pour un utilisateur non admin. Les réponses
 portent `Cache-Control: no-store`.
 
+Les images utilisent `POST /api/admin/images` (binaire authentifié, 5 Mio maximum) et
+`GET /api/images/:id` (permissions de la fiche ou de l'import privé contrôlées à chaque
+lecture, sans cache). Le type `PLAYER_CHARACTER` distingue les PJ des `PERSON` (PNJ).
+Contrats, conservation et préparation Nginx : [EDITORIAL-MEDIA.md](EDITORIAL-MEDIA.md).
+
 | Route admin | Réponse |
 | --- | --- |
 | `GET /api/admin/ingestion/batches` | Batches, comptes et Sources ; 20 par page. |

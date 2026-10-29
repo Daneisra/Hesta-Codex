@@ -174,3 +174,9 @@
 .admin-delete-dialog button:not(.admin-delete-button) { border: 1px solid #5b6780; border-radius: .45rem; padding: .55rem .8rem; background: #152137; color: #eef2fb; cursor: pointer; }
 .admin-delete-dialog .admin-editor-actions { display: flex; flex-wrap: wrap; gap: .7rem; margin-top: 1rem; }
 .admin-delete-dialog .admin-delete-button { margin-left: 0; }
+.markdown-help { margin-block: .5rem; }
+.markdown-help > summary { cursor: pointer; font-weight: 600; }
+.markdown-help details { margin-block: .6rem; }
+.markdown-help pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: .75rem; border: 1px solid #394660; border-radius: .5rem; }
+.admin-image-upload { display: grid; gap: .75rem; padding: 1rem; border: 1px solid #394660; border-radius: .65rem; min-width: 0; }
+.admin-image-upload input[type="file"] { max-width: 100%; }

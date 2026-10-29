@@ -704,3 +704,4 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+.markdown-body img { display: block; max-width: 100%; height: auto; margin-block: 1rem; }

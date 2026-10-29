@@ -17,7 +17,7 @@ async function plan(tx: Prisma.TransactionClient, slug: string) {
   const relations = await tx.relation.findMany({ where: { OR: [{ fromEntityId: entity.id }, { toEntityId: entity.id }] },
     select: { id: true, updatedAt: true }, orderBy: { id: 'asc' } })
   const relationIds = relations.map(row => row.id)
-  const [evidence, revisions, decisions, ignores] = await Promise.all([
+  const [evidence, revisions, decisions, ignores, images] = await Promise.all([
     tx.evidence.findMany({ where: { OR: [{ entityId: entity.id }, { relationId: { in: relationIds } }] },
       select: { id: true, entityId: true, updatedAt: true }, orderBy: { id: 'asc' } }),
     tx.revision.findMany({ where: { entityId: entity.id }, select: { id: true }, orderBy: { id: 'asc' } }),
@@ -25,13 +25,14 @@ async function plan(tx: Prisma.TransactionClient, slug: string) {
       select: { id: true, association: { select: { id: true, revision: true } } }, orderBy: { id: 'asc' } }),
     tx.obsidianReferenceIgnore.findMany({ where: { OR: [{ fromEntityId: entity.id }, { toEntityId: entity.id }] },
       select: { fromEntityId: true, toEntityId: true, revision: true }, orderBy: [{ fromEntityId: 'asc' }, { toEntityId: 'asc' }] }),
+    tx.entityImage.findMany({ where: { entityId: entity.id }, select: { id: true }, orderBy: { id: 'asc' } }),
   ])
   const associationIds = [...new Set(decisions.map(row => row.association.id))].sort()
   const directEvidence = evidence.filter(row => row.entityId === entity.id).length
-  const fingerprint = createHash('sha256').update(JSON.stringify({ entity, relations, evidence, revisions, decisions, ignores })).digest('hex')
+  const fingerprint = createHash('sha256').update(JSON.stringify({ entity, relations, evidence, revisions, decisions, ignores, images })).digest('hex')
   const preview: AdminEntityDeletionPlan = { id: entity.id, slug: entity.slug, title: entity.title, status: entity.status,
     fingerprint, counts: { relations: relations.length, directEvidence, relationEvidence: evidence.length - directEvidence,
-      revisions: revisions.length, associationDecisions: decisions.length, associations: associationIds.length, referenceIgnores: ignores.length } }
+      revisions: revisions.length, associationDecisions: decisions.length, associations: associationIds.length, referenceIgnores: ignores.length, images: images.length } }
   return { preview, associationIds, relationIds }
 }
 

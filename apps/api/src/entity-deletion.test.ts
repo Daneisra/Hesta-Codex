@@ -96,7 +96,7 @@ const request = async () => { const preview = await service.preview('cible'); re
 test('Prisma preview is read-only and counts unique incoming/outgoing/self relations and all actual dependencies', async () => {
   const before = await snapshots(), preview = await service.preview('cible')
   assert.deepEqual(preview.counts, { relations: 3, directEvidence: 1, relationEvidence: 3, revisions: 1,
-    associationDecisions: 2, associations: 2, referenceIgnores: 3 })
+    associationDecisions: 2, associations: 2, referenceIgnores: 3, images: 0 })
   assert.equal(preview.title, 'Cible fictive'); assert.match(preview.fingerprint, /^[0-9a-f]{64}$/)
   assert.equal((await service.preview('cible')).fingerprint, preview.fingerprint)
   assert.deepEqual(await snapshots(), before)

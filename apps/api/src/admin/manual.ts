@@ -4,12 +4,13 @@ import { EditorialError, entitySnapshot } from './editorial.js'
 import { createInitialEvidence, resolveCreationSource } from './creation-provenance.js'
 import type { ManualCreateInput, SourceLookupInput } from './manual-validation.js'
 import { readAdminEntity, sourceItem, sourceSelect } from './store.js'
+import { bindEntityImages } from '../images.js'
 
 const pageSize = 20
 
 export interface ManualService {
   listSources(input: SourceLookupInput): Promise<AdminSourceListResponse>
-  create(input: ManualCreateInput, editorLabel: string): Promise<AdminEntityDetail>
+  create(input: ManualCreateInput, editorLabel: string, actorDiscordId?: string): Promise<AdminEntityDetail>
 }
 
 function isUniqueConflict(error: unknown): boolean {
@@ -46,7 +47,7 @@ export function createPrismaManualService(prisma: PrismaClient): ManualService {
       return { items: rows.map(sourceItem), total, page, pageSize }
     },
 
-    create(input, editorLabel) {
+    create(input, editorLabel, actorDiscordId) {
       return prisma.$transaction(async (tx) => {
         const existing = await tx.entity.findUnique({ where: { slug: input.entity.slug }, select: { id: true } })
         if (existing) throw new EditorialError(409, 'ENTITY_CONFLICT', 'Ce slug est déjà utilisé par une fiche.')
@@ -54,6 +55,7 @@ export function createPrismaManualService(prisma: PrismaClient): ManualService {
         const sourceId = await resolveCreationSource(tx, input.source)
 
         const entity = await createProposedEntity(tx, input.entity)
+        await bindEntityImages(tx, entity.bodyMarkdown, entity.id, actorDiscordId)
 
         await createInitialEvidence(tx, sourceId, { entityId: entity.id, relationId: null },
           input.evidence, input.source.mode === 'existing')

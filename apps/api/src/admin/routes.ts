@@ -121,7 +121,7 @@ export function createAdminRouter(store: AdminStore, editorial: EditorialService
         response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'Création invalide.', issues } })
         return
       }
-      const created = await manual.create(parsed.data, editorLabel(response))
+      const created = await manual.create(parsed.data, editorLabel(response), adminSession(response).discordId)
       response.status(201).json(created)
     })
   }
@@ -208,7 +208,7 @@ export function createAdminRouter(store: AdminStore, editorial: EditorialService
       response.status(400).json({ error: { code: 'INVALID_REQUEST', message: validationMessage(parsed.error) } })
       return
     }
-    response.json(await editorial.patch(request.params.slug, parsed.data, editorLabel(response)))
+    response.json(await editorial.patch(request.params.slug, parsed.data, editorLabel(response), adminSession(response).discordId))
   })
 
   router.post('/entities/:slug/publish', async (request, response) => {

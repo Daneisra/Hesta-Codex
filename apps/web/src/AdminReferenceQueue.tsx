@@ -3,13 +3,14 @@ import type { EntityKind, QualificationFilters, QualificationResponse, Qualifica
 import { decideReference, errorStatus, getAdminJson } from './admin-http'
 import type { ReferenceRelationSeed } from './reference-relation'
 import { AdminQualificationRelationEditor } from './AdminQualificationRelationEditor'
+import { entityKindName } from '@hesta-codex/shared'
 
 const noop = () => {}
 
 export const qualificationLabels: Record<QualificationState, string> = {
   PENDING: 'À qualifier', QUALIFIED: 'Qualifiée', IGNORED: 'Ignorée volontairement',
 }
-const kinds: EntityKind[] = ['PERSON', 'PLACE', 'ORGANIZATION', 'FAMILY', 'RELIGION', 'DEITY', 'SPECIES', 'CREATURE',
+const kinds: EntityKind[] = ['PERSON', 'PLAYER_CHARACTER', 'PLACE', 'ORGANIZATION', 'FAMILY', 'RELIGION', 'DEITY', 'SPECIES', 'CREATURE',
   'ARTIFACT', 'EVENT', 'QUEST', 'SESSION', 'CONCEPT', 'OTHER']
 const diagnosticLabels: Record<string, string> = { MISSING: 'Absentes', AMBIGUOUS: 'Ambiguës',
   UNASSOCIATED: 'Sans fiche associée', UNSUPPORTED: 'Non prises en charge', OUT_OF_SCOPE: 'Hors périmètre', RESOLVED: 'Ancres à revoir' }
@@ -78,7 +79,7 @@ export function AdminReferenceQueue({ filters, onFilters, onNavigate, onDefine, 
     </div>
     <details><summary>Filtres avancés</summary><div className="admin-filters">
       <label>Type de fiche<select value={filters.kind ?? ''} disabled={locked} onChange={event => change({ kind: event.target.value as EntityKind || undefined })}>
-        <option value="">Tous</option>{kinds.map(kind => <option key={kind}>{kind}</option>)}</select></label>
+        <option value="">Tous</option>{kinds.map(kind => <option key={kind} value={kind}>{entityKindName(kind)}</option>)}</select></label>
       <label>Source<select value={filters.sourceId ?? ''} disabled={locked} onChange={event => change({ sourceId: event.target.value || undefined })}>
         <option value="">Toutes</option>{filters.sourceId && !data?.sources.some(source => source.id === filters.sourceId) &&
           <option value={filters.sourceId}>Source sélectionnée indisponible</option>}

@@ -15,6 +15,7 @@ import type { IngestionAdminStore } from './ingestion/admin.js'
 import type { ReferenceService } from './obsidian-references.js'
 import type { QualificationService } from './reference-qualification.js'
 import type { EntityDeletionService } from './admin/entity-deletion.js'
+import { imageReadRouter, imageUploadRouter, type ImageService } from './images.js'
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const entityKinds = new Set<string>(Object.values(EntityKind))
@@ -44,13 +45,17 @@ function parseEntityFilters(query: Record<string, unknown>): EntityFilters {
 export function createApp(store: CodexStore, privateServices?: {
   auth: AuthDependencies; admin: AdminStore; editorial: EditorialService;
   provenance?: ProvenanceService; manual?: ManualService; manualRelations?: ManualRelationService;
-  evidenceAdd?: EvidenceAddService; graph?: GraphStore; ingestion?: IngestionAdminStore; references?: ReferenceService; qualification?: QualificationService; deletion?: EntityDeletionService
+    evidenceAdd?: EvidenceAddService; graph?: GraphStore; ingestion?: IngestionAdminStore; references?: ReferenceService; qualification?: QualificationService; deletion?: EntityDeletionService; images?: ImageService
 }, graph?: GraphStore, references?: ReferenceService) {
   const app = express()
   app.disable('x-powered-by')
 
   if (privateServices) {
     app.use('/api/auth', createAuthRouter(privateServices.auth))
+    if (privateServices.images) {
+      app.use('/api/admin/images', requireAdmin(privateServices.auth), requireSameOrigin(privateServices.auth.config.origin), imageUploadRouter(privateServices.images))
+      app.use('/api/images', imageReadRouter(privateServices.images, privateServices.auth))
+    }
     app.use('/api/admin', requireAdmin(privateServices.auth), requireSameOrigin(privateServices.auth.config.origin),
       express.json({ limit: '1mb' }), createAdminRouter(privateServices.admin, privateServices.editorial,
         privateServices.provenance, privateServices.manual, privateServices.manualRelations,

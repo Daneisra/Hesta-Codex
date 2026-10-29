@@ -2,13 +2,14 @@ import type { AdminEntityDetail, AdminEntityPatch, AdminWorkflowRequest } from '
 import { Prisma, type PrismaClient } from '../prisma-client/client.ts'
 import { readAdminEntity } from './store.js'
 import { editorialFieldsSchema } from './validation.js'
+import { bindEntityImages } from '../images.js'
 
 export class EditorialError extends Error {
   constructor(readonly status: number, readonly code: string, message: string) { super(message) }
 }
 
 export interface EditorialService {
-  patch(slug: string, input: AdminEntityPatch, editorLabel: string): Promise<AdminEntityDetail>
+  patch(slug: string, input: AdminEntityPatch, editorLabel: string, actorDiscordId?: string): Promise<AdminEntityDetail>
   publish(slug: string, input: AdminWorkflowRequest, editorLabel: string): Promise<AdminEntityDetail>
   unpublish(slug: string, input: AdminWorkflowRequest, editorLabel: string): Promise<AdminEntityDetail>
 }
@@ -72,7 +73,7 @@ async function fullDetail(tx: Prisma.TransactionClient, slug: string): Promise<A
 
 export function createPrismaEditorialService(prisma: PrismaClient): EditorialService {
   return {
-    async patch(slug, input, editorLabel) {
+    async patch(slug, input, editorLabel, actorDiscordId) {
       return prisma.$transaction(async (tx) => {
         const current = await tx.entity.findUnique({ where: { slug }, select: editorialSelect })
         if (!current) throw new EditorialError(404, 'NOT_FOUND', 'Fiche introuvable')
@@ -90,6 +91,7 @@ export function createPrismaEditorialService(prisma: PrismaClient): EditorialSer
           },
         })
         if (changed.count !== 1) throw new EditorialError(409, 'ENTITY_MODIFIED', 'Cette fiche a été modifiée depuis son ouverture.')
+        await bindEntityImages(tx, input.bodyMarkdown, current.id, actorDiscordId)
         await addRevision(tx, { ...current, ...input, updatedAt }, editorLabel, input.revisionMessage ?? null)
         return fullDetail(tx, slug)
       })

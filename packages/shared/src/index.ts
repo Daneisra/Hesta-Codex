@@ -17,12 +17,13 @@ export interface RelationTypeItem {
 export interface AdminEntityDeletionPlan {
   id: string; slug: string; title: string; status: EditorialStatus; fingerprint: string
   counts: { relations: number; directEvidence: number; relationEvidence: number; revisions: number
-    associationDecisions: number; associations: number; referenceIgnores: number }
+    associationDecisions: number; associations: number; referenceIgnores: number; images: number }
 }
 export interface AdminEntityDeletionRequest { entityId: string; fingerprint: string; confirm: true }
 
 export type EntityKind =
   | 'PERSON'
+  | 'PLAYER_CHARACTER'
   | 'PLACE'
   | 'ORGANIZATION'
   | 'FAMILY'
@@ -38,6 +39,8 @@ export type EntityKind =
   | 'OTHER'
 
 export type PlaceKind = 'CITY' | 'CONTINENT' | 'REGION' | 'SEA' | 'OCEAN' | 'OTHER'
+
+export const entityKindName = (kind: EntityKind) => kind === 'PLAYER_CHARACTER' ? 'PLAYER_CHARACTER (PJ)' : kind === 'PERSON' ? 'PERSON (PNJ)' : kind
 
 /** Projection de lecture minimale ; les identifiants restent ceux du Codex. */
 export interface GraphNode {
@@ -378,3 +381,4 @@ export * from './obsidian.js'
 export * from './reference-qualification.js'
 export * from './relation-catalog.js'
 export { canonicalRelationEndpoints } from './relation-direction.js'
+export * from './images.js'

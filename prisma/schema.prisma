@@ -24,6 +24,7 @@ enum Visibility {
 
 enum EntityKind {
   PERSON
+  PLAYER_CHARACTER
   PLACE
   ORGANIZATION
   FAMILY
@@ -79,12 +80,28 @@ model Entity {
   incomingRelations Relation[] @relation("RelationTo")
   evidence          Evidence[]
   revisions         Revision[]
+  images            EntityImage[]
   ingestionDecisions IngestionAssociationDecision[]
   ignoredOutgoingReferences ObsidianReferenceIgnore[] @relation("IgnoredReferenceFrom")
   ignoredIncomingReferences ObsidianReferenceIgnore[] @relation("IgnoredReferenceTo")
 
   @@index([kind, placeKind])
   @@index([status, visibility])
+}
+
+// Sanitized images only. Pending uploads are private to their authenticated owner.
+model EntityImage {
+  id             String   @id @default(uuid()) @db.Uuid
+  entityId       String?  @db.Uuid
+  ownerDiscordId String?  @db.VarChar(32)
+  content        Bytes    @db.ByteA
+  byteSize       Int
+  width          Int
+  height         Int
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  entity Entity? @relation(fields: [entityId], references: [id], onDelete: Cascade, onUpdate: Restrict)
+  @@index([entityId])
+  @@index([ownerDiscordId, createdAt])
 }
 
 // Editorial decisions only. Automatic references remain a read-only projection.

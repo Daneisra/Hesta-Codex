@@ -14,6 +14,13 @@ const graph: GraphResponse = { nodes: ['a', 'b', 'c', 'd', 'e', 'x', 'y', 'z'].m
   edges: [edge('ab', 'a', 'b'), edge('bc', 'b', 'c', true), edge('dc', 'd', 'c'), edge('de', 'd', 'e'), edge('xy', 'x', 'y')] }
 
 describe('graph neighborhoods', () => {
+  it('keeps PJ and PNJ independently filterable within the existing people group', () => {
+    const fixture: GraphResponse = { nodes: [{ ...node('pj'), kind: 'PLAYER_CHARACTER', placeKind: null },
+      { ...node('pnj'), kind: 'PERSON', placeKind: null }], edges: [edge('relation', 'pj', 'pnj')] }
+    const visible = filterGraph(fixture, { ...emptyFilters, kind: 'PLAYER_CHARACTER' }, new Set(graphGroups.map(group => group.id)))
+    expect(visible.nodes.map(node => node.id)).toEqual(['pj'])
+    expect(graphGroups.find(group => group.kinds.some(kind => kind === 'PLAYER_CHARACTER'))?.id).toBe('people')
+  })
   it('traverses directional and symmetric edges at depths 1, 2 and 3 without disconnected nodes', () => {
     const index = indexGraph(graph)
     expect([...neighborhoodDistances(index, 'a', 1)]).toEqual([['a', 0], ['b', 1]])

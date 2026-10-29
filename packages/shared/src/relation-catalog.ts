@@ -79,7 +79,7 @@ export function groupRelationTypes(types: readonly RelationTypeItem[]) {
       (a.code < b.code ? -1 : a.code > b.code ? 1 : 0)) })).filter(group => group.types.length > 0)
 }
 
-const kindLabels: Record<EntityKind, string> = { PERSON: 'personnage', PLACE: 'lieu', ORGANIZATION: 'organisation',
+const kindLabels: Record<EntityKind, string> = { PERSON: 'personnage', PLAYER_CHARACTER: 'personnage joueur', PLACE: 'lieu', ORGANIZATION: 'organisation',
   FAMILY: 'famille', RELIGION: 'religion', DEITY: 'divinité', SPECIES: 'peuple ou espèce', CREATURE: 'créature',
   ARTIFACT: 'artefact', EVENT: 'événement', QUEST: 'quête', SESSION: 'session', CONCEPT: 'concept', OTHER: 'autre' }
 
@@ -89,7 +89,7 @@ export function relationKindWarning(code: string, from: EntityKind, to: EntityKi
   if (!type || from === 'OTHER' || to === 'OTHER') return null
   const inverse = code === type.inverseCode
   const expectedFrom = inverse ? type.usualTo : type.usualFrom, expectedTo = inverse ? type.usualFrom : type.usualTo
-  const accepts = (expected: readonly EntityKind[], actual: EntityKind) => !expected.length || expected.includes(actual)
+  const accepts = (expected: readonly EntityKind[], actual: EntityKind) => !expected.length || expected.includes(actual === 'PLAYER_CHARACTER' ? 'PERSON' : actual)
   const normal = accepts(expectedFrom, from) && accepts(expectedTo, to)
   if (normal || (type.symmetric && accepts(expectedFrom, to) && accepts(expectedTo, from))) return null
   const label = inverse ? type.inverseLabel : type.label

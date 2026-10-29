@@ -13,6 +13,7 @@ const GraphPage = lazy(() => import('./GraphPage').then((module) => ({ default: 
 
 const kindOptions: { kind: EntityKind; label: string }[] = [
   { kind: 'PERSON', label: 'Personnages' },
+  { kind: 'PLAYER_CHARACTER', label: 'Personnages joueurs (PJ)' },
   { kind: 'PLACE', label: 'Lieux' },
   { kind: 'ORGANIZATION', label: 'Organisations' },
   { kind: 'FAMILY', label: 'Familles' },

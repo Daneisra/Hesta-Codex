@@ -89,6 +89,7 @@ export function AdminDeleteEntity({ entity, disabled, onPending, onDeleted, onAc
             <li>{plan.counts.relations} relation(s) éditoriale(s) entrante(s) ou sortante(s).</li>
             <li>{plan.counts.directEvidence + plan.counts.relationEvidence} preuve(s) : {plan.counts.directEvidence} sur la fiche et {plan.counts.relationEvidence} sur ses relations.</li>
             <li>{plan.counts.revisions} révision(s).</li>
+            <li>{plan.counts.images} image(s) importée(s).</li>
             <li>{plan.counts.associationDecisions} décision(s) d’association d’ingestion.</li>
             <li>{plan.counts.referenceIgnores} décision(s) d’ignorance de références Obsidian.</li>
           </ul>

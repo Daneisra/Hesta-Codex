@@ -5,8 +5,12 @@ import type {
   AdminManualCreateRequest, AdminSource, EntityKind, PlaceKind, SourceKind, Visibility,
 } from '@hesta-codex/shared'
 import { AdminSourcePicker } from './AdminSourcePicker'
+import { entityKindName } from '@hesta-codex/shared'
+import { AdminImageUpload } from './AdminImageUpload'
+import { MarkdownHelp } from './MarkdownHelp'
+import { MarkdownImage } from './MarkdownImage'
 
-const kinds: EntityKind[] = ['PERSON', 'PLACE', 'ORGANIZATION', 'FAMILY', 'RELIGION', 'DEITY', 'SPECIES',
+const kinds: EntityKind[] = ['PERSON', 'PLAYER_CHARACTER', 'PLACE', 'ORGANIZATION', 'FAMILY', 'RELIGION', 'DEITY', 'SPECIES',
   'CREATURE', 'ARTIFACT', 'EVENT', 'QUEST', 'SESSION', 'CONCEPT', 'OTHER']
 const places: PlaceKind[] = ['CITY', 'CONTINENT', 'REGION', 'SEA', 'OCEAN', 'OTHER']
 const sourceKinds: SourceKind[] = ['MANUAL', 'OBSIDIAN', 'DISCORD', 'HESTA_MAP', 'YOUTUBE', 'AI_DERIVED', 'OTHER']
@@ -40,13 +44,14 @@ function timeLabel(value: string): string | null {
     .map((part) => String(part).padStart(2, '0')).join(':')
 }
 
-export function AdminCreate({ busy, disabled, error, onCreate, onClearError, onDirtyChange, onNavigate }: {
+export function AdminCreate({ busy, disabled, error, onCreate, onClearError, onDirtyChange, onNavigate, onUploadPending, onUploadAccessError }: {
   busy: boolean; disabled: boolean
   error: { status: number | null; message: string; issues?: Issue[] } | null
   onCreate: (input: AdminManualCreateRequest) => void
   onClearError: () => void
   onDirtyChange: (dirty: boolean) => void
   onNavigate: (event: MouseEvent<HTMLAnchorElement>, path: string) => void
+  onUploadPending?: (pending: boolean) => void; onUploadAccessError?: (status: number) => void
 }) {
   const [form, setForm] = useState<Form>(initial)
   const [slugEdited, setSlugEdited] = useState(false)
@@ -54,6 +59,7 @@ export function AdminCreate({ busy, disabled, error, onCreate, onClearError, onD
   const [selectedSource, setSelectedSource] = useState<AdminSource | null>(null)
   const [review, setReview] = useState(false)
   const [localIssues, setLocalIssues] = useState<Issue[]>([])
+  const [uploading, setUploading] = useState(false)
   const errorRef = useRef<HTMLDivElement>(null)
   const issues = [...localIssues, ...(error?.issues ?? [])]
   const issue = (path: string) => issues.find((item) => item.path === path || item.path.startsWith(`${path}.`))?.message
@@ -69,8 +75,8 @@ export function AdminCreate({ busy, disabled, error, onCreate, onClearError, onD
   useEffect(() => { if (error) errorRef.current?.focus() }, [error])
 
   useEffect(() => {
-    onDirtyChange(JSON.stringify(form) !== JSON.stringify(initial) || selectedSource !== null || mode !== 'existing')
-  }, [form, selectedSource, mode, onDirtyChange])
+    onDirtyChange(uploading || JSON.stringify(form) !== JSON.stringify(initial) || selectedSource !== null || mode !== 'existing')
+  }, [form, selectedSource, mode, uploading, onDirtyChange])
 
   function change<K extends keyof Form>(key: K, value: Form[K]) {
     setForm((previous) => ({ ...previous, [key]: value }))
@@ -103,6 +109,7 @@ export function AdminCreate({ busy, disabled, error, onCreate, onClearError, onD
   }
   function proceed(event: FormEvent) {
     event.preventDefault()
+    if (busy || uploading || disabled) return
     const invalid: Issue[] = []
     if (!form.title.trim()) invalid.push({ path: 'entity.title', message: 'Le titre est requis.' })
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(form.slug)) {
@@ -179,7 +186,7 @@ export function AdminCreate({ busy, disabled, error, onCreate, onClearError, onD
           onChange={(event) => { setSlugEdited(true); change('slug', event.target.value) }} />
           {errorText('entity.slug')}</label>
         <label>Type<select value={form.kind} onChange={(event) => change('kind', event.target.value as EntityKind)}>
-          {kinds.map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select></label>
+          {kinds.map((kind) => <option key={kind} value={kind}>{entityKindName(kind)}</option>)}</select></label>
         {form.kind === 'PLACE' && <label>Sous-type de lieu<select id="entity.placeKind" value={form.placeKind}
           {...field('entity.placeKind')} onChange={(event) => change('placeKind', event.target.value as PlaceKind)}>
           <option value="">Choisir…</option>{places.map((kind) => <option key={kind} value={kind}>{kind}</option>)}
@@ -194,8 +201,15 @@ export function AdminCreate({ busy, disabled, error, onCreate, onClearError, onD
           onChange={(event) => change('tags', event.target.value)} />{errorText('entity.tags')}</label>
         <label className="admin-editor-wide">Contenu Markdown<textarea value={form.bodyMarkdown} maxLength={100_000} rows={12}
           onChange={(event) => change('bodyMarkdown', event.target.value)} /></label>
+        <MarkdownHelp />
+        <AdminImageUpload disabled={busy || disabled} onPendingChange={value => { setUploading(value); onUploadPending?.(value) }}
+          onAccessError={onUploadAccessError} onInsert={snippet => {
+            const next = `${form.bodyMarkdown}${form.bodyMarkdown ? '\n\n' : ''}${snippet}\n`
+            if (next.length > 100000) return false
+            change('bodyMarkdown', next); return true
+          }} />
       </div><div className="admin-editor-preview"><h3>Aperçu Markdown</h3><div className="markdown-body admin-markdown">
-        <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>{form.bodyMarkdown || 'Aucun contenu détaillé.'}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml components={{ img: props => <MarkdownImage {...props} admin /> }}>{form.bodyMarkdown || 'Aucun contenu détaillé.'}</ReactMarkdown>
       </div></div></section>
       <section className="admin-section"><h2>Provenance</h2><fieldset className="admin-source-mode"
         aria-describedby={issue('source.sourceId') ? 'source.sourceId-error' : undefined}>
@@ -252,7 +266,7 @@ export function AdminCreate({ busy, disabled, error, onCreate, onClearError, onD
           onChange={(event) => change('evidenceVisibility', event.target.value as Visibility)}>
           {visibilities.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
       </div></section>
-      <div className="admin-editor-actions"><button className="admin-primary-button" type="submit">Vérifier la création</button></div>
+      <div className="admin-editor-actions"><button className="admin-primary-button" type="submit" disabled={busy || uploading || disabled}>Vérifier la création</button></div>
     </form>}
   </div>
 }

@@ -10,7 +10,7 @@ const entity: AdminEntityDetail = { id: '00000000-0000-4000-8000-000000000001', 
   evidence: [], revisions: [], incomingRelations: [], outgoingRelations: [] }
 const plan: AdminEntityDeletionPlan = { id: entity.id, slug: entity.slug, title: entity.title, status: entity.status,
   fingerprint: 'a'.repeat(64), counts: { relations: 3, directEvidence: 1, relationEvidence: 3, revisions: 1,
-    associationDecisions: 2, associations: 2, referenceIgnores: 3 } }
+    associationDecisions: 2, associations: 2, referenceIgnores: 3, images: 0 } }
 const response = (body: unknown, status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => body }) as Response
 function setup(options: { previewStatus?: number; deleteStatus?: number | 'network'; delayed?: Promise<void>; preview?: AdminEntityDeletionPlan } = {}) {
   const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {

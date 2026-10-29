@@ -2,9 +2,13 @@ import { useEffect, useState, type FormEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { AdminEntityDetail, AdminEntityPatch, EntityKind, PlaceKind, Visibility } from '@hesta-codex/shared'
+import { entityKindName } from '@hesta-codex/shared'
+import { AdminImageUpload } from './AdminImageUpload'
+import { MarkdownHelp } from './MarkdownHelp'
+import { MarkdownImage } from './MarkdownImage'
 
 const kinds: EntityKind[] = [
-  'PERSON', 'PLACE', 'ORGANIZATION', 'FAMILY', 'RELIGION', 'DEITY', 'SPECIES',
+  'PERSON', 'PLAYER_CHARACTER', 'PLACE', 'ORGANIZATION', 'FAMILY', 'RELIGION', 'DEITY', 'SPECIES',
   'CREATURE', 'ARTIFACT', 'EVENT', 'QUEST', 'SESSION', 'CONCEPT', 'OTHER',
 ]
 const places: PlaceKind[] = ['CITY', 'CONTINENT', 'REGION', 'SEA', 'OCEAN', 'OTHER']
@@ -34,7 +38,7 @@ function terms(text: string): string[] {
   return text.trim() ? text.split(',').map((value) => value.trim()) : []
 }
 
-export function AdminEditor({ entity, busy, saveDisabled, error, onSave, onCancel, onDirtyChange }: {
+export function AdminEditor({ entity, busy, saveDisabled, error, onSave, onCancel, onDirtyChange, onUploadPending, onUploadAccessError }: {
   entity: AdminEntityDetail
   busy: boolean
   saveDisabled: boolean
@@ -42,10 +46,12 @@ export function AdminEditor({ entity, busy, saveDisabled, error, onSave, onCance
   onSave: (input: AdminEntityPatch) => void
   onCancel: () => void
   onDirtyChange: (dirty: boolean) => void
+  onUploadPending?: (pending: boolean) => void; onUploadAccessError?: (status: number) => void
 }) {
   const [form, setForm] = useState<FormState>(() => initialForm(entity))
   const [localError, setLocalError] = useState<string | null>(null)
-  const dirty = JSON.stringify(form) !== JSON.stringify(initialForm(entity))
+  const [uploading, setUploading] = useState(false)
+  const dirty = uploading || JSON.stringify(form) !== JSON.stringify(initialForm(entity))
   useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange])
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -55,6 +61,7 @@ export function AdminEditor({ entity, busy, saveDisabled, error, onSave, onCance
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (busy || uploading || saveDisabled) return
     if (!form.title.trim()) { setLocalError('Le titre est requis.'); return }
     if (form.kind === 'PLACE' && !form.placeKind) { setLocalError('Choisissez un sous-type de lieu.'); return }
     onSave({
@@ -83,7 +90,7 @@ export function AdminEditor({ entity, busy, saveDisabled, error, onSave, onCance
         <label>Type<select value={form.kind} onChange={(event) => {
           const kind = event.target.value as EntityKind
           setForm((current) => ({ ...current, kind, placeKind: kind === 'PLACE' ? current.placeKind : '' }))
-        }}>{kinds.map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select></label>
+        }}>{kinds.map((kind) => <option key={kind} value={kind}>{entityKindName(kind)}</option>)}</select></label>
         {form.kind === 'PLACE' && <label>Sous-type de lieu<select value={form.placeKind} required onChange={(event) => update('placeKind', event.target.value as PlaceKind)}>
           <option value="">Choisir…</option>{places.map((place) => <option key={place} value={place}>{place}</option>)}
         </select></label>}
@@ -99,19 +106,26 @@ export function AdminEditor({ entity, busy, saveDisabled, error, onSave, onCance
         <p className="admin-muted admin-editor-wide">Alias et tags : 30 valeurs maximum, sans entrée vide ni doublon.</p>
         <label className="admin-editor-wide">Contenu Markdown<textarea value={form.bodyMarkdown} maxLength={100000} rows={16}
           onChange={(event) => update('bodyMarkdown', event.target.value)} /></label>
+        <MarkdownHelp />
+        <AdminImageUpload disabled={busy || saveDisabled} onPendingChange={value => { setUploading(value); onUploadPending?.(value) }}
+          onAccessError={onUploadAccessError} onInsert={snippet => {
+            const next = `${form.bodyMarkdown}${form.bodyMarkdown ? '\n\n' : ''}${snippet}\n`
+            if (next.length > 100000) return false
+            update('bodyMarkdown', next); return true
+          }} />
         <label className="admin-editor-wide">Message de révision (facultatif)<input value={form.revisionMessage} maxLength={500}
           onChange={(event) => update('revisionMessage', event.target.value)} /></label>
       </div>
       <div className="admin-editor-preview">
         <h3>Aperçu Markdown</h3>
-        <div className="markdown-body admin-markdown"><ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>
+        <div className="markdown-body admin-markdown"><ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml components={{ img: props => <MarkdownImage {...props} admin /> }}>
           {form.bodyMarkdown || 'Aucun contenu détaillé.'}
         </ReactMarkdown></div>
       </div>
       {(localError || error) && <p className="admin-form-error" role="alert">{localError ?? error}</p>}
       <div className="admin-editor-actions">
-        <button type="button" disabled={busy} onClick={onCancel}>Annuler</button>
-        <button className="admin-primary-button" type="submit" disabled={busy || saveDisabled}>{busy ? 'Enregistrement…' : 'Enregistrer'}</button>
+        <button type="button" disabled={busy || uploading} onClick={onCancel}>Annuler</button>
+        <button className="admin-primary-button" type="submit" disabled={busy || uploading || saveDisabled}>{busy ? 'Enregistrement…' : 'Enregistrer'}</button>
       </div>
     </form>
   </section>

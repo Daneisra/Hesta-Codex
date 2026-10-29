@@ -5,6 +5,7 @@ import {
   markdownTextOffset, markdownHeadings, walkWikiProse, type WikiNavigation,
 } from '@hesta-codex/shared'
 import type { Root, Nodes, PhrasingContent } from 'mdast'
+import { MarkdownImage } from './MarkdownImage'
 
 export function scrollToWikiAnchor() {
   if (!window.location.hash) return
@@ -82,6 +83,6 @@ export function WikiMarkdown({ body, updatedAt, navigation, admin = false, onNav
       } catch { /* Ordinary invalid URLs keep the renderer's safe URL handling. */ }
       return <a href={href} title={title} onClick={path ? event => onNavigate(event, path!) : undefined}>{children}</a>
     },
-    ...(admin ? { img: ({ alt }: { alt?: string }) => <span className="admin-muted">Image non chargée : {alt || 'sans description'}</span> } : {}),
+    img: ({ src, alt, title }) => <MarkdownImage src={src} alt={alt} title={title} admin={admin} />,
   }}>{body}</ReactMarkdown>
 }

@@ -15,6 +15,12 @@ d'armure restent dans Système PA.
 
 ## Principes
 
+`PLAYER_CHARACTER` représente un personnage joueur (PJ), séparément de `PERSON`
+(PNJ). La migration additive `20261029000000_entity_images_and_player_characters`
+ajoute ce type et les images sans reclasser de fiche existante. Les images suivent
+les permissions de lecture de leur fiche ; elles ne changent pas les règles de
+publication. Voir [Images éditoriales](EDITORIAL-MEDIA.md).
+
 - Chaque fiche et chaque relation possède un UUID stable. Le slug unique sert aux URL ;
   changer un titre ne change ni l'UUID ni les liens relationnels.
 - Le texte narratif est en Markdown. Les types, relations, sources et preuves sont des
@@ -27,9 +33,11 @@ d'armure restent dans Système PA.
   Sans authentification, l’API de lecture expose seulement les fiches et relations à la fois
   `PUBLISHED` et `PUBLIC`. Les fiches voisines doivent respecter la même règle. Sources,
   preuves et révisions ne sont pas encore exposées par l’API.
-- Les suppressions physiques de fiches, sources, arêtes ou types référencés sont interdites
-  par des clés étrangères `ON DELETE RESTRICT`. Les UUID référencés ne peuvent pas changer
-  (`ON UPDATE RESTRICT`). Archiver une fiche conserve son historique.
+- Les dépendances éditoriales utilisent des clés étrangères `ON DELETE RESTRICT` :
+  la suppression individuelle d'une fiche passe par l'inventaire et la transaction
+  [dédiés](ENTITY-DELETION.md). Seules ses images liées sont supprimées par cascade.
+  Les UUID référencés ne peuvent pas changer (`ON UPDATE RESTRICT`). Archiver une fiche
+  conserve son historique.
 
 ## Tables
 
@@ -41,6 +49,7 @@ d'armure restent dans Système PA.
 | `Source` | Document ou origine | Type (`MANUAL`, `OBSIDIAN`, `DISCORD`, `HESTA_MAP`, `YOUTUBE`, `AI_DERIVED`, `OTHER`), identifiant externe et URL facultatifs, auteur, metadata ; une source dérivée peut référencer sa source d'origine. Aucune clé étrangère vers une autre application. |
 | `Evidence` | Fait précis soutenu par une source | Une source, exactement une fiche ou une relation, énoncé, extrait, repère et timestamps facultatifs, confiance facultative, dates de création/modification. |
 | `Revision` | Historique d'une fiche | Numéro par `Entity`, snapshot, message et attribution textuelle facultative. |
+| `EntityImage` | Illustration importée et nettoyée | UUID, binaire WebP BYTEA, taille/dimensions et date ; propriétaire admin temporaire OU fiche liée, jamais les deux ; suppression en cascade uniquement avec sa fiche. Aucune lecture binaire dans les listes. |
 | `User` | Identité Discord minimale pour l'administration | Discord ID unique, username, display name facultatif ; aucun rôle persistant. |
 | `Session` | Session serveur révocable | Hash unique du token de cookie, utilisateur, création et expiration ; aucun jeton OAuth Discord conservé. |
 | `IngestionBatch` | Opération de staging réussie | UUID, format v1, libellé, comptes reçus/nouveaux/inchangés/modifiés, avertissements et date ; aucune publication. |

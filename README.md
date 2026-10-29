@@ -85,6 +85,10 @@ aucun secret n'est versionné. Voir [docs/AUTH.md](docs/AUTH.md) pour la configu
 
 ## Vérifications
 
+Les formulaires éditoriaux proposent l'import d'images, l'aide Markdown et le type
+distinct **personnage joueur (PJ)**. Voir [Images et personnages joueurs](docs/EDITORIAL-MEDIA.md)
+pour les limites, permissions, migration et réglage Nginx requis avant livraison.
+
 ```bash
 npm run lint
 npm run typecheck

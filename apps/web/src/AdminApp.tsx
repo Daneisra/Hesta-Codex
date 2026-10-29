@@ -12,6 +12,7 @@ import { AdminCreateRelation } from './AdminCreateRelation'
 import type { ReferenceRelationSeed } from './reference-relation'
 import { AdminProvenance } from './AdminProvenance'
 import { AdminDeleteEntity } from './AdminDeleteEntity'
+import { entityKindName } from '@hesta-codex/shared'
 import { getAdminJson as getJson, HttpError, errorStatus, decideReference } from './admin-http'
 import './Admin.css'
 const GraphPage = lazy(() => import('./GraphPage').then((module) => ({ default: module.GraphPage })))
@@ -26,7 +27,7 @@ const relationCreatePath = /^\/admin\/fiches\/([a-z0-9]+(?:-[a-z0-9]+)*)\/nouvel
 const statuses: EditorialStatus[] = ['DRAFT', 'PROPOSED', 'PUBLISHED', 'ARCHIVED']
 const visibilities: Visibility[] = ['PUBLIC', 'PLAYERS', 'GM', 'SECRET']
 const kinds: EntityKind[] = [
-  'PERSON', 'PLACE', 'ORGANIZATION', 'FAMILY', 'RELIGION', 'DEITY', 'SPECIES',
+  'PERSON', 'PLAYER_CHARACTER', 'PLACE', 'ORGANIZATION', 'FAMILY', 'RELIGION', 'DEITY', 'SPECIES',
   'CREATURE', 'ARTIFACT', 'EVENT', 'QUEST', 'SESSION', 'CONCEPT', 'OTHER',
 ]
 const statusLabels: Record<EditorialStatus, string> = {
@@ -84,7 +85,7 @@ function StateMessage({ children }: { children: string }) {
 }
 
 function Detail({ entity, onNavigate, editing, provenanceEditing, busy, authExpired, error, onEdit, onCancel, onSave,
-  onDirtyChange, onWorkflow, onReload, onProvenanceMutation, onProvenanceEditingChange, evidenceNotice, onDefine, onIgnore, onAccessError, onDeletionPending, onDeleted }: {
+  onDirtyChange, onWorkflow, onReload, onProvenanceMutation, onProvenanceEditingChange, evidenceNotice, onDefine, onIgnore, onAccessError, onDeletionPending, onDeleted, onUploadAccessError }: {
   entity: AdminEntityDetail
   onNavigate: (event: MouseEvent<HTMLAnchorElement>, path: string) => void
   editing: boolean
@@ -106,6 +107,7 @@ function Detail({ entity, onNavigate, editing, provenanceEditing, busy, authExpi
   onIgnore: (input: ReferenceIgnoreRequest) => void
   onAccessError: (status: number) => void
   onDeletionPending: (pending: boolean) => void
+  onUploadAccessError: (status: number) => void
   onDeleted: (title: string) => void
 }) {
   return <article className="admin-detail">
@@ -134,6 +136,7 @@ function Detail({ entity, onNavigate, editing, provenanceEditing, busy, authExpi
       {error.status === 401 && <a href="/api/auth/discord/login">Se reconnecter avec Discord</a>}
     </div>}
     {editing ? <AdminEditor entity={entity} busy={busy} saveDisabled={authExpired} error={null} onSave={onSave}
+      onUploadPending={onDeletionPending} onUploadAccessError={onUploadAccessError}
       onCancel={onCancel} onDirtyChange={onDirtyChange} /> : <section className="admin-section">
       <h2>Contenu</h2>
       {entity.summary && <p className="admin-summary">{entity.summary}</p>}
@@ -618,7 +621,7 @@ export function AdminApp() {
               <option value="">Toutes</option>{visibilities.map((value) => <option value={value} key={value}>{visibilityLabels[value]}</option>)}
             </select></label>
             <label>Type<select value={kind} onChange={(event) => { setKind(event.target.value as EntityKind | ''); setPage(1) }}>
-              <option value="">Tous</option>{kinds.map((value) => <option value={value} key={value}>{value}</option>)}
+              <option value="">Tous</option>{kinds.map((value) => <option value={value} key={value}>{entityKindName(value)}</option>)}
             </select></label>
           </div>
           {search.trim().length === 1 && <p className="admin-muted">Saisissez au moins 2 caractères pour rechercher.</p>}
@@ -639,6 +642,7 @@ export function AdminApp() {
       </>}
       {(isAdmin || (authExpired && route.view === 'create')) && route.view === 'create' &&
         <AdminCreate busy={busy} disabled={authExpired} error={mutationError} onCreate={(input) => void create(input)}
+          onUploadPending={deletionPending} onUploadAccessError={status => mutationFailed(new HttpError(status))}
           onClearError={() => setMutationError(null)} onDirtyChange={setEditDirty} onNavigate={onNavigate} />}
       {(isAdmin || (authExpired && route.view === 'relation-create')) && route.view === 'relation-create' && <>
         {(detailFor !== activeSlug || detail.phase === 'loading') && <StateMessage>Chargement de la fiche de départ…</StateMessage>}
@@ -662,6 +666,7 @@ export function AdminApp() {
           <a href="/admin" onClick={(event) => onNavigate(event, '/admin')}>Retour au tableau de bord</a></div>}
         {detailFor === activeSlug && detail.phase === 'ready' && <Detail entity={detail.data} onNavigate={onNavigate}
           onDeletionPending={deletionPending} onDeleted={entityDeleted}
+          onUploadAccessError={status => mutationFailed(new HttpError(status))}
           onAccessError={ingestionAccessError}
           onIgnore={input => void ignoreReference(input)}
           editing={editing} provenanceEditing={provenanceEditing} busy={busy} authExpired={authExpired}
