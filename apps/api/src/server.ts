@@ -18,6 +18,7 @@ import { createPrismaReferenceService } from './obsidian-references.js'
 import { createPrismaQualificationService } from './reference-qualification.js'
 import { createPrismaEntityDeletionService } from './admin/entity-deletion.js'
 import { createPrismaImageService } from './images.js'
+import { createPrismaEditorialSuggestionService } from './editorial-suggestions.js'
 
 config({ path: resolve(import.meta.dirname, '../../../.env'), quiet: true })
 
@@ -48,6 +49,7 @@ const app = createApp(createPrismaStore(prisma), {
   qualification: createPrismaQualificationService(prisma),
   deletion: createPrismaEntityDeletionService(prisma),
   images: createPrismaImageService(prisma),
+  suggestions: createPrismaEditorialSuggestionService(prisma),
   ingestion: createPrismaIngestionAdminStore(prisma),
 }, graph, references)
 const server = app.listen(port, () => {

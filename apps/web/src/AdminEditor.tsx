@@ -6,6 +6,7 @@ import { entityKindName } from '@hesta-codex/shared'
 import { AdminImageUpload } from './AdminImageUpload'
 import { MarkdownHelp } from './MarkdownHelp'
 import { MarkdownImage } from './MarkdownImage'
+import { AdminTermSuggestions } from './AdminTermSuggestions'
 
 const kinds: EntityKind[] = [
   'PERSON', 'PLAYER_CHARACTER', 'PLACE', 'ORGANIZATION', 'FAMILY', 'RELIGION', 'DEITY', 'SPECIES',
@@ -104,6 +105,8 @@ export function AdminEditor({ entity, busy, saveDisabled, error, onSave, onCance
         <label className="admin-editor-wide">Tags, séparés par des virgules<input value={form.tags}
           onChange={(event) => update('tags', event.target.value)} /></label>
         <p className="admin-muted admin-editor-wide">Alias et tags : 30 valeurs maximum, sans entrée vide ni doublon.</p>
+        <AdminTermSuggestions entityId={entity.id} title={form.title} bodyMarkdown={form.bodyMarkdown} aliases={form.aliases} tags={form.tags}
+          disabled={busy || saveDisabled || uploading} onChange={update} onAccessError={onUploadAccessError} />
         <label className="admin-editor-wide">Contenu Markdown<textarea value={form.bodyMarkdown} maxLength={100000} rows={16}
           onChange={(event) => update('bodyMarkdown', event.target.value)} /></label>
         <MarkdownHelp />

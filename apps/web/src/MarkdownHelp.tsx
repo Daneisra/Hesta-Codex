@@ -7,6 +7,7 @@ const examples = [
   ['Liens', '[Texte du lien](https://exemple.test)\nhttps://exemple.test\n[Contact](mailto:contact@exemple.test)'],
   ['Liens par référence et notes de bas de page', '[Texte][lien]\n\n[lien]: https://exemple.test\n\nUne précision[^note].\n\n[^note]: Texte de la note.'],
   ['Liens entre fiches Obsidian', '[[Nom]]\n[[Nom|Libellé affiché]]\n[[Dossier/Nom]]\n[[Nom#Section]]'],
+  ['Lien ciblé vers une fiche Codex', '[[/fiches/slug-de-la-fiche|Texte affiché]]\nLe scan propose ce format pour désigner précisément une fiche existante.'],
   ['Images importées', '![Description accessible](/api/images/identifiant-fourni-par-import)'],
   ['Code dans le texte ou en bloc', '`Texte monospace`\n\n```text\nUn bloc de code conserve les espaces et les exemples de syntaxe.\n```'],
   ['Tableaux', '| Nom | Détail |\n| :--- | ---: |\n| Exemple | Valeur |'],

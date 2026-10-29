@@ -35,6 +35,7 @@ interface Resolved { occurrence: WikiOccurrence; status: WikiStatus; entity?: Re
 /** Pure, deterministic projection. Only confirmed identities identify Obsidian destinations. */
 export function buildReferenceCatalog(entities: ReferenceEntity[], origins: ReferenceOrigin[]) {
   const byId = new Map(entities.map(entity => [entity.id, entity]))
+  const bySlug = new Map(entities.map(entity => [entity.slug, entity]))
   const contexts = new Map<string, ReferenceOrigin[]>()
   const spaces = new Map<string, { index: ReturnType<typeof obsidianLinkIndex>; paths: Map<string, Set<string>>;
     originalPaths: Map<string, string[]>; names: Map<string, Set<string>>; ambiguousTargets: Set<string> }>()
@@ -69,10 +70,24 @@ export function buildReferenceCatalog(entities: ReferenceEntity[], origins: Refe
     }
     space.index = obsidianLinkIndex([...space.originalPaths.keys()].sort())
   }
-  const trees = new Map([...contexts.keys()].map(id => [id, markdownTree(byId.get(id)!.bodyMarkdown)]))
+  const trees = new Map(entities.map(entity => [entity.id, markdownTree(entity.bodyMarkdown)]))
   const headings = new Map([...trees].map(([id, tree]) => [id, markdownHeadings(byId.get(id)!.bodyMarkdown, tree)]))
-  function resolve(occurrence: WikiOccurrence, origin: ReferenceOrigin): Resolved {
+  function explicitDestination(occurrence: WikiOccurrence): Resolved | undefined {
     if (occurrence.embed) return { occurrence, status: 'UNSUPPORTED' }
+    const slug = /^\/fiches\/([a-z0-9]+(?:-[a-z0-9]+)*)$/.exec(occurrence.target)?.[1]
+    if (!slug) return undefined
+    const entity = bySlug.get(slug)
+    return entity ? withAnchor(occurrence, entity) : { occurrence, status: 'MISSING' }
+  }
+  function withAnchor(occurrence: WikiOccurrence, entity: ReferenceEntity): Resolved {
+    if (!occurrence.anchor) return { occurrence, status: 'RESOLVED', entity }
+    const matching = headings.get(entity.id)!.filter(heading => heading.key === wikiKey(occurrence.anchor!))
+    return { occurrence, status: 'RESOLVED', entity, ...(matching.length === 1 ? { anchorId: matching[0]!.id }
+      : { anchorIssue: matching.length ? 'Section ambiguë : lien vers la fiche sans ancre.' : 'Section absente ou non prise en charge : lien vers la fiche sans ancre.' }) }
+  }
+  function resolve(occurrence: WikiOccurrence, origin: ReferenceOrigin): Resolved {
+    const explicit = explicitDestination(occurrence)
+    if (explicit) return explicit
     const space = spaces.get(origin.sourceId)!, path = resolveObsidianPath(pathKey(occurrence.target), pathKey(origin.path), space.index)
     if (path.status === 'UNSUPPORTED' || path.status === 'OUT_OF_SCOPE' || path.status === 'AMBIGUOUS') return { occurrence, status: path.status }
     if (space.ambiguousTargets.has(ambiguityKey(occurrence.target))) return { occurrence, status: 'AMBIGUOUS' }
@@ -91,19 +106,17 @@ export function buildReferenceCatalog(entities: ReferenceEntity[], origins: Refe
     if (path.status === 'FOUND' && !pathCandidates?.size && !explicitAlias) return { occurrence, status: 'UNASSOCIATED' }
     if (candidates.size !== 1) return { occurrence, status: candidates.size > 1 ? 'AMBIGUOUS' : 'MISSING' }
     const entity = byId.get([...candidates][0]!)!
-    if (!occurrence.anchor) return { occurrence, status: 'RESOLVED', entity }
-    const matching = headings.get(entity.id)!.filter(heading => heading.key === wikiKey(occurrence.anchor!))
-    return { occurrence, status: 'RESOLVED', entity, ...(matching.length === 1 ? { anchorId: matching[0]!.id }
-      : { anchorIssue: matching.length ? 'Section ambiguë : lien vers la fiche sans ancre.' : 'Section absente ou non prise en charge : lien vers la fiche sans ancre.' }) }
+    return withAnchor(occurrence, entity)
   }
   const resolved = new Map<string, Resolved[]>(), statsById = new Map<string, ReferenceStats>(), totalStats = emptyStats()
   const edges = new Map<string, ObsidianGraphEdge>()
   let occurrences = 0
   for (const entity of entities) {
     const ownOrigins = contexts.get(entity.id)
-    if (!ownOrigins) continue
     const results = wikiOccurrences(entity.bodyMarkdown, trees.get(entity.id)).map(occurrence => {
-      const choices = ownOrigins.map(origin => resolve(occurrence, origin)), first = choices[0]!
+      const choices = ownOrigins ? ownOrigins.map(origin => resolve(occurrence, origin))
+        : [explicitDestination(occurrence) ?? { occurrence, status: 'MISSING' as const }]
+      const first = choices[0]!
       return choices.every(choice => choice.status === first.status && choice.entity?.id === first.entity?.id && choice.anchorId === first.anchorId)
         ? first : { occurrence, status: 'AMBIGUOUS' as const }
     })
@@ -200,7 +213,7 @@ export function buildReferenceCatalog(entities: ReferenceEntity[], origins: Refe
 
 export async function loadReferenceSnapshot(tx: Prisma.TransactionClient) {
   const entities = await tx.entity.findMany({ select: { id: true, slug: true, title: true, aliases: true,
-    bodyMarkdown: true, kind: true, status: true, visibility: true, updatedAt: true }, orderBy: { id: 'asc' }, take: 2001 })
+    bodyMarkdown: true, tags: true, kind: true, status: true, visibility: true, updatedAt: true }, orderBy: { id: 'asc' }, take: 2001 })
   const associations = await tx.ingestionAssociation.findMany({ where: { source: { kind: 'OBSIDIAN' },
     externalId: { not: null }, decisions: { some: { decision: 'CONFIRMED' } } }, select: {
     sourceId: true, externalId: true, decisions: { where: { decision: 'CONFIRMED' }, select: { entityId: true } },

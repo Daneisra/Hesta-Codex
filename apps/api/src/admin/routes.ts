@@ -18,6 +18,7 @@ import type { QualificationService } from '../reference-qualification.js'
 import type { EntityDeletionService } from './entity-deletion.js'
 import { patchSchema, validationMessage, workflowSchema } from './validation.js'
 import { createIngestionAdminRouter, type IngestionAdminStore } from '../ingestion/admin.js'
+import type { EditorialSuggestionService } from '../editorial-suggestions.js'
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const filtersSchema = z.strictObject({
@@ -40,8 +41,30 @@ function editorLabel(response: { locals: Record<string, unknown> }): string {
 export function createAdminRouter(store: AdminStore, editorial: EditorialService,
   provenance?: ProvenanceService, manual?: ManualService, manualRelations?: ManualRelationService,
   evidenceAdd?: EvidenceAddService, graph?: GraphStore, ingestion?: IngestionAdminStore, references?: ReferenceService,
-  qualification?: QualificationService, deletion?: EntityDeletionService) {
+  qualification?: QualificationService, deletion?: EntityDeletionService, suggestions?: EditorialSuggestionService) {
   const router = Router()
+  if (suggestions) {
+    router.get('/editorial-suggestions/vocabulary', async (_request, response) => { response.json(await suggestions.vocabulary()) })
+    const draftSchema = z.strictObject({ entityId: z.uuid().nullable(), title: z.string().max(200), bodyMarkdown: z.string().max(100000),
+      aliases: z.array(z.string().max(200)).max(30), tags: z.array(z.string().max(100)).max(30) })
+    router.post('/editorial-suggestions/terms', async (request, response) => {
+      const parsed = draftSchema.safeParse(request.body)
+      if (!parsed.success) { response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'Brouillon invalide.' } }); return }
+      response.json(await suggestions.terms(parsed.data))
+    })
+    const scanSchema = z.strictObject({ page: z.number().int().min(1).max(9999).default(1) })
+    router.post('/link-suggestions/scan', async (request, response) => {
+      const parsed = scanSchema.safeParse(request.body)
+      if (!parsed.success) { response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'Paramètres de scan invalides.' } }); return }
+      response.json(await suggestions.scan(parsed.data.page))
+    })
+    const applySchema = z.strictObject({ id: z.string().regex(/^[a-f0-9]{64}$/), fingerprint: z.string().regex(/^[a-f0-9]{64}$/), confirm: z.literal(true) })
+    router.post('/link-suggestions/apply', async (request, response) => {
+      const parsed = applySchema.safeParse(request.body)
+      if (!parsed.success) { response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'Aperçu récent et confirmation requis.' } }); return }
+      response.json(await suggestions.apply(parsed.data, { discordId: adminSession(response).discordId, label: editorLabel(response) }))
+    })
+  }
   if (deletion) {
     router.get('/entities/:slug/deletion', async (request, response) => {
       if (!validSlug(request.params.slug)) {

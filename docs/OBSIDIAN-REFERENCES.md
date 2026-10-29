@@ -13,6 +13,10 @@ Le résolveur de chemins est partagé avec le convertisseur M3.1. La navigation 
 associations `CONFIRMED`, le chemin externe original, le titre éditorial, les alias éditoriaux
 et les alias valides conservés dans la dernière réception du snapshot associé.
 
+Le [scan des connexions](EDITORIAL-SUGGESTIONS.md) peut aussi insérer, après validation,
+`[[/fiches/slug|Texte]]` : ce lien Codex ciblé fonctionne sans origine Obsidian, garde
+le contrôle des visibilités et n’altère pas la résolution des noms/chemins Obsidian.
+
 La résolution reste dans la même Source. Casse et Unicode NFC sont normalisés, sans supprimer
 les accents ni faire de recherche floue. Des chemins distincts après cette normalisation sont
 ambigus, même si leur nom est identique. Deux homonymes dans des dossiers différents nécessitent

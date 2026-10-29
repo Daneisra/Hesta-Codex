@@ -58,6 +58,12 @@ Les images utilisent `POST /api/admin/images` (binaire authentifié, 5 Mio maxim
 lecture, sans cache). Le type `PLAYER_CHARACTER` distingue les PJ des `PERSON` (PNJ).
 Contrats, conservation et préparation Nginx : [EDITORIAL-MEDIA.md](EDITORIAL-MEDIA.md).
 
+Les suggestions d’alias/tags et de connexions sont réservées à l’administration :
+`GET /api/admin/editorial-suggestions/vocabulary`, `POST /api/admin/editorial-suggestions/terms`,
+`POST /api/admin/link-suggestions/scan` (lecture seule) et
+`POST /api/admin/link-suggestions/apply` (aperçu SHA-256 confirmé, édition avec révision).
+Voir [EDITORIAL-SUGGESTIONS.md](EDITORIAL-SUGGESTIONS.md).
+
 | Route admin | Réponse |
 | --- | --- |
 | `GET /api/admin/ingestion/batches` | Batches, comptes et Sources ; 20 par page. |

@@ -16,6 +16,8 @@ import type { ReferenceService } from './obsidian-references.js'
 import type { QualificationService } from './reference-qualification.js'
 import type { EntityDeletionService } from './admin/entity-deletion.js'
 import { imageReadRouter, imageUploadRouter, type ImageService } from './images.js'
+import type { EditorialSuggestionService } from './editorial-suggestions.js'
+import { publicWikiView } from './public-wiki.js'
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const entityKinds = new Set<string>(Object.values(EntityKind))
@@ -45,7 +47,7 @@ function parseEntityFilters(query: Record<string, unknown>): EntityFilters {
 export function createApp(store: CodexStore, privateServices?: {
   auth: AuthDependencies; admin: AdminStore; editorial: EditorialService;
   provenance?: ProvenanceService; manual?: ManualService; manualRelations?: ManualRelationService;
-    evidenceAdd?: EvidenceAddService; graph?: GraphStore; ingestion?: IngestionAdminStore; references?: ReferenceService; qualification?: QualificationService; deletion?: EntityDeletionService; images?: ImageService
+  evidenceAdd?: EvidenceAddService; graph?: GraphStore; ingestion?: IngestionAdminStore; references?: ReferenceService; qualification?: QualificationService; deletion?: EntityDeletionService; images?: ImageService; suggestions?: EditorialSuggestionService
 }, graph?: GraphStore, references?: ReferenceService) {
   const app = express()
   app.disable('x-powered-by')
@@ -59,7 +61,7 @@ export function createApp(store: CodexStore, privateServices?: {
     app.use('/api/admin', requireAdmin(privateServices.auth), requireSameOrigin(privateServices.auth.config.origin),
       express.json({ limit: '1mb' }), createAdminRouter(privateServices.admin, privateServices.editorial,
         privateServices.provenance, privateServices.manual, privateServices.manualRelations,
-        privateServices.evidenceAdd, privateServices.graph, privateServices.ingestion, privateServices.references, privateServices.qualification, privateServices.deletion))
+        privateServices.evidenceAdd, privateServices.graph, privateServices.ingestion, privateServices.references, privateServices.qualification, privateServices.deletion, privateServices.suggestions))
     app.use('/api/auth', (_request, response) => {
       response.status(404).json({ error: { code: 'NOT_FOUND', message: 'Endpoint not found' } })
     })
@@ -114,7 +116,7 @@ export function createApp(store: CodexStore, privateServices?: {
       return
     }
     const wikiNavigation = await references?.navigation(entity.id, entity.updatedAt)
-    response.json({ ...entity, ...(wikiNavigation ? { wikiNavigation } : {}) })
+    response.json({ ...entity, ...publicWikiView(entity.bodyMarkdown, wikiNavigation) })
   })
 
   app.use('/api/v1', (_request, response) => {

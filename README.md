@@ -89,6 +89,10 @@ Les formulaires éditoriaux proposent l'import d'images, l'aide Markdown et le t
 distinct **personnage joueur (PJ)**. Voir [Images et personnages joueurs](docs/EDITORIAL-MEDIA.md)
 pour les limites, permissions, migration et réglage Nginx requis avant livraison.
 
+Les [suggestions éditoriales](docs/EDITORIAL-SUGGESTIONS.md) proposent des alias/tags
+et un scan des mentions non liées depuis le tableau de bord, avec aperçu, validation
+humaine et révision avant tout ajout de wikilinks.
+
 ```bash
 npm run lint
 npm run typecheck

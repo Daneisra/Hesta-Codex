@@ -71,30 +71,27 @@ async function fullDetail(tx: Prisma.TransactionClient, slug: string): Promise<A
   return detail
 }
 
+export async function patchEditorialInTransaction(tx: Prisma.TransactionClient, slug: string, input: AdminEntityPatch,
+  editorLabel: string, actorDiscordId?: string): Promise<AdminEntityDetail> {
+  const current = await tx.entity.findUnique({ where: { slug }, select: editorialSelect })
+  if (!current) throw new EditorialError(404, 'NOT_FOUND', 'Fiche introuvable')
+  checkExpected(current, input.expectedUpdatedAt)
+  if (current.status === 'ARCHIVED') throw new EditorialError(409, 'INVALID_STATUS', 'Une fiche archivée est en lecture seule.')
+  if (sameFields(current, input)) return fullDetail(tx, slug)
+  const updatedAt = nextUpdatedAt(current.updatedAt)
+  const changed = await tx.entity.updateMany({ where: { id: current.id, updatedAt: current.updatedAt, status: current.status },
+    data: { title: input.title, summary: input.summary, bodyMarkdown: input.bodyMarkdown, kind: input.kind,
+      placeKind: input.placeKind, aliases: input.aliases, tags: input.tags, visibility: input.visibility, updatedAt } })
+  if (changed.count !== 1) throw new EditorialError(409, 'ENTITY_MODIFIED', 'Cette fiche a été modifiée depuis son ouverture.')
+  await bindEntityImages(tx, input.bodyMarkdown, current.id, actorDiscordId)
+  await addRevision(tx, { ...current, ...input, updatedAt }, editorLabel, input.revisionMessage ?? null)
+  return fullDetail(tx, slug)
+}
+
 export function createPrismaEditorialService(prisma: PrismaClient): EditorialService {
   return {
     async patch(slug, input, editorLabel, actorDiscordId) {
-      return prisma.$transaction(async (tx) => {
-        const current = await tx.entity.findUnique({ where: { slug }, select: editorialSelect })
-        if (!current) throw new EditorialError(404, 'NOT_FOUND', 'Fiche introuvable')
-        checkExpected(current, input.expectedUpdatedAt)
-        if (current.status === 'ARCHIVED') throw new EditorialError(409, 'INVALID_STATUS', 'Une fiche archivée est en lecture seule.')
-        if (sameFields(current, input)) return fullDetail(tx, slug)
-
-        const updatedAt = nextUpdatedAt(current.updatedAt)
-        const changed = await tx.entity.updateMany({
-          where: { id: current.id, updatedAt: current.updatedAt, status: current.status },
-          data: {
-            title: input.title, summary: input.summary, bodyMarkdown: input.bodyMarkdown,
-            kind: input.kind, placeKind: input.placeKind, aliases: input.aliases,
-            tags: input.tags, visibility: input.visibility, updatedAt,
-          },
-        })
-        if (changed.count !== 1) throw new EditorialError(409, 'ENTITY_MODIFIED', 'Cette fiche a été modifiée depuis son ouverture.')
-        await bindEntityImages(tx, input.bodyMarkdown, current.id, actorDiscordId)
-        await addRevision(tx, { ...current, ...input, updatedAt }, editorLabel, input.revisionMessage ?? null)
-        return fullDetail(tx, slug)
-      })
+      return prisma.$transaction(tx => patchEditorialInTransaction(tx, slug, input, editorLabel, actorDiscordId))
     },
     async publish(slug, input, editorLabel) {
       return prisma.$transaction(async (tx) => {
