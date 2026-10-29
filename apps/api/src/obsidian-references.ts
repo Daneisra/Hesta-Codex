@@ -81,10 +81,14 @@ export function buildReferenceCatalog(entities: ReferenceEntity[], origins: Refe
     const pathCandidates = originals[0] ? space.paths.get(originals[0]) : undefined
     const candidates = new Set(pathCandidates)
     // Explicit paths resolve only by identity. Simple names also consider exact titles/aliases.
-    if (occurrence.target && !/[/\\]/.test(occurrence.target)) {
-      for (const id of space.names.get(wikiKey(occurrence.target.replace(/\.md$/i, ''))) ?? []) candidates.add(id)
+    const name = occurrence.target && !/[/\\]/.test(occurrence.target) ? wikiKey(occurrence.target.replace(/\.md$/i, '')) : null
+    if (name) {
+      for (const id of space.names.get(name) ?? []) candidates.add(id)
     }
-    if (path.status === 'FOUND' && !pathCandidates?.size) return { occurrence, status: 'UNASSOCIATED' }
+    // A deliberate current editorial alias may replace a deleted/unpromoted note's simple name.
+    // Historical metadata, a title alone or an explicit path must never redirect that identity.
+    const explicitAlias = name && [...candidates].some(id => byId.get(id)!.aliases.some(alias => wikiKey(alias) === name))
+    if (path.status === 'FOUND' && !pathCandidates?.size && !explicitAlias) return { occurrence, status: 'UNASSOCIATED' }
     if (candidates.size !== 1) return { occurrence, status: candidates.size > 1 ? 'AMBIGUOUS' : 'MISSING' }
     const entity = byId.get([...candidates][0]!)!
     if (!occurrence.anchor) return { occurrence, status: 'RESOLVED', entity }

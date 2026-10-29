@@ -153,6 +153,66 @@ test('known empty/non-promoted paths are retained and never redirected to a same
   assert.equal(catalog.graph().edges.length, 0)
 })
 
+test('an explicit current alias resolves a former note without restoring its deleted identity', () => {
+  const body = '[[Insulaires]] [[Insulaires|Habitants]] [[Insulaires#Histoire]] [[Peuples/Insulaires]]'
+  const source = entity('source', 'Source', body), target = entity('island', 'Archipel', '## Histoire', { aliases: ['Insulaires'] })
+  const origins = [origin('source', 'Source.md', { obsidian: { wikilinks: [{ status: 'FOUND', path: 'Peuples/Insulaires.md' }] } }),
+    origin('island', 'Lieux/Archipel.md')]
+  const before = buildReferenceCatalog([source, target, entity('old', 'Insulaires')], [...origins, origin('old', 'Peuples/Insulaires.md')])
+  assert.equal(before.detail('source', stamp)!.links[0]!.href, null)
+  assert.equal(before.detail('source', stamp)!.stats.ambiguous, 2)
+  const catalog = buildReferenceCatalog([source, target], origins), detail = catalog.detail('source', stamp)!
+  assert.deepEqual(detail.links.map(link => link.href), ['/admin/fiches/island', '/admin/fiches/island',
+    '/admin/fiches/island#obsidian-histoire', null])
+  assert.equal(detail.links[1]!.label, 'Habitants')
+  assert.deepEqual(detail.stats, { occurrences: 4, resolved: 2, ambiguous: 0, missing: 0, unassociated: 1, unsupported: 0 })
+  assert.equal(detail.outgoing[0]!.occurrences, 3)
+  assert.equal(catalog.detail('island', stamp)!.incoming[0]!.id, 'source')
+  assert.deepEqual(catalog.graph().edges.map(edge => [edge.source, edge.target, edge.occurrences]), [['source', 'island', 3]])
+  assert.equal(catalog.entities.has('old'), false)
+  assert.equal(source.bodyMarkdown, body)
+})
+
+test('a known unassociated note is not reassigned by title, imported alias, unconfirmed identity or another Source', () => {
+  for (const variant of ['title', 'imported', 'unconfirmed', 'other-source'] as const) {
+    const target = entity('target', variant === 'title' ? 'Réserve' : 'Cible', '', { aliases: variant === 'title' || variant === 'imported' ? [] : ['Réserve'] })
+    const catalog = buildReferenceCatalog([entity('source', 'Source', '[[Réserve]]'), target], [
+      origin('source', 'Source.md', { obsidian: { wikilinks: [{ status: 'FOUND', path: 'Archives/Réserve.md' }] } }),
+      ...(variant === 'unconfirmed' ? [] : [origin('target', 'Cible.md', { aliases: ['Réserve'] }, variant === 'other-source' ? 'other' : 'vault')]),
+    ])
+    assert.equal(catalog.detail('source', stamp)!.stats.unassociated, 1, variant)
+    assert.equal(catalog.graph().edges.length, 0, variant)
+  }
+})
+
+test('alias fallback never chooses between current homonyms or overrides an original ambiguity', () => {
+  for (const mode of ['aliases', 'title', 'live-path', 'original-ambiguity'] as const) {
+    const target = entity('target', 'Cible', '', { aliases: ['Réserve'] })
+    const other = entity('other', mode === 'title' ? 'Réserve' : 'Autre', '', { aliases: mode === 'aliases' ? ['Réserve'] : [] })
+    const catalog = buildReferenceCatalog([entity('source', 'Source', '[[Réserve]]'), target, other], [
+      origin('source', 'Source.md', { obsidian: { wikilinks: [{ status: 'FOUND', path: 'Archives/Réserve.md' },
+        ...(mode === 'original-ambiguity' ? [{ status: 'AMBIGUOUS', target: 'Réserve' }] : [])] } }),
+      origin('target', 'Cible.md'), origin('other', mode === 'live-path' ? 'Archives/Réserve.md' : 'Autre.md'),
+    ])
+    assert.equal(catalog.detail('source', stamp)!.stats.ambiguous, 1, mode)
+    assert.equal(catalog.graph().edges.length, 0, mode)
+  }
+})
+
+test('alias fallback obeys public visibility and is invalidated when the explicit alias is removed', () => {
+  for (const status of ['DRAFT', 'PROPOSED', 'PUBLISHED', 'ARCHIVED']) for (const visibility of ['PUBLIC', 'PLAYERS', 'GM', 'SECRET']) {
+    const source = entity('source', 'Source', '[[Réserve]]', { status: 'PUBLISHED', visibility: 'PUBLIC' })
+    const target = entity('private-target', 'Cible', '', { aliases: [' réSERVE '], status, visibility })
+    const origins = [origin('source', 'Source.md', { obsidian: { wikilinks: [{ status: 'FOUND', path: 'Réserve.md' }] } }), origin('private-target', 'Cible.md')]
+    const catalog = buildReferenceCatalog([source, target], origins)
+    assert.equal(catalog.detail('source', stamp)!.links[0]!.href, '/admin/fiches/private-target')
+    const projection = catalog.navigation('source', stamp, true)!
+    assert.equal(projection.links[0]!.href, status === 'PUBLISHED' && visibility === 'PUBLIC' ? '/fiches/private-target' : null)
+    if (status !== 'PUBLISHED' || visibility !== 'PUBLIC') assert.equal(JSON.stringify(projection).includes('private-target'), false)
+    assert.equal(buildReferenceCatalog([source, { ...target, aliases: [] }], origins).detail('source', stamp)!.stats.unassociated, 1)
+  }
+})
+
 test('case and Unicode normalization cannot bypass absent identities or collapse distinct paths', () => {
   const entities = [entity('source', 'Source', '[[vide]] [[re\u0301gion/e\u0301te\u0301]] [[Doublon]]'),
     entity('target', 'Été'), entity('a', 'Doublon'), entity('b', 'Doublon')]

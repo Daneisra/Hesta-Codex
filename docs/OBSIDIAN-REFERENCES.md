@@ -29,6 +29,15 @@ même si un seul homonyme a été promu : l'autre peut être une note vide dont 
 candidat n'a été exporté. Un chemin explicite différent peut lever cette ambiguïté lorsqu'il
 identifie de manière fiable une association existante.
 
+Après suppression d'une ancienne fiche, son chemin peut donc rester connu sans destination.
+Pour un nom simple, un **alias éditorial actuel explicitement ajouté** à une fiche existante
+et associée dans la même Source permet néanmoins la résolution. L'ensemble des candidats
+actuels doit identifier une seule fiche : un homonyme ou une ambiguïté d'origine bloque
+toujours le lien. Un titre seul ou un alias historique d'import ne réaffecte jamais une note
+sans fiche. Un chemin explicite continue d'identifier uniquement sa propre note, même si son
+nom est devenu l'alias d'une autre fiche. Le Markdown et les associations de staging restent
+inchangés ; aucune fiche supprimée n'est recréée. Retirer l'alias retire aussi cette résolution.
+
 Une section correspond à un titre Markdown unique (casse/espaces/NFC normalisés). Les titres
 rendus reçoivent un identifiant stable préfixé `obsidian-`. Une section absente, répétée ou une
 ancre de bloc `^identifiant` donne un lien vers la fiche sans fragment, accompagné d'un diagnostic.
@@ -123,6 +132,21 @@ résolues, 1 absente et 1 arc (3 occurrences), sans ambiguïté. Une autre fixtu
 31 chemins réservés sans destination créée. Les nombres de production restent inconnus localement.
 
 ## Validation locale
+
+Correctif des alias après suppression, 29 octobre 2026 : **848 tests réussis**
+(474 API, 374 web), dont cinq nouveaux tests de régression. Le défaut est reproduit
+avant correction. La suppression réelle en base fictive en mémoire, l'ajout/retrait
+d'alias, les homonymes, les chemins explicites, les ancres, les sources distinctes
+et les 16 combinaisons statut/visibilité sont vérifiés. Lint, typecheck, build,
+Prisma validate/generate et contrôle du diff réussis. Aucun changement de schéma.
+
+Recette Edge locale à 1 440 × 1 000 et 390 × 844 avec le véritable résolveur et une
+API fictive : lien par alias et référence entrante corrects, destination privée
+non navigable publiquement, destination publiée/publique navigable. Aucune erreur
+JavaScript, écriture de recette, requête externe de page ou donnée réelle utilisée.
+Les scripts, journaux et captures restent hors Git dans le répertoire temporaire.
+
+Validation initiale de la navigation Obsidian :
 
 661 tests réussis : 408 API et 253 web. Lint, typecheck, build, Prisma validate/generate
 et contrôle du diff passent. Les tests de base existants, notamment ceux du staging et du

@@ -135,6 +135,32 @@ test('a PostgreSQL failure after dependent deletes rolls back every row and asso
   assert.deepEqual(await snapshots(), before)
 })
 
+test('references recalculate after actual deletion and an explicit alias edit without changing staging or editorial relations', async () => {
+  const other = await prisma.entity.update({ where: { id: id(2) }, data: { bodyMarkdown: '[[Cible]] [[Tests/Cible]]' } })
+  const references = createPrismaReferenceService(prisma)
+  const detail = () => references.detail(other.id, other.updatedAt.toISOString())
+  assert.deepEqual((await detail())!.links.map(link => link.href), ['/admin/fiches/cible', '/admin/fiches/cible'])
+  await service.remove('cible', await request())
+  assert.equal((await detail())!.stats.unassociated, 2)
+  const stagingBefore = await snapshots()
+  await prisma.entity.update({ where: { id: id(3) }, data: { aliases: ['Cible'] } })
+  const resolved = (await detail())!
+  assert.deepEqual(resolved.links.map(link => link.href), ['/admin/fiches/tiers', null])
+  assert.equal(resolved.outgoing[0]!.id, id(3))
+  const target = await prisma.entity.findUniqueOrThrow({ where: { id: id(3) } })
+  assert.equal((await references.detail(target.id, target.updatedAt.toISOString()))!.incoming.some(item => item.id === id(2)), true)
+  assert.equal((await createPrismaGraphStore(prisma, references).adminGraph()).edges.some(edge => edge.origin === 'OBSIDIAN' && edge.source === id(2) && edge.target === id(3)), true)
+  assert.equal((await createPrismaGraphStore(prisma, references).publicGraph()).edges.length, 0)
+  await prisma.entity.update({ where: { id: id(3) }, data: { aliases: [] } })
+  assert.equal((await detail())!.stats.unassociated, 2)
+  const after = await snapshots()
+  for (const name of ['Relation', 'Evidence', 'Revision', 'Source', 'IngestionBatch', 'IngestionItem', 'IngestionReceipt', 'IngestionAssociation', 'IngestionAssociationDecision']) {
+    assert.deepEqual(after[tables.indexOf(name)], stagingBefore[tables.indexOf(name)], name)
+  }
+  assert.equal(await prisma.entity.count({ where: { id: id(1) } }), 0)
+  assert.equal((await prisma.entity.findUniqueOrThrow({ where: { id: id(2) } })).bodyMarkdown, other.bodyMarkdown)
+})
+
 test('changed dependencies, replaced UUIDs and unconfirmed requests are rejected without any deletion', async () => {
   const input = await request()
   await prisma.evidence.create({ data: { sourceId: id(50), relationId: id(10), claimText: 'Nouvelle preuve fictive' } })
