@@ -126,37 +126,63 @@ export function scanConnections(snapshot: Snapshot) {
   const pattern = matcher([...names.keys()]), catalog = buildReferenceCatalog(entities, origins)
   const pair = (a: string, b: string) => JSON.stringify([a, b].sort())
   const connected = new Set([...catalog.graph().edges.map(edge => pair(edge.source, edge.target)), ...relations.map(row => pair(row.fromEntityId, row.toEntityId))])
-  const fingerprint = hash({ entities: [...entities].sort((a, b) => compare(a.id, b.id)),
+  const fingerprint = hash({ algorithm: 2, entities: [...entities].sort((a, b) => compare(a.id, b.id)),
     origins: [...origins].sort((a, b) => compare(JSON.stringify(a), JSON.stringify(b))),
     relations: [...relations].sort((a, b) => compare(JSON.stringify(a), JSON.stringify(b))) })
   const groups = new Map<string, LinkSuggestion>(), ambiguities: LinkSuggestionScan['ambiguities'] = []
-  let ambiguous = 0, existing = 0, occurrences = 0, matches = 0
-  if (pattern) for (const note of entities.filter(note => note.status !== 'ARCHIVED').sort((a, b) => compare(a.id, b.id))) {
-    for (const range of proseRanges(note.bodyMarkdown)) for (const match of range.text.matchAll(pattern)) {
-      if (++matches > 100000) throw tooLarge()
-      const ids = [...names.get(wikiKey(match[0]))!]
-      if (ids.length !== 1) {
-        ambiguous++
-        if (ambiguities.length < 30) ambiguities.push({ from: view(note), text: match[0], candidates: ids.map(id => byId.get(id)!.title) })
-        continue
+  let ambiguous = 0, existing = 0, occurrences = 0, matches = 0, repairs = 0
+  function add(note: SuggestionNote, name: string, start: number, end: number, replacement: (slug: string) => string, repair = false) {
+    if (++matches > 100000) throw tooLarge()
+    const ids = [...(names.get(wikiKey(name)) ?? [])]
+    if (!ids.length) return
+    if (ids.length !== 1) {
+      ambiguous++
+      if (ambiguities.length < 30) ambiguities.push({ from: view(note), text: name, candidates: ids.map(id => byId.get(id)!.title) })
+      return
+    }
+    const target = byId.get(ids[0]!)!
+    if (target.id === note.id) return
+    // Existing connectivity must not hide an already authored wikilink that still needs repair.
+    if (!repair && connected.has(pair(note.id, target.id))) { existing++; return }
+    const id = hash([note.id, target.id]), group = groups.get(id) ?? { id, fingerprint, from: view(note), to: view(target), occurrences: [] }
+    let escapes = 0
+    for (let at = start - 1; at >= 0 && note.bodyMarkdown[at] === '\\'; at--) escapes++
+    if (escapes % 2) return
+    group.occurrences.push({ start, end, text: note.bodyMarkdown.slice(start, end), before: note.bodyMarkdown.slice(Math.max(0, start - 100), start),
+      after: note.bodyMarkdown.slice(end, end + 100), wikilink: replacement(target.slug), ...(repair ? { repair: true } : {}) })
+    groups.set(id, group); occurrences++
+    if (repair) repairs++
+    if (groups.size > 5000 || occurrences > 20000 || ambiguous > 20000 || existing > 100000) throw tooLarge()
+  }
+  for (const note of entities.filter(note => note.status !== 'ARCHIVED').sort((a, b) => compare(a.id, b.id))) {
+    const cells: Array<{ start: number; end: number }> = []
+    const math = [...note.bodyMarkdown.matchAll(/\$\$[\s\S]*?(?:\$\$|$)|\$[^$\r\n]*\$/g)]
+      .map(item => ({ start: item.index, end: item.index + item[0].length }))
+    walkWikiProse(markdownTree(note.bodyMarkdown), node => {
+      if (node.type === 'tableCell' && node.position?.start.offset !== undefined && node.position.end.offset !== undefined) {
+        cells.push({ start: node.position.start.offset, end: node.position.end.offset })
       }
-      const target = byId.get(ids[0]!)!
-      if (target.id === note.id) continue
-      if (connected.has(pair(note.id, target.id))) { existing++; continue }
-      const id = hash([note.id, target.id]), group = groups.get(id) ?? { id, fingerprint, from: view(note), to: view(target), occurrences: [] }
+    })
+    const separator = (at: number) => cells.some(cell => cell.start <= at && at < cell.end) ? '\\|' : '|'
+    if (pattern) for (const range of proseRanges(note.bodyMarkdown)) for (const match of range.text.matchAll(pattern)) {
       const start = range.start + match.index!, end = start + match[0].length
-      let escapes = 0
-      for (let at = start - 1; at >= 0 && note.bodyMarkdown[at] === '\\'; at--) escapes++
-      if (escapes % 2) continue
-      const wikilink = `[[/fiches/${target.slug}|${match[0]}]]`
-      group.occurrences.push({ start, end, text: match[0], before: note.bodyMarkdown.slice(Math.max(0, start - 100), start),
-        after: note.bodyMarkdown.slice(end, end + 100), wikilink })
-      groups.set(id, group); occurrences++
-      if (groups.size > 5000 || occurrences > 20000 || ambiguous > 20000 || existing > 100000) throw tooLarge()
+      add(note, match[0], start, end, slug => `[[/fiches/${slug}${separator(start)}${match[0]}]]`)
+    }
+    for (const link of catalog.unresolved(note.id)) {
+      // A simple name can be reviewed against current editorial titles/aliases. Do not guess paths or original ambiguities.
+      if (!link.target || /[/\\]/.test(link.target) || link.embed) continue
+      if (math.some(range => range.start <= link.start && link.end <= range.end)) continue
+      const raw = note.bodyMarkdown.slice(link.start, link.end), targetAt = raw.indexOf(link.target, 2)
+      if (targetAt < 0) continue
+      add(note, link.target.replace(/\.md$/i, ''), link.start, link.end, slug => {
+        const fixed = raw.slice(0, targetAt) + `/fiches/${slug}` + raw.slice(targetAt + link.target.length)
+        return link.alias !== null ? fixed : `${fixed.slice(0, -2)}${separator(link.start)}${link.target}]]`
+      }, true)
     }
   }
-  return { entities: entities.length, items: [...groups.values()].sort((a, b) => compare(wikiKey(a.from.title), wikiKey(b.from.title)) ||
-    compare(wikiKey(a.to.title), wikiKey(b.to.title)) || compare(a.id, b.id)), occurrences, ambiguous, existing, ambiguities }
+  return { entities: entities.length, items: [...groups.values()].map(group => ({ ...group, occurrences: group.occurrences.sort((a, b) => a.start - b.start) }))
+    .sort((a, b) => compare(wikiKey(a.from.title), wikiKey(b.from.title)) || compare(wikiKey(a.to.title), wikiKey(b.to.title)) || compare(a.id, b.id)),
+    occurrences, ambiguous, existing, repairs, ambiguities }
 }
 
 export interface EditorialSuggestionService {
@@ -202,7 +228,7 @@ export function createPrismaEditorialSuggestionService(prisma: PrismaClient): Ed
           // Use only editorial fields; strict validation rejects oversized bodies rather than truncating.
           const fields = { title: current.title, summary: current.summary, bodyMarkdown: body, kind: current.kind, placeKind: current.placeKind,
             aliases: current.aliases, tags: current.tags, visibility: current.visibility, expectedUpdatedAt: current.updatedAt.toISOString(),
-            revisionMessage: `Ajout de ${group.occurrences.length} lien(s) vers /${group.to.slug} après revue du scan.` }
+            revisionMessage: `Ajout/correction de ${group.occurrences.length} lien(s) vers /${group.to.slug} après revue du scan.` }
           const checked = patchSchema.safeParse(fields)
           if (!checked.success) throw new EditorialError(400, 'INVALID_LINK_UPDATE', 'Le contenu dépasserait les limites de la fiche ou ses champs doivent être corrigés.')
           return patchEditorialInTransaction(tx, current.slug, checked.data, actor.label, actor.discordId)

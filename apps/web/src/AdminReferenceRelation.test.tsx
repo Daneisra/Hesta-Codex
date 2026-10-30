@@ -100,12 +100,12 @@ async function review(user: ReturnType<typeof userEvent.setup>, code = 'located_
 }
 
 describe('qualification humaine des références Obsidian', () => {
-  it('propose les 35 types regroupés, leurs 28 inverses et les sept symétries sans choisir automatiquement', async () => {
+  it('propose les 39 types regroupés, leurs 32 inverses et les sept symétries sans choisir automatiquement', async () => {
     const catalogue = relationTypeDefinitions.map((type, index) => ({ ...type, id: `catalogue-${index}` }))
     api({ catalogue: [...catalogue].reverse() }); const user = userEvent.setup(); await open(user)
     const select = screen.getByRole('combobox', { name: 'Type et sens' }) as HTMLSelectElement
     expect([...select.querySelectorAll('optgroup')].map(group => group.label)).toEqual(relationCategories.map(group => group.label))
-    expect([...select.options].filter(option => option.value)).toHaveLength(63)
+    expect([...select.options].filter(option => option.value)).toHaveLength(71)
     expect([...select.options].filter(option => option.textContent?.includes('symétrique'))).toHaveLength(7)
     expect(select.value).toBe('')
     await user.selectOptions(select, 'worshipped_by')
@@ -120,6 +120,10 @@ describe('qualification humaine des références Obsidian', () => {
       ['covets', 'convoite'], ['coveted_by', 'est convoité par'],
       ['seeks', 'recherche'], ['sought_by', 'est recherché par'],
       ['holds', 'détient'], ['held_by', 'est détenu par'],
+      ['visited', 'a voyagé en'], ['visited_by', 'a reçu la visite de'],
+      ['lived_in', 'a vécu en'], ['previously_inhabited_by', 'a été habité par'],
+      ['born_in', 'est né à'], ['birthplace_of', 'est le lieu de naissance de'],
+      ['died_in', 'est mort à'], ['deathplace_of', 'est le lieu de décès de'],
     ] as const) expect(screen.getByRole('option', { name: label })).toHaveProperty('value', code)
   })
 
@@ -137,6 +141,22 @@ describe('qualification humaine des références Obsidian', () => {
     expect(create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ fromEntityId: ownerId, toEntityId: targetId,
       relationCode: 'coveted_by', visibility: 'GM', source: { mode: 'existing', sourceId: source.id },
       evidence: expect.objectContaining({ locator: proof.locator, sourceExcerpt: excerpt, visibility: 'GM' }) }))
+  })
+
+  it('confirme une ancienne résidence depuis le lieu sans inverser la signification ni perdre la preuve', async () => {
+    const catalogue = relationTypeDefinitions.map((type, index) => ({ ...type, id: `catalogue-${index}` }))
+    api({ catalogue, targetKind: 'PERSON' }); const create = vi.fn(), user = userEvent.setup()
+    render(<AdminCreateRelation entity={{ ...owner, kind: 'PLACE', placeKind: 'CITY' }} seed={seed} busy={false} disabled={false} error={null}
+      onCreate={create} onClearError={vi.fn()} onDirtyChange={vi.fn()} onNavigate={vi.fn()} />)
+    await screen.findByRole('option', { name: 'a été habité par' })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Inverser les fiches' })).not.toHaveProperty('disabled', true))
+    await review(user, 'previously_inhabited_by')
+    expect(create).not.toHaveBeenCalled()
+    expect(screen.getByText('Homonyme → lived_in → Homonyme')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Créer la relation' }))
+    expect(create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ fromEntityId: ownerId, toEntityId: targetId,
+      relationCode: 'previously_inhabited_by', visibility: 'GM', source: { mode: 'existing', sourceId: source.id },
+      evidence: expect.objectContaining({ locator: proof.locator, sourceExcerpt: excerpt }) }))
   })
 
   it('un choix inhabituel affiche un avertissement dans le formulaire et le récapitulatif sans bloquer la confirmation humaine', async () => {

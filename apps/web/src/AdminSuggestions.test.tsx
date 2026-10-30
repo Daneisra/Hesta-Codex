@@ -34,6 +34,16 @@ describe('scan des connexions', () => {
     expect(screen.queryByRole('checkbox')).toBeNull()
     expect(fetcher).toHaveBeenCalledTimes(1)
   })
+  it('identifies existing wikilinks to repair and previews the replacement without applying it automatically', async () => {
+    const repair = { ...item, occurrences: [{ ...item.occurrences[0]!, text: '[[Cible]]', repair: true }] }
+    const fetcher = vi.fn<(url: string, init?: RequestInit) => Promise<unknown>>(async () => response({ ...plan, repairs: 1, items: [repair] }))
+    vi.stubGlobal('fetch', fetcher); scanner(); await openReview()
+    expect(screen.getByText(/1 wikilinks à réparer/)).toBeTruthy()
+    expect(screen.getByText(/leur destination sera corrigée/i)).toBeTruthy()
+    expect(screen.getByText('Wikilink à réparer 1 : [[Cible]]')).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Ajouter les liens validés' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
   it('submits the approved fingerprint once despite double clicks, refreshes the scan and reports the revision', async () => {
     let done: ((value: unknown) => void) | undefined, scans = 0
     const fetcher = vi.fn<(url: string, init?: RequestInit) => Promise<unknown>>((url: string) => url.endsWith('/apply') ? new Promise(resolve => { done = resolve }) : Promise.resolve(response(++scans === 1 ? plan : { ...plan, items: [], connections: 0 })))

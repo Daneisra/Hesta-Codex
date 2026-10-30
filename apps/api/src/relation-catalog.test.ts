@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { readFile, readdir } from 'node:fs/promises'
 import { test } from 'node:test'
 import { PGlite } from '@electric-sql/pglite'
-import { groupRelationTypes, originalRelationCodes, relationCatalog, relationKindWarning, relationTypeDefinitions } from '@hesta-codex/shared'
+import { canonicalRelationEndpoints, groupRelationTypes, originalRelationCodes, relationCatalog, relationKindWarning, relationTypeDefinitions } from '@hesta-codex/shared'
 import type { PrismaClient } from './prisma-client/client.ts'
 
 const migrations = new URL('../../../prisma/migrations/', import.meta.url)
@@ -11,17 +11,19 @@ const migrationName = '20261011120000_editorial_relation_catalog'
 const migrationSql = await readFile(new URL(`${migrationName}/migration.sql`, migrations), 'utf8')
 const additionalMigration = await readFile(new URL('20261018000000_additional_editorial_relations/migration.sql', migrations), 'utf8')
 const intentionsMigration = await readFile(new URL('20261021000000_editorial_intentions_and_custody/migration.sql', migrations), 'utf8')
+const lifePlacesMigration = await readFile(new URL('20261030000000_journeys_and_life_places/migration.sql', migrations), 'utf8')
 const newCodes = ['works_for', 'protects', 'can_become', 'previously_owned', 'previously_used']
 const intentionCodes = ['seeks', 'covets', 'holds']
+const lifePlaceCodes = ['visited', 'lived_in', 'born_in', 'died_in']
 const additions = relationTypeDefinitions.filter(type => !originalRelationCodes.some(code => code === type.code))
 const original = relationTypeDefinitions.filter(type => originalRelationCodes.some(code => code === type.code))
 const id = (number: number) => `00000000-0000-4000-8000-${String(number).padStart(12, '0')}`
 
-test('catalogue has 35 types, 7 symmetric types, unique direct/inverse codes and the unchanged four original definitions', () => {
-  assert.equal(relationCatalog.length, 35); assert.equal(additions.length, 31)
+test('catalogue has 39 types, 7 symmetric types, unique direct/inverse codes and the unchanged four original definitions', () => {
+  assert.equal(relationCatalog.length, 39); assert.equal(additions.length, 35)
   assert.equal(relationCatalog.filter(type => type.symmetric).length, 7)
   const codes = relationCatalog.flatMap(type => [type.code, ...(type.inverseCode ? [type.inverseCode] : [])])
-  assert.equal(codes.length, 63); assert.equal(new Set(codes).size, codes.length)
+  assert.equal(codes.length, 71); assert.equal(new Set(codes).size, codes.length)
   for (const type of relationCatalog) {
     assert.match(type.code, /^[a-z][a-z0-9_]*$/); assert.ok(type.code.length <= 64 && type.label.length <= 200)
     assert.equal(type.symmetric, type.inverseCode === null); assert.equal(type.symmetric, type.inverseLabel === null)
@@ -35,9 +37,10 @@ test('catalogue has 35 types, 7 symmetric types, unique direct/inverse codes and
   ])
   const ids: string[] = []
   for (const [sql, expected] of [
-    [migrationSql, additions.filter(type => !newCodes.includes(type.code) && !intentionCodes.includes(type.code))],
+    [migrationSql, additions.filter(type => !newCodes.includes(type.code) && !intentionCodes.includes(type.code) && !lifePlaceCodes.includes(type.code))],
     [additionalMigration, additions.filter(type => newCodes.includes(type.code))],
     [intentionsMigration, additions.filter(type => intentionCodes.includes(type.code))],
+    [lifePlacesMigration, additions.filter(type => lifePlaceCodes.includes(type.code))],
   ] as const) {
     const serialized = sql.match(/new_types CONSTANT jsonb := '([\s\S]*?)'::jsonb/)![1]!.replaceAll("''", "'")
     const sqlTypes = JSON.parse(serialized) as Array<typeof additions[number] & { id: string }>
@@ -45,7 +48,7 @@ test('catalogue has 35 types, 7 symmetric types, unique direct/inverse codes and
       inverseLabel: type.inverseLabel, symmetric: type.symmetric })), expected)
     ids.push(...sqlTypes.map(type => type.id))
   }
-  assert.equal(new Set(ids).size, 31)
+  assert.equal(new Set(ids).size, 35)
 })
 
 test('desire, active search and custody have distinct meanings and correct inverse kind expectations', () => {
@@ -64,6 +67,26 @@ test('desire, active search and custody have distinct meanings and correct inver
   assert.equal(relationKindWarning('seeks', 'PERSON', 'CONCEPT'), null)
   assert.equal(relationKindWarning('seeks', 'CREATURE', 'ARTIFACT'), null)
   assert.match(relationKindWarning('held_by', 'PERSON', 'ARTIFACT')!, /choix reste autorisé/)
+})
+
+test('journeys, former residence, birth and death retain distinct meanings and normalize their inverses for PJ/PNJ', () => {
+  for (const [index, [code, label, inverseCode, inverseLabel]] of [
+    ['visited', 'a voyagé en', 'visited_by', 'a reçu la visite de'],
+    ['lived_in', 'a vécu en', 'previously_inhabited_by', 'a été habité par'],
+    ['born_in', 'est né à', 'birthplace_of', 'est le lieu de naissance de'],
+    ['died_in', 'est mort à', 'deathplace_of', 'est le lieu de décès de'],
+  ].entries()) {
+    const type = { ...relationTypeDefinitions.find(type => type.code === code)!, id: id(9000 + index) }
+    assert.deepEqual(type, { id: id(9000 + index), code, label, inverseCode, inverseLabel, symmetric: false })
+    for (const kind of ['PERSON', 'PLAYER_CHARACTER', 'CREATURE', 'DEITY'] as const) {
+      assert.equal(relationKindWarning(code!, kind, 'PLACE'), null)
+      assert.equal(relationKindWarning(inverseCode!, 'PLACE', kind), null)
+    }
+    assert.deepEqual(canonicalRelationEndpoints(type, code!, id(1), id(2)), canonicalRelationEndpoints(type, inverseCode!, id(2), id(1)))
+  }
+  assert.equal(relationTypeDefinitions.find(type => type.code === 'inhabits')!.label, 'habite dans')
+  assert.equal(relationTypeDefinitions.find(type => type.code === 'originates_from')!.label, 'est originaire de')
+  assert.match(relationKindWarning('born_in', 'ARTIFACT', 'PLACE')!, /choix reste autorisé/)
 })
 
 test('grouping is stable, uses actual database UUIDs/labels, preserves custom types and never offers absent types', () => {
@@ -139,7 +162,7 @@ async function seedAdapter(db: PGlite) {
   await installRelationCatalog(prisma)
 }
 
-test('PostgreSQL installs the 23, five and three additions twice, preserving all 130 entities, proofs, revisions, associations and existing relations', async () => {
+test('PostgreSQL installs the 23, five, three and four additions twice, preserving all 130 entities, proofs, revisions, associations and existing relations', async () => {
   const db = await database()
   try {
     await db.exec(`
@@ -168,13 +191,17 @@ test('PostgreSQL installs the 23, five and three additions twice, preserving all
     const previous32 = (await db.query<{ id: string }>('SELECT * FROM "RelationType" ORDER BY id')).rows
     assert.equal(previous32.length, 32)
     await db.exec(intentionsMigration)
+    const previous35 = (await db.query<{ id: string }>('SELECT * FROM "RelationType" ORDER BY id')).rows
+    assert.equal(previous35.length, 35)
+    await db.exec(lifePlacesMigration)
     const installed = await snapshot(db, ['RelationType'])
-    assert.equal(installed[0]!.length, 35)
+    assert.equal(installed[0]!.length, 39)
+    assert.deepEqual((await db.query('SELECT * FROM "RelationType" WHERE id = ANY($1::uuid[]) ORDER BY id', [previous35.map(row => row.id)])).rows, previous35)
     assert.deepEqual((await db.query('SELECT * FROM "RelationType" WHERE id = ANY($1::uuid[]) ORDER BY id', [previous32.map(row => row.id)])).rows, previous32)
     assert.deepEqual((await db.query('SELECT * FROM "RelationType" WHERE id = ANY($1::uuid[]) ORDER BY id', [previousTypes.map(row => row.id)])).rows, previousTypes)
     assert.deepEqual((await db.query('SELECT * FROM "RelationType" WHERE id = ANY($1::uuid[]) ORDER BY id', [originalTypes.map(row => row.id)])).rows, originalTypes)
     assert.deepEqual(await snapshot(db, tables), before)
-    await db.exec(migrationSql); await db.exec(additionalMigration); await db.exec(intentionsMigration)
+    await db.exec(migrationSql); await db.exec(additionalMigration); await db.exec(intentionsMigration); await db.exec(lifePlacesMigration)
     assert.deepEqual(await snapshot(db, ['RelationType']), installed)
     await seedAdapter(db); assert.deepEqual(await snapshot(db, ['RelationType']), installed)
     assert.deepEqual(await snapshot(db, tables), before)
@@ -192,8 +219,10 @@ test('PostgreSQL migration and seed are idempotent even when a new code already 
       ['cb9415c6-f258-4d92-aaf2-000000000001', 'another_custom', 'Autre type fictif'])
     await db.query('INSERT INTO "RelationType" (id,code,label,"updatedAt") VALUES ($1,$2,$3,CURRENT_TIMESTAMP)',
       ['dcb2d3a4-7eb1-4b35-bab3-000000000001', 'third_custom', 'Troisième type fictif'])
+    await db.query('INSERT INTO "RelationType" (id,code,label,"updatedAt") VALUES ($1,$2,$3,CURRENT_TIMESTAMP)',
+      ['8c412e13-d18b-4f5b-89a4-000000000001', 'fourth_custom', 'Quatrième type fictif'])
     const seeded = await snapshot(db, ['RelationType'])
-    await db.exec(migrationSql); await db.exec(additionalMigration); await db.exec(intentionsMigration); await seedAdapter(db)
+    await db.exec(migrationSql); await db.exec(additionalMigration); await db.exec(intentionsMigration); await db.exec(lifePlacesMigration); await seedAdapter(db)
     assert.deepEqual(await snapshot(db, ['RelationType']), seeded)
   } finally { await db.close() }
 })
@@ -217,6 +246,29 @@ test('PostgreSQL rejects intentions/custody code collisions, incompatible defini
       ['dcb2d3a4-7eb1-4b35-bab3-000000000003', 'custom', 'UUID occupé'])
     const before = await snapshot(db, ['RelationType'])
     await assert.rejects(db.exec(intentionsMigration), /duplicate key/)
+    assert.deepEqual(await snapshot(db, ['RelationType']), before)
+  } finally { await db.close() }
+})
+
+test('PostgreSQL rejects journey/life-place namespace conflicts and UUID collisions atomically, preserving existing types', async () => {
+  const db = await database()
+  try {
+    await db.exec(migrationSql); await db.exec(additionalMigration); await db.exec(intentionsMigration)
+    for (const [code, inverse, label] of [['visited_by', null, 'Collision fictive'], ['custom', 'lived_in', 'Collision fictive'],
+      ['custom', 'deathplace_of', 'Collision fictive'], ['born_in', 'birthplace_of', 'Définition incompatible']] as const) {
+      await db.query('INSERT INTO "RelationType" (id,code,label,"inverseCode","inverseLabel","symmetric","updatedAt") VALUES ($1,$2,$3,$4,$5,false,CURRENT_TIMESTAMP)',
+        [id(4000), code, label, inverse, inverse ? 'Inverse fictif' : null])
+      const before = await snapshot(db, ['RelationType'])
+      await assert.rejects(db.exec(lifePlacesMigration), /Conflicting relation code|Existing relation definition differs/)
+      assert.deepEqual(await snapshot(db, ['RelationType']), before)
+      await assert.rejects(seedAdapter(db), /Conflicting relation code|Existing relation definition differs/)
+      assert.deepEqual(await snapshot(db, ['RelationType']), before)
+      await db.query('DELETE FROM "RelationType" WHERE id = $1', [id(4000)])
+    }
+    await db.query('INSERT INTO "RelationType" (id,code,label,"updatedAt") VALUES ($1,$2,$3,CURRENT_TIMESTAMP)',
+      ['8c412e13-d18b-4f5b-89a4-000000000003', 'custom', 'UUID occupé'])
+    const before = await snapshot(db, ['RelationType'])
+    await assert.rejects(db.exec(lifePlacesMigration), /duplicate key/)
     assert.deepEqual(await snapshot(db, ['RelationType']), before)
   } finally { await db.close() }
 })

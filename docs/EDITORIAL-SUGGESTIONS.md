@@ -33,17 +33,28 @@ Le bouton **Scanner les fiches** du tableau de bord ouvre
 Le scan cherche des titres et alias exacts dans les parties textuelles du Markdown,
 avec limites de mots, casse, espaces et Unicode normalisés. Les noms les plus longs
 sont examinés d’abord. Il n’y a ni recherche floue, ni inférence de relation sémantique.
-Code, HTML, liens Markdown, images, wikilinks déjà écrits ou échappés, frontmatter,
+Code, HTML, liens Markdown, images, wikilinks déjà résolus ou échappés, frontmatter,
 entités de caractères et fragments mathématiques en ligne sont conservés.
 
 Les propositions excluent les auto-liens et les fiches archivées. Une connexion
 éditoriale ou une référence résolue déjà présente dans **l’un ou l’autre sens** exclut
-la paire : ce scan cherche des connexions nouvelles, pas tous les mots encore sans
-crochets. Plusieurs occurrences vers une même fiche sont regroupées. Un titre/alias
+la paire pour les nouvelles mentions ordinaires : ce scan ne lie pas tous les mots
+encore sans crochets. Plusieurs occurrences vers une même fiche sont regroupées. Un titre/alias
 partagé par plusieurs fiches donne un diagnostic ; aucune destination n’est choisie.
 
+Les wikilinks simples déjà écrits mais **absents ou sans association Obsidian** sont
+aussi proposés à la réparation lorsqu’un titre/alias actuel désigne une seule fiche
+existante. Cela fonctionne pour une fiche créée manuellement, même si la connexion
+inverse ou une relation éditoriale existe déjà. Les chemins explicites, inclusions,
+ambiguïtés d’origine et destinations absentes/archivées ne sont pas réaffectés.
+Une note historique peut rester « sans fiche associée » après une création manuelle :
+la fiche existe, mais aucune association d’identité Obsidian n’a été décidée. Le scan
+permet alors de corriger précisément les liens, après revue, sans inventer cette association.
+
 Les compteurs distinguent fiches analysées, connexions proposées, occurrences à lier,
-mentions ambiguës et mentions déjà connectées. Les propositions sont paginées par 30,
+wikilinks à réparer, mentions ambiguës et mentions déjà connectées. Une paire déjà
+connectée peut donc figurer parmi les propositions si un de ses wikilinks reste à
+réparer. Les propositions sont paginées par 30,
 avec jusqu’à 30 exemples de mentions ambiguës. Les aperçus longs s’ouvrent progressivement.
 « Masquer pour ce scan » est temporaire : ce choix n’écrit aucune décision persistante.
 
@@ -53,7 +64,7 @@ avec jusqu’à 30 exemples de mentions ambiguës. Les aperçus longs s’ouvren
 2. Vérifier les mentions et la destination ; pour les aperçus longs, afficher toutes
    les mentions avant de pouvoir cocher la confirmation.
 3. Cocher la confirmation, puis **Ajouter les liens validés**.
-4. Les seules modifications sont l’insertion des wikilinks dans la fiche source et
+4. Les seules modifications sont l’insertion ou la correction des wikilinks dans la fiche source et
    une nouvelle Revision attribuée à l’administrateur connecté. Le scan est recalculé.
 
 Le format ciblé `[[/fiches/slug|Texte d’origine]]` désigne précisément une fiche Codex
@@ -61,6 +72,10 @@ existante, y compris une fiche manuelle sans identité Obsidian ou une fiche hom
 Il réutilise le rendu, les références entrantes/sortantes et le graphe existants.
 Les règles des chemins Obsidian et des alias simples restent inchangées. Un chemin
 Codex invalide ou disparu reste non navigable ; aucune fiche n’est créée.
+Une réparation conserve le libellé et l’ancre du lien existant. Les séparateurs
+sont échappés dans les tableaux GFM pour conserver leurs lignes et cellules. Les
+diagnostics techniques disparaissent après réparation des occurrences concernées ;
+actualiser la file recalcule aussi les références entrantes/sortantes et les compteurs.
 
 L’empreinte SHA-256 de l’aperçu est vérifiée sur un nouveau snapshot cohérent dans la
 transaction d’application. Un changement de texte, titre, alias, visibilité, statut,
@@ -68,6 +83,8 @@ origine ou connexion invalide l’aperçu (`409`) et demande un nouveau scan. La
 jour réutilise la validation, la gestion des images, le verrou de version et les
 révisions de l’édition habituelle. Une erreur annule toute la transaction. Une double
 application ne crée pas deux révisions. Aucun texte n’est tronqué pour respecter une limite.
+La version de l’algorithme fait partie de l’empreinte : un aperçu issu de l’ancien
+scan, qui ne proposait pas les réparations, doit être recalculé avant application.
 
 Les Sources, preuves, associations, réceptions, items et contenus de staging ne sont
 jamais modifiés. Aucune ligne `Relation`, nouvelle fiche ou publication automatique
@@ -108,7 +125,29 @@ L’inspiration fonctionnelle est [Obsidian Note Linker](https://github.com/Alex
 détecter les mentions de noms/alias puis laisser l’opérateur choisir les liens.
 Son code et ses dépendances ne sont pas intégrés au Codex.
 
-## Vérification locale — 29 octobre 2026
+## Vérifications locales
+
+### Correctif du 30 octobre 2026 : wikilinks déjà écrits sans association
+
+**889 tests réussis : 502 API et 387 web**, dont cinq nouveaux tests de régression.
+Lint, typecheck, build, Prisma validate/generate et contrôle du diff réussis. Aucun
+changement de schéma, dépendance ou migration.
+
+Le défaut est reproduit avant correction avec une note associée à l’index Obsidian,
+une destination créée manuellement, deux wikilinks non résolus et une connexion déjà
+présente dans l’autre sens. La réparation validée supprime le diagnostic technique,
+ajoute la référence entrante, conserve le lien inverse et crée une seule révision.
+Les Sources, preuves, staging et décisions d’association sont identiques avant/après.
+Les tests vérifient aussi les alias, ancres, tableaux GFM, cas ambigus et exclusions.
+
+Recette Edge à 1920 × 1080 et 390 × 844 avec données fictives : deux wikilinks à
+réparer proposés malgré le lien inverse ; aperçu, confirmation, liens navigables,
+diagnostic retiré et destination privée masquée publiquement. Aucun débordement ni
+erreur JavaScript ; les deux écritures de recette sont simulées. Les fichiers de
+recette restent dans le répertoire temporaire, hors Git. Aucun accès ou changement
+de données de production, commit, push ou déploiement pendant cette correction.
+
+### Validation initiale du 29 octobre 2026
 
 **884 tests réussis : 498 API et 386 web**, dont 36 nouveaux tests. La suite web
 complète utilise sous Windows un réglage Vitest temporaire hors dépôt (threads,

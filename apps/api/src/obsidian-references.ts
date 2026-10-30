@@ -208,6 +208,8 @@ export function buildReferenceCatalog(entities: ReferenceEntity[], origins: Refe
     fingerprintOccurrences.get(edge.id),
   ])).digest('hex')]))
   return { navigation, detail, diagnostics: diagnosticsFor, fingerprints, contexts, entities: byId,
+    unresolved: (id: string) => (resolved.get(id) ?? []).filter(result => result.status === 'MISSING' || result.status === 'UNASSOCIATED')
+      .map(result => result.occurrence),
     graph: () => ({ edges: [...edges.values()].sort((a, b) => a.id < b.id ? -1 : 1), stats: totalStats }) }
 }
 

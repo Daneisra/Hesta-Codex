@@ -42,6 +42,13 @@ sans fiche. Un chemin explicite continue d'identifier uniquement sa propre note,
 nom est devenu l'alias d'une autre fiche. Le Markdown et les associations de staging restent
 inchangés ; aucune fiche supprimée n'est recréée. Retirer l'alias retire aussi cette résolution.
 
+Créer une fiche manuellement ne confirme pas automatiquement une ancienne identité Obsidian.
+Si un ancien wikilink simple reste sans association malgré l’existence de la fiche, le
+[scan](EDITORIAL-SUGGESTIONS.md) propose maintenant de le réparer vers cette destination
+unique, même si la connexion inverse existe déjà. Après aperçu et validation, le lien
+ciblé remplace cette occurrence et son diagnostic disparaît. Une révision est créée ;
+les associations et contenus d’origine restent intacts.
+
 Une section correspond à un titre Markdown unique (casse/espaces/NFC normalisés). Les titres
 rendus reçoivent un identifiant stable préfixé `obsidian-`. Une section absente, répétée ou une
 ancre de bloc `^identifiant` donne un lien vers la fiche sans fragment, accompagné d'un diagnostic.

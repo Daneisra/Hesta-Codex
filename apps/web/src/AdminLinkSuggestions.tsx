@@ -47,22 +47,23 @@ export function AdminLinkSuggestions({ onNavigate, onAccessError, onPendingChang
   return <section className="admin-link-suggestions">
     <a className="admin-back" href="/admin" onClick={event => onNavigate(event, '/admin')}>← Tableau de bord</a>
     <h1>Connexions suggérées</h1>
-    <p>Mentions de titres ou d’alias sans connexion existante. Le scan est en lecture seule : chaque ajout de wikilinks exige votre validation.</p>
-    <p className="admin-muted">Code, liens et images existants sont exclus. Aucune relation éditoriale n’est créée. Les fiches archivées sont exclues des propositions.</p>
+    <p>Mentions sans connexion existante et wikilinks non résolus à réparer. Le scan est en lecture seule : chaque ajout ou correction exige votre validation.</p>
+    <p className="admin-muted">Code, liens déjà résolus et images sont exclus. Un wikilink non résolu peut être réparé même si la connexion inverse existe. Aucune relation éditoriale n’est créée.</p>
     <button type="button" disabled={busy || loading} onClick={() => void scan()}>{loading ? 'Analyse des fiches…' : 'Relancer le scan'}</button>
     {notice && <p className="admin-message" role="status">{notice}</p>}
     {error && <p role="alert" className="admin-form-error">{error}</p>}
-    {data && <p role="status">{data.entities} fiches analysées · {data.connections} connexions proposées · {data.occurrences} mentions à lier · {data.ambiguous} mentions ambiguës · {data.existing} mentions déjà connectées</p>}
+    {data && <p role="status">{data.entities} fiches analysées · {data.connections} connexions proposées · {data.occurrences} mentions à lier · {data.repairs ?? 0} wikilinks à réparer · {data.ambiguous} mentions ambiguës · {data.existing} mentions déjà connectées</p>}
     {data && !data.connections && !loading && <p>Aucune nouvelle connexion à proposer.</p>}
     <ul className="admin-connection-list">{items.map(item => <li key={item.id} className="admin-section">
       <h2><a href={`/admin/fiches/${item.from.slug}`} onClick={event => onNavigate(event, `/admin/fiches/${item.from.slug}`)}>{item.from.title}</a>
         {' → '}<a href={`/admin/fiches/${item.to.slug}`} onClick={event => onNavigate(event, `/admin/fiches/${item.to.slug}`)}>{item.to.title}</a></h2>
       <p>{item.occurrences.length} mention(s) · /{item.from.slug} → /{item.to.slug}</p>
+      {item.occurrences.some(occurrence => occurrence.repair) && <p className="admin-warning">Des wikilinks déjà écrits ne sont pas résolus. Leur destination sera corrigée vers cette fiche après votre confirmation.</p>}
       <button type="button" disabled={busy || loading || stale} onClick={() => { setReview(review === item.id ? null : item.id); setConfirmed(false); setPreviewCount(30) }}> {review === item.id ? 'Fermer l’aperçu' : 'Examiner et lier'}</button>
       <button type="button" disabled={busy} onClick={() => setHidden(current => new Set([...current, item.id]))}>Masquer pour ce scan</button>
       {review === item.id && <div className="admin-link-review">
-        <h3>Avant / après</h3><p>Seules ces mentions seront entourées de wikilinks. Le reste du texte est conservé.</p>
-        {item.occurrences.slice(0, previewCount).map((occurrence, index) => <details key={occurrence.start} open={index < 3}><summary>Mention {index + 1} : {occurrence.text}</summary>
+        <h3>Avant / après</h3><p>Seules ces mentions seront liées ou leurs wikilinks corrigés. Le reste du texte est conservé.</p>
+        {item.occurrences.slice(0, previewCount).map((occurrence, index) => <details key={occurrence.start} open={index < 3}><summary>{occurrence.repair ? 'Wikilink à réparer' : 'Mention'} {index + 1} : {occurrence.text}</summary>
           <p>{occurrence.before}<mark>{occurrence.text}</mark>{occurrence.after}</p>
           <pre>{occurrence.before}{occurrence.wikilink}{occurrence.after}</pre>
         </details>)}

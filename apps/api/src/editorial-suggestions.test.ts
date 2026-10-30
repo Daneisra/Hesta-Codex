@@ -16,6 +16,9 @@ import { createApp } from './app.js'
 import { readAuthConfig } from './auth/config.js'
 import { sessionHash, sessionCookieName } from './auth/session.js'
 import { publicWikiView } from './public-wiki.js'
+import { markdownTree, wikiOccurrences } from '@hesta-codex/shared'
+import { sha256, itemIdentity } from './ingestion/format.js'
+import { createPrismaQualificationService } from './reference-qualification.js'
 
 const stamp = new Date('2026-10-01T00:00:00Z'), id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
 const note = (n: number, title: string, bodyMarkdown = '', extra: Partial<SuggestionNote> = {}): SuggestionNote => ({ id: id(n), slug: `fiche-${n}`, title,
@@ -31,11 +34,12 @@ test('scan finds bounded Unicode names, aliases, longest matches and exact sourc
   assert.deepEqual(plan.items[0]!.occurrences.map(item => item.wikilink), ['[[/fiches/fiche-3|Étoile du Nord]]', '[[/fiches/fiche-3|E\u0301toile du Nord]]', '[[/fiches/fiche-3|Vigie]]'])
 })
 
-test('scan ignores existing and escaped wikilinks, fenced/inline/indented code, HTML, images, links and frontmatter', () => {
+test('scan separates unresolved wikilinks from prose while excluding escaped links, code, HTML, images and frontmatter', () => {
   const body = ['---', 'title: Cible', '---', 'Cible', '`Cible`', '```md', 'Cible', '```', '', '    Cible', '',
     '[[Cible]] \\[[Cible]] ![[Cible]]', '[Cible](https://example.test)', '![Cible](image.png)', '<!-- Cible -->', '$Cible$'].join('\n')
   assert.equal(proseRanges(body).map(range => range.text).join(' ').match(/Cible/g)?.length, 1)
-  assert.equal(scan([note(1, 'Départ', body), note(2, 'Cible')]).occurrences, 1)
+  const plan = scan([note(1, 'Départ', body), note(2, 'Cible')])
+  assert.equal(plan.occurrences, 2); assert.equal(plan.repairs, 1)
 })
 
 test('existing editorial or textual connections in either direction suppress duplicate proposals and preserve self exclusions', () => {
@@ -43,6 +47,45 @@ test('existing editorial or textual connections in either direction suppress dup
   assert.equal(scan(entities).items.length, 2)
   assert.equal(scan(entities, [{ fromEntityId: id(2), toEntityId: id(1) }]).items.length, 0)
   assert.equal(scan([{ ...entities[0]!, bodyMarkdown: '[[/fiches/fiche-2|Cible]] Cible' }, entities[1]!]).items.length, 0)
+})
+
+test('scan proposes repairing unassociated wikilinks to a new manual fiche despite an existing reverse connection', () => {
+  const entities = [note(1, 'Port fictif', '[[Maison Ardoise]] et [[Maison Ardoise|La maison]].'),
+    note(2, 'Maison Ardoise', '[[/fiches/fiche-1|Port fictif]]')]
+  const origins = [{ entityId: id(1), sourceId: 'fictive', path: 'Villes/Port.md', metadata: {
+    obsidian: { wikilinks: [{ status: 'FOUND', path: 'Familles/Maison Ardoise.md' }] },
+  } }]
+  const before = buildReferenceCatalog(entities, origins)
+  assert.equal(before.detail(id(1), stamp.toISOString())!.stats.unassociated, 1)
+  assert.equal(before.graph().edges.length, 1)
+  const plan = scanConnections({ entities, origins, relations: [] })
+  assert.equal(plan.items.length, 1)
+  assert.equal(plan.items[0]!.from.id, id(1)); assert.equal(plan.items[0]!.to.id, id(2))
+  assert.deepEqual(plan.items[0]!.occurrences.map(item => item.wikilink), ['[[/fiches/fiche-2|Maison Ardoise]]', '[[/fiches/fiche-2|La maison]]'])
+  assert.equal(plan.repairs, 2)
+  assert.equal(plan.items[0]!.occurrences.every(item => item.repair), true)
+})
+
+test('repairs preserve aliases, anchors and GFM table structure, including newly linked prose in a table', () => {
+  const body = '[[Cible#Section|Alias]]\n\n| Nom |\n|---|\n|[[Cible\\|Alias tableau]]|\n|Cible|'
+  const plan = scan([note(1, 'Départ', body), note(2, 'Cible', '## Section')])
+  assert.equal(plan.repairs, 2); assert.equal(plan.occurrences, 3)
+  let updated = body
+  for (const item of [...plan.items[0]!.occurrences].reverse()) updated = updated.slice(0, item.start) + item.wikilink + updated.slice(item.end)
+  assert.ok(updated.includes('[[/fiches/fiche-2#Section|Alias]]'))
+  assert.ok(updated.includes('[[/fiches/fiche-2\\|Alias tableau]]'))
+  assert.ok(updated.includes('[[/fiches/fiche-2\\|Cible]]'))
+  assert.deepEqual(wikiOccurrences(updated).map(link => link.label), ['Alias', 'Alias tableau', 'Cible'])
+  const table = markdownTree(updated).children.find(node => node.type === 'table')!
+  assert.equal(table.children.length, 3)
+  assert.equal(table.children.every(row => row.children.length === 1), true)
+})
+
+test('repairs leave original ambiguities, absent targets, explicit paths and archived destinations unresolved', () => {
+  const entities = [note(1, 'Départ', '[[Commun]] [[Absent]] [[Dossier/Cible]] [[Archive]]\n\n$$ [[Cible]] $$\n\n$[[Cible]]$'), note(2, 'Commun'), note(3, 'Cible'), note(4, 'Archive', '', { status: 'ARCHIVED' })]
+  const origins = [{ entityId: id(1), sourceId: 'fictive', path: 'Départ.md', metadata: { obsidian: { wikilinks: [{ status: 'AMBIGUOUS', target: 'Commun' }] } } },
+    { entityId: id(2), sourceId: 'fictive', path: 'Commun.md', metadata: {} }]
+  assert.equal(scanConnections({ entities, origins, relations: [] }).items.length, 0)
 })
 
 test('current title/alias homonyms are diagnostic only, even when one candidate is the mentioning fiche', () => {
@@ -202,6 +245,45 @@ test('validated application preserves text and provenance, records a human revis
   assert.equal((await service.scan(1)).connections, 0)
   await assert.rejects(service.apply(input, author), { status: 409 })
   assert.equal(await prisma.revision.count(), 2)
+})
+
+test('reviewed repair clears technical diagnostics for a manual destination while preserving staging and the reverse link', async () => {
+  const original = '[[Cible]] et [[Cible|La ville]].', path = 'Notes/Depart.md', contentHash = sha256(original), identityKey = itemIdentity(path, contentHash)
+  await prisma.entity.update({ where: { id: id(1) }, data: { bodyMarkdown: original } })
+  const reverse = '[[/fiches/depart|Départ]]'
+  await prisma.entity.update({ where: { id: id(2) }, data: { bodyMarkdown: reverse } })
+  await prisma.source.create({ data: { id: id(51), kind: 'OBSIDIAN', label: 'Coffre fictif', externalId: 'coffre-fictif' } })
+  await prisma.ingestionBatch.create({ data: { id: id(52), label: 'Lot fictif', receivedCount: 1, newCount: 1, unchangedCount: 0, modifiedCount: 0 } })
+  await prisma.ingestionItem.create({ data: { id: id(53), sourceId: id(51), batchId: id(52), identityKey, externalId: path, version: 1, contentHash, content: original } })
+  await prisma.ingestionReceipt.create({ data: { id: id(54), batchId: id(52), itemId: id(53), ordinal: 0, outcome: 'NEW', title: 'Départ', locator: path,
+    contentType: 'text/markdown', metadata: { obsidian: { wikilinks: [{ status: 'FOUND', path: 'Lieux/Cible.md' }] } } } })
+  await prisma.ingestionAssociation.create({ data: { id: id(55), itemId: id(53), sourceId: id(51), identityKey, externalId: path } })
+  await prisma.ingestionAssociationDecision.create({ data: { id: id(56), associationId: id(55), entityId: id(1), decision: 'CONFIRMED',
+    origin: 'MANUAL', authorDiscordId: actor, authorLabel: 'Auteur fictif' } })
+  const qualification = createPrismaQualificationService(prisma), references = createPrismaReferenceService(prisma)
+  const diagnostics = await qualification.list({ page: 1, view: 'diagnostics' })
+  assert.equal(diagnostics.diagnosticTotal, 1)
+  assert.equal(diagnostics.diagnostics[0]!.target, 'Cible'); assert.equal(diagnostics.diagnostics[0]!.occurrences, 2)
+  const before = await snapshots(), decisions = await prisma.ingestionAssociationDecision.findMany()
+  const plan = await service.scan(1), group = plan.items[0]!
+  assert.equal(plan.connections, 1); assert.equal(plan.repairs, 2)
+  assert.deepEqual(await snapshots(), before)
+  const input = { id: group.id, fingerprint: group.fingerprint, confirm: true as const }
+  const updated = await service.apply(input, author)
+  assert.equal(updated.bodyMarkdown, '[[/fiches/cible|Cible]] et [[/fiches/cible|La ville]].')
+  assert.equal((await qualification.list({ page: 1, view: 'diagnostics' })).diagnosticTotal, 0)
+  assert.equal((await qualification.detail(id(1), updated.updatedAt))!.outgoing[0]!.occurrences, 2)
+  const target = await prisma.entity.findUniqueOrThrow({ where: { id: id(2) } })
+  assert.equal(target.bodyMarkdown, reverse)
+  assert.equal((await references.detail(id(2), target.updatedAt.toISOString()))!.incoming[0]!.id, id(1))
+  assert.equal((await references.graph()).edges.length, 2)
+  assert.equal((await fetch(base + '/api/v1/entities/depart')).status, 404)
+  const after = await snapshots()
+  for (let i = 2; i < tables.length; i++) assert.deepEqual(after[i], before[i], tables[i])
+  assert.deepEqual(await prisma.ingestionAssociationDecision.findMany(), decisions)
+  assert.equal(await prisma.revision.count(), 2)
+  assert.equal((await service.scan(1)).connections, 0)
+  await assert.rejects(service.apply(input, author), { status: 409 })
 })
 
 test('a failure creating the revision rolls back all Markdown changes', async () => {
