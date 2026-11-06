@@ -52,7 +52,8 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
   const savedPositions = useRef(initialPositions.positions)
   const [fixedCount, setFixedCount] = useState(initialPositions.positions.size)
   const [layoutMessage, setLayoutMessage] = useState(initialPositions.available ? '' : 'Stockage local indisponible : disposition conservée pour cette vue uniquement.')
-  const fitAfterReset = useRef(false)
+  const fitAfterLayout = useRef(false)
+  const manualCamera = () => { fitted.current = true; fitAfterLayout.current = false }
   const textWidths = useRef(new Map<string, number>())
   const [size, setSize] = useState({ width: 0, height: 0 })
   const canvasReady = size.width > 0
@@ -73,7 +74,8 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
   useEffect(() => { if (immersive) setMoreOpen(false) }, [immersive])
   const connections = useMemo(() => groupGraphConnections(data), [data])
   const connectionIndex = useMemo(() => new Map(connections.map(connection => [connection.id, connection])), [connections])
-  const physicsData = useMemo(() => ({ nodes: data.nodes, edges: connections }), [data.nodes, connections])
+  const physicsData = useMemo(() => ({ nodes: data.nodes, edges: connections,
+    radii: new Map(data.nodes.map(node => [node.id, nodeRadius(distinctNeighbors(totalIndex, node.id))])) }), [data.nodes, connections, totalIndex])
   // ForceGraph mutates coordinates and link endpoints. Keep the API response untouched.
   const graphData = useMemo(() => ({ nodes: data.nodes.map((node) => {
     // Keep session-local coordinates (including dragged positions) through filters and isolation.
@@ -145,10 +147,10 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
 
   useEffect(() => {
     if (!canvasReady || !graphRef.current?.d3Force) return
-    configureGraphPhysics(graphRef.current as unknown as PhysicsEngine, physicsData)
-    if (reducedMotion) settleGraphLayout(graphData.nodes, graphData.links.map(edge => ({ ...edge })), physicsData)
+    configureGraphPhysics(graphRef.current as unknown as PhysicsEngine, physicsData, size)
+    if (reducedMotion) settleGraphLayout(graphData.nodes, graphData.links.map(edge => ({ ...edge })), physicsData, size)
     graphRef.current.d3ReheatSimulation()
-  }, [physicsData, graphData, canvasReady, reducedMotion])
+  }, [physicsData, graphData, canvasReady, reducedMotion, size.width, size.height])
 
   const focus = useCallback((id: string) => {
     const node = positionedNodes.get(id)
@@ -169,6 +171,8 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
     // A completed request must not override later manual camera movements on a data change.
     if (issuedFocusRequest.current === focusRequest) return
     issuedFocusRequest.current = focusRequest
+    fitAfterLayout.current = false
+    fitted.current = true
     pendingFocus.current = focusRequest.id
     focus(focusRequest.id)
   }, [focusRequest, selectedId, index, focus, canvasReady])
@@ -180,7 +184,10 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
     const resized = previousSize.current.width > 0 && (previousSize.current.width !== size.width || previousSize.current.height !== size.height)
     const changedIsolation = previousIsolation.current !== isolated
     previousSize.current = size; previousIsolation.current = isolated
-    if (canvasReady && (changedIsolation || resized && !selectedId)) graphRef.current?.zoomToFit(motionDuration(450), 50)
+    if (canvasReady && (changedIsolation || resized && !selectedId)) {
+      fitAfterLayout.current = true
+      graphRef.current?.zoomToFit(motionDuration(450), 50)
+    }
   }, [size, isolated, selectedId, canvasReady])
 
   const radiusFor = useCallback((id: string) => nodeRadius(distinctNeighbors(totalIndex, id)), [totalIndex])
@@ -197,10 +204,10 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
     setLayoutMessage(cleared ? 'Disposition réinitialisée.' : 'Disposition réinitialisée pour cette vue. Le stockage local est indisponible.')
     lastClick.current = null
     pendingFocus.current = null
-    fitAfterReset.current = true
-    if (reducedMotion) settleGraphLayout(graphData.nodes, graphData.links.map(edge => ({ ...edge })), physicsData)
+    fitAfterLayout.current = true
+    if (reducedMotion) settleGraphLayout(graphData.nodes, graphData.links.map(edge => ({ ...edge })), physicsData, size)
     graphRef.current?.d3ReheatSimulation()
-  }, [scope, reducedMotion, graphData, physicsData])
+  }, [scope, reducedMotion, graphData, physicsData, size])
   const hoveredMember = hoverEdge?.members[0]
   const hoverCounts = hoverEdge ? connectionCounts(hoverEdge.members) : null
   const relationText = hoverEdge && hoveredMember ? hoverEdge.members.length === 1
@@ -209,9 +216,9 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
 
   return <div className="graph-main">
     <div className="graph-controls" aria-label="Contrôles du graphe">
-      <button type="button" onClick={() => { fitted.current = true; graphRef.current?.zoom(Math.min(8, graphRef.current.zoom() * 1.3), motionDuration(300)) }}>Zoom +</button>
-      <button type="button" onClick={() => { fitted.current = true; graphRef.current?.zoom(Math.max(.15, graphRef.current.zoom() / 1.3), motionDuration(300)) }}>Zoom −</button>
-      <button ref={fitButtonRef} type="button" onClick={() => { fitted.current = true; graphRef.current?.zoomToFit(motionDuration(400), 48) }}>Ajuster à l’écran</button>
+      <button type="button" onClick={() => { manualCamera(); graphRef.current?.zoom(Math.min(8, graphRef.current.zoom() * 1.3), motionDuration(300)) }}>Zoom +</button>
+      <button type="button" onClick={() => { manualCamera(); graphRef.current?.zoom(Math.max(.15, graphRef.current.zoom() / 1.3), motionDuration(300)) }}>Zoom −</button>
+      <button ref={fitButtonRef} type="button" onClick={() => { manualCamera(); graphRef.current?.zoomToFit(motionDuration(400), 48) }}>Ajuster à l’écran</button>
       {panelControls}
       <button type="button" disabled={!canvasReady} onClick={resetLayout}
         title="Relancer la disposition automatique et effacer les positions fixées de ce graphe dans ce navigateur">
@@ -219,11 +226,12 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
       </button>
       <details className="graph-exploration" open={moreOpen} onToggle={event => setMoreOpen(event.currentTarget.open)}>
       <summary>Exploration</summary><div>
+      <small>Taille des nœuds : nombre de fiches distinctes liées dans le graphe chargé.</small>
       <label className="graph-display-option"><input type="checkbox" checked={showEditorialLinks}
         onChange={event => { setShowEditorialLinks(event.target.checked); setHoveredEdgeId('') }} /> Afficher les relations éditoriales</label>
       <label className="graph-display-option"><input type="checkbox" checked={showArrows}
         onChange={event => setShowArrows(event.target.checked)} /> Afficher les flèches</label>
-      <button type="button" onClick={() => { fitted.current = true; graphRef.current?.centerAt(0, 0, motionDuration(400)) }}>Recentrer</button>
+      <button type="button" onClick={() => { manualCamera(); graphRef.current?.centerAt(0, 0, motionDuration(400)) }}>Recentrer</button>
       <label className="graph-depth">Profondeur du voisinage<select value={depth} disabled={!selectedId}
         onChange={(event) => { const value = Number(event.target.value)
           if (value === 1 || value === 2 || value === 3) onDepthChange(value) }}>
@@ -234,12 +242,12 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
         {isolated ? 'Afficher tout le graphe' : depth === 1 ? 'Connexions directes' : 'Isoler le voisinage'}
       </button>
       <button type="button" disabled={!selectedId && !selectedEdgeId} onClick={() => {
-        onClearSelection(); graphRef.current?.zoomToFit(motionDuration(400), 48)
+        manualCamera(); onClearSelection(); graphRef.current?.zoomToFit(motionDuration(400), 48)
       }}>Vue complète</button>
       </div></details>
     </div>
     <div className="graph-canvas" ref={areaRef} role="group"
-      onPointerDownCapture={() => { fitted.current = true }} onWheelCapture={() => { fitted.current = true }}
+      onPointerDownCapture={manualCamera} onWheelCapture={manualCamera}
       onPointerEnter={() => { pointerInside.current = true }}
       onPointerLeave={() => { pointerInside.current = false; setHoveredNodeId(''); setHoveredEdgeId('') }}
       aria-label="Graphe interactif. La recherche et la liste de fiches permettent la navigation au clavier.">
@@ -317,8 +325,8 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
         onEngineTick={() => { if (pendingFocus.current) focus(pendingFocus.current) }}
         onEngineStop={() => {
           if (pendingFocus.current) focus(pendingFocus.current)
-          if (fitAfterReset.current || !fitted.current && !pendingFocus.current && !selectedId) {
-            fitAfterReset.current = false
+          if (fitAfterLayout.current || !fitted.current && !pendingFocus.current && !selectedId) {
+            fitAfterLayout.current = false
             fitted.current = true; graphRef.current?.zoomToFit(motionDuration(450), 50)
           }
         }}

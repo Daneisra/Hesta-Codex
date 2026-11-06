@@ -78,6 +78,26 @@ describe('graph canvas interactions', () => {
     expect(graphMock.methods.zoomToFit).not.toHaveBeenCalled()
   })
 
+  it('does not override a manual camera movement while a reset layout is settling', () => {
+    render(<GraphCanvas {...props()} selectedId="" focusRequest={null} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Réinitialiser la disposition' }))
+    fireEvent.wheel(screen.getByRole('group', { name: /Graphe interactif/ }), { deltaY: -100 })
+    graphMock.methods.zoomToFit.mockClear()
+    act(() => latest().onEngineStop())
+    expect(graphMock.methods.zoomToFit).not.toHaveBeenCalled()
+  })
+
+  it('prioritizes a newly requested fiche focus over a pending automatic layout frame', () => {
+    const input = props()
+    const { rerender } = render(<GraphCanvas {...input} selectedId="" focusRequest={null} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Réinitialiser la disposition' }))
+    rerender(<GraphCanvas {...input} focusRequest={{ id: 'a', token: 2 }} />)
+    graphMock.methods.zoomToFit.mockClear()
+    act(() => latest().onEngineStop())
+    expect(graphMock.methods.centerAt).toHaveBeenCalled()
+    expect(graphMock.methods.zoomToFit).not.toHaveBeenCalled()
+  })
+
   it('restores dragged positions after remount without fixing new nodes or altering API data', () => {
     render(<GraphCanvas {...props()} />)
     const dragged = latest().graphData.nodes[0]!

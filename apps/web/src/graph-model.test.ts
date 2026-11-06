@@ -64,10 +64,11 @@ describe('graph neighborhoods', () => {
     expect(indexGraph(malformed).edges.has('ghost')).toBe(false)
   })
 
-  it('bounds node radii while preserving a modest distinction for connected nodes', () => {
+  it('bounds node radii while clearly distinguishing hubs from lightly connected notes', () => {
     expect(nodeRadius(0)).toBe(2.8)
-    expect(nodeRadius(1)).toBe(3.25)
-    expect(nodeRadius(1_000_000)).toBe(6)
+    expect(nodeRadius(1)).toBeCloseTo(3.95)
+    expect(nodeRadius(40)).toBeGreaterThan(nodeRadius(1) * 2.5)
+    expect(nodeRadius(1_000_000)).toBe(11)
     expect(nodeRadius(-1)).toBe(2.8)
   })
 })

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { configureGraphPhysics, graphPhysics, settleGraphLayout, type PhysicsEngine } from './graph-physics'
-import { syntheticGraph } from './graph-synthetic'
+import { readabilityGraph, syntheticGraph } from './graph-synthetic'
+import { nodeRadius } from './graph-model'
 import { groupGraphConnections } from './graph-connections'
 import { forceSimulation, forceManyBody, forceLink, type Force } from 'd3-force-3d'
 
@@ -9,9 +10,9 @@ describe('graph physics', () => {
     const dense = syntheticGraph(), sparse = { ...dense, edges: dense.edges.slice(0, 10) }
     expect(graphPhysics(dense).charge).toBeLessThan(graphPhysics(sparse).charge)
     expect(graphPhysics(dense).distance).toBeGreaterThan(graphPhysics(sparse).distance)
-    expect(graphPhysics(dense).reach).toBeLessThanOrEqual(900)
-    expect(graphPhysics(dense).collisionGap).toBeLessThanOrEqual(10)
-    expect(graphPhysics({ nodes: [], edges: [] }).charge).toBe(-85)
+    expect(graphPhysics(dense).reach).toBeLessThanOrEqual(1000)
+    expect(graphPhysics(dense).collisionGap).toBeLessThanOrEqual(14)
+    expect(graphPhysics({ nodes: [], edges: [] }).charge).toBe(-110)
   })
 
   it('does not increase density when editorial and automatic connections join the same pair', () => {
@@ -60,5 +61,41 @@ describe('graph physics', () => {
       return positioned.map(node => [node.x, node.y])
     }
     expect(run(duplicated)).toEqual(run(edges))
+  })
+
+  it.each([[1920, 1080], [3840, 2160]])('keeps all 141 fictitious notes framed and gives the main network room at %s × %s', (width, height) => {
+    const fixture = readabilityGraph(), original = JSON.stringify(fixture)
+    expect(fixture.edges).toHaveLength(310)
+    // Let D3 use its ordinary phyllotaxis seed, as with a fresh browser layout.
+    const positioned = fixture.nodes.map(node => ({ ...node, x: undefined as number | undefined, y: undefined as number | undefined }))
+    const links = groupGraphConnections(fixture)
+    settleGraphLayout(positioned, links.map(edge => ({ ...edge })), { nodes: fixture.nodes, edges: links }, { width, height })
+    const settings = graphPhysics(fixture), radius = (id: string) => nodeRadius(settings.index.neighbors.get(id)!.size)
+    expect(positioned.every(node => Number.isFinite(node.x) && Number.isFinite(node.y))).toBe(true)
+    const left = Math.min(...positioned.map(node => node.x! - radius(node.id))), right = Math.max(...positioned.map(node => node.x! + radius(node.id)))
+    const top = Math.min(...positioned.map(node => node.y! - radius(node.id))), bottom = Math.max(...positioned.map(node => node.y! + radius(node.id)))
+    const scale = Math.min((width - 100) / (right - left), (height - 100) / (bottom - top))
+    const core = positioned.filter(node => Number(node.id.slice(5)) < 122)
+    expect((Math.max(...core.map(node => node.x!)) - Math.min(...core.map(node => node.x!))) * scale / width).toBeGreaterThan(.55)
+    const gaps = core.map(node => Math.min(...core.filter(other => other !== node).map(other => Math.hypot(node.x! - other.x!, node.y! - other.y!))) * scale).sort((a, b) => a - b)
+    expect(gaps[Math.floor(gaps.length / 2)]! / height).toBeGreaterThan(.04)
+    expect(JSON.stringify(fixture)).toBe(original)
+  })
+
+  it('keeps component anchors finite in portrait, empty, disconnected and self-linked graphs without fixing nodes', () => {
+    const fixture = readabilityGraph(), nodes = fixture.nodes.slice(0, 4)
+    for (const data of [{ nodes: [], edges: [] }, { nodes, edges: [] }, { nodes, edges: [{ source: nodes[0]!.id, target: nodes[0]!.id }] }]) {
+      const settings = graphPhysics(data, { width: 390, height: 844 })
+      expect([...settings.anchors.values()].every(anchor => Number.isFinite(anchor.x) && Number.isFinite(anchor.y))).toBe(true)
+      expect(data.nodes.some(node => 'fx' in node)).toBe(false)
+    }
+  })
+
+  it('retains manually fixed coordinates while settling a mixed-component viewport layout', () => {
+    const fixture = readabilityGraph()
+    const nodes = fixture.nodes.map((node, i) => ({ ...node, x: 0, y: 0, fx: i === 0 ? 123 : undefined, fy: i === 0 ? 456 : undefined }))
+    settleGraphLayout(nodes, fixture.edges.map(edge => ({ ...edge })), fixture, { width: 1920, height: 1080 })
+    expect(nodes[0]).toMatchObject({ x: 123, y: 456, fx: 123, fy: 456 })
+    expect(nodes.slice(1).every(node => node.fx === undefined && node.fy === undefined && Number.isFinite(node.x) && Number.isFinite(node.y))).toBe(true)
   })
 })

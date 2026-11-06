@@ -23,7 +23,18 @@ describe('graph label readability', () => {
       expect(labels.has('0')).toBe(true)
       expect(labels.size).toBeGreaterThan(1)
       expect(labels.size).toBeLessThanOrEqual(180)
-      for (const label of labels.values()) expect(label.fontSize * scale).toBeLessThanOrEqual(14.001)
+      for (const label of labels.values()) expect(label.fontSize * scale).toBeLessThanOrEqual(15.001)
+    }
+  })
+
+  it('uses more of a large viewport without letting labels cover unlabelled nodes', () => {
+    const candidates = Array.from({ length: 200 }, (_, i) => candidate(String(i), (i % 20) * 130 - 1200, Math.floor(i / 20) * 70 - 300))
+    const small = layoutGraphLabels(candidates, 1, measure, { left: -450, right: 450, top: -250, bottom: 250 })
+    const large = layoutGraphLabels(candidates, 1, measure, { left: -1900, right: 1900, top: -1000, bottom: 1000 })
+    expect(large.size).toBeGreaterThan(small.size * 2)
+    for (const label of large.values()) for (const { node, radius } of candidates) {
+      expect(label.x >= node.x! + radius || label.x + label.width <= node.x! - radius ||
+        label.y >= node.y! + radius || label.y + label.height <= node.y! - radius).toBe(true)
     }
   })
 

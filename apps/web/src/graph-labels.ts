@@ -21,7 +21,10 @@ export function layoutGraphLabels(candidates: readonly LabelCandidate[], scale: 
   if (!Number.isFinite(scale) || scale < .01 || scale > 100) return placed
   const cell = 80 / scale
   const grid = new Map<string, LabelBox[]>()
-  const maxLabels = scale < .7 ? 36 : scale < 1.4 ? 80 : 180
+  const area = bounds ? (bounds.right - bounds.left) * (bounds.bottom - bounds.top) * scale ** 2 : 960 * 540
+  const viewportBudget = Math.max(8, Math.min(120, Math.floor((Number.isFinite(area) ? Math.max(0, area) : 960 * 540) / 28000)))
+  const ordinaryBudget = Math.min(180, Math.max(8, Math.round(viewportBudget * (scale < .7 ? .65 : scale < 1.4 ? 1 : 1.5))))
+  const maxLabels = Math.min(180, ordinaryBudget + 24)
   let ordinary = 0
   const keys = (box: LabelBox): string[] => {
     const cells: string[] = []
@@ -30,6 +33,15 @@ export function layoutGraphLabels(candidates: readonly LabelCandidate[], scale: 
     }
     return cells
   }
+  // A name must also avoid other nodes, including nodes whose names are not displayed.
+  for (const { node, radius } of candidates) {
+    if (!Number.isFinite(node.x) || !Number.isFinite(node.y) || !Number.isFinite(radius) || radius < 0 || radius > 100 ||
+      Math.abs(node.x!) > 1_000_000 || Math.abs(node.y!) > 1_000_000) continue
+    const margin = radius + 2 / scale
+    const box = { x: node.x! - margin, y: node.y! - margin, width: margin * 2, height: margin * 2 }
+    if (bounds && !overlaps(box, { x: bounds.left, y: bounds.top, width: bounds.right - bounds.left, height: bounds.bottom - bounds.top })) continue
+    for (const key of keys(box)) { const entries = grid.get(key) ?? []; entries.push(box); grid.set(key, entries) }
+  }
   for (const candidate of candidates) {
     if (placed.size >= maxLabels) break
     const { node, priority, radius, text } = candidate
@@ -37,8 +49,8 @@ export function layoutGraphLabels(candidates: readonly LabelCandidate[], scale: 
     const x = node.x!, y = node.y!
     if (Math.abs(x) > 1_000_000 || Math.abs(y) > 1_000_000 || !Number.isFinite(radius) || radius < 0 || radius > 100) continue
     if (bounds && (x < bounds.left || x > bounds.right || y < bounds.top || y > bounds.bottom)) continue
-    if (priority >= 4 && scale < 1.4 && ordinary >= (scale < .7 ? 8 : 24)) continue
-    const screenFontSize = priority === 0 ? 14 : priority === 1 ? 13 : priority <= 3 ? 12 : 11
+    if (priority >= 4 && ordinary >= ordinaryBudget) continue
+    const screenFontSize = priority === 0 ? 15 : priority === 1 ? 14 : 13
     const fontSize = screenFontSize / scale
     const measuredWidth = measure(text, screenFontSize)
     if (!Number.isFinite(measuredWidth) || measuredWidth < 0 || measuredWidth > 10_000) continue

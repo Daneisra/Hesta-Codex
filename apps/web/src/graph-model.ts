@@ -51,7 +51,7 @@ export function isolateNeighborhood(data: GraphResponse, distances: ReadonlyMap<
 }
 
 export function nodeRadius(connectionCount: number): number {
-  return Math.min(6, 2.8 + Math.sqrt(Math.max(0, connectionCount)) * .45)
+  return Math.min(11, 2.8 + Math.sqrt(Math.max(0, connectionCount)) * 1.15)
 }
 export type GraphFilters = {
   kind: EntityKind | ''

@@ -13,8 +13,8 @@ declare module 'd3-force-3d' {
     id(value: (node: SimulationNode) => string | number): Force
   }
   export function forceCollide(radius: (node: SimulationNode) => number): Force
-  export function forceX(x: number): Force
-  export function forceY(y: number): Force
+  export function forceX(x: number | ((node: SimulationNode) => number)): Force
+  export function forceY(y: number | ((node: SimulationNode) => number)): Force
   export function forceManyBody(): Force
   export function forceCenter(x?: number, y?: number): Force
   export function forceLink(links: Array<{ source: unknown; target: unknown }>): Force

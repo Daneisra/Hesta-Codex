@@ -73,7 +73,8 @@ Le panneau affiche résumé, sens des relations, comptes entrants/sortants, conn
 symétriques et navigation vers les voisins. Le total de relations porte uniquement sur
 le graphe autorisé chargé ; les relations affichées avec les filtres sont comptées séparément.
 Le rayon des nœuds varie avec le nombre de voisins distincts du graphe chargé, de 2,8 à
-6 unités Canvas au maximum. Mentions réciproques et faits multiples ne grossissent plus un nœud.
+11 unités Canvas au maximum, avec une progression plus expressive pour les pôles.
+Mentions réciproques et faits multiples ne grossissent plus un nœud.
 Pour une arête directionnelle, le libellé inverse apparaît depuis sa cible ; une arête
 symétrique utilise le même libellé aux deux extrémités. Le survol révèle un libellé textuel
 sans utiliser les infobulles HTML de la bibliothèque. Le Canvas accepte pan, zoom, drag et
@@ -94,11 +95,11 @@ déclaré directement comme dépendance du web ; aucune bibliothèque de rendu s
 
 | Aspect | Avant | Maintenant |
 | --- | --- | --- |
-| Réseau dense | Forces par défaut ; noyau compact et petits groupes éloignés | Répulsion et distance adaptées à la densité, collisions et rappel doux vers le centre |
-| Nœuds | Rayons 4–9, couleurs plus saturées | Rayons 2,8–6, palette douce par catégorie |
+| Réseau dense | Noyau compact et petits groupes éloignés | Répulsion et distances adaptées aux pôles ; rappel et composantes adaptés au format de la fenêtre |
+| Nœuds | Rayons 2,8–6 | Rayons 2,8–11, palette douce par catégorie et tailles stables pendant les filtres |
 | Références | Traits bleus pointillés, flèches permanentes | Traits fins et translucides ; pointillés sur le voisinage mis en évidence, flèches optionnelles |
 | Relations éditoriales | Traits dorés et flèches permanents | Traits masqués par défaut ; traits et flèches réactivables séparément dans « Exploration » |
-| Étiquettes | Plus nombreuses, chacune avec un fond | Densité adaptée au zoom ; fond réservé aux étiquettes prioritaires |
+| Étiquettes | Budget fixe selon le zoom | Budget adapté au zoom et à la surface ; fond réservé aux étiquettes prioritaires |
 | Commandes | Barre occupant une bande du graphe, filtres développés | Barre flottante compacte, menu « Exploration », panneaux masquables |
 | Surface | Graphe encadré dans la page | Plein écran natif, sans en-tête ni panneaux imposés |
 
@@ -150,15 +151,22 @@ Les données, permissions et positions sont inchangées ; masquer un trait ne r�
 la simulation et ne modifie pas le cadrage.
 
 Répulsion, portée et distance des liens augmentent de manière bornée avec cette densité
-et le nombre de nœuds. La force des liens est réduite pour les fiches très connectées ; une
-seule liaison physique représente chaque paire de fiches. Des collisions et un rappel faible sur les
-axes X/Y retiennent les composantes déconnectées ; les fiches sans connexion ont un rappel
-légèrement plus fort. La simulation s'arrête après 180 ticks, au plus 6 secondes, avec
+et le nombre de nœuds. Les pôles repoussent davantage et leurs liens sont plus longs ; la
+force des liens reste réduite pour les fiches très connectées. Une seule liaison physique
+représente chaque paire de fiches. Les collisions utilisent les rayons réellement dessinés,
+y compris après filtrage. Un rappel faible sur les axes X/Y s’adapte au format paysage ou
+portrait de la fenêtre. Les composantes déconnectées ont des centres de rappel répartis
+autour de la composante principale ; les petits groupes restent cohérents et toutes les
+fiches restent présentes. Ces centres ne fixent aucune coordonnée : D3 conserve sa disposition
+organique et les positions fixées manuellement restent prioritaires.
+La simulation s'arrête après 180 ticks, au plus 6 secondes, avec
 amortissement et refroidissement ; survol et sélection ne la réchauffent pas.
 
 Le premier cadrage s'effectue après stabilisation, sans reprendre la main si l'utilisateur
 a déjà déplacé ou zoomé la vue. Redimensionnement sans sélection et changement d'isolation
-ajustent le cadrage ; un recentrage déjà effectué n'est pas rejoué. Les objets de simulation
+ajustent le cadrage après stabilisation du nouveau format ; une intervention manuelle
+annule ce cadrage différé. Aucun nœud périphérique n’est exclu d’« Ajuster à l’écran ».
+Un recentrage déjà effectué n'est pas rejoué. Les objets de simulation
 restent séparés de la réponse API. En mouvement réduit, 180 ticks sont calculés hors écran
 avant d'afficher les coordonnées fixes et les commandes de caméra n'ont aucune transition.
 
@@ -232,8 +240,8 @@ sélectionnable apparaît et reçoit le focus ; aucune confirmation n'utilise `a
 ## Positions propres au navigateur
 
 Seuls les couples identifiant de fiche / coordonnées finies sont sauvegardés dans `localStorage`,
-sous `hesta-codex:graph-layout:v2:public` et `hesta-codex:graph-layout:v2:admin`. Les clés de
-l'ancienne génération `v1` sont ignorées pour profiter de la nouvelle disposition.
+sous `hesta-codex:graph-layout:v3:public` et `hesta-codex:graph-layout:v3:admin`. Les clés des
+anciennes générations `v1` et `v2` sont ignorées pour profiter de la nouvelle disposition.
 Le format des coordonnées est inchangé et versionné
 est `{ "version": 1, "positions": [["id", x, y]] }` : pas de titre, slug, résumé, statut ou compte.
 Une position enregistrée fixe `x/y` et `fx/fy` à la prochaine ouverture. Les fiches supprimées
@@ -258,14 +266,16 @@ dernière sauvegarde mutuelle ; les utilisateurs d'un même profil navigateur pa
 
 Les labels sont classés hors des frames de dessin : sélection, survol, voisins directs,
 résultats de recherche, puis autres fiches, avec les fiches les plus connectées en premier à
-priorité égale. Ils gardent une taille à l'écran de 11 à 14 px, indépendante du zoom ; les
+priorité égale. Ils gardent une taille à l'écran de 13 à 15 px, indépendante du zoom ; les
 titres Canvas sont tronqués à 42 caractères Unicode et restent complets dans le survol/panneau.
 Un fond discret protège le contraste des étiquettes prioritaires. Une grille spatiale recherche
-quatre placements et évite les collisions entre labels ; le nom d'une sélection présente à
+quatre placements et évite les collisions entre labels et avec les nœuds, même sans nom ; le nom d'une sélection présente à
 l'écran reste prioritaire.
 
-Le budget est de 36, 80 ou 180 labels selon le zoom, avec 8 ou 24 labels ordinaires au faible
-zoom pour conserver des repères. Les candidats hors écran sont ignorés. Les géométries mobiles
+Le budget dépend de la surface visible et du zoom, avec un plafond total de 180 labels
+et une réserve pour les noms prioritaires. Les grandes fenêtres peuvent ainsi afficher
+davantage de repères sans imposer leur densité aux petits écrans. Les candidats hors écran
+sont ignorés. Les géométries mobiles
 sont recalculées par frame peinte, les mesures de texte sont mises en cache ; les index de
 recherche normalisée et d'adjacence ne sont pas reconstruits lors du dessin. `GraphCanvas` et
 `GraphDetails` sont mémorisés ; recherche sans résultat et confirmation de copie ne relancent
@@ -305,6 +315,34 @@ Ces vérifications ne remplacent pas une mesure GPU dans un navigateur interacti
 revue visuelle du réseau réel après déploiement autorisé.
 
 ## Limites et suite
+
+Contrôle de lisibilité du 6 novembre 2026 : une fixture entièrement fictive de **141 fiches
+et 310 connexions uniques** comprend des pôles, une composante principale de 122 fiches,
+sept paires déconnectées et cinq fiches isolées. Le placement D3 et le calcul des étiquettes
+ont été comparés à la version précédente à 1920 × 1080 et 3840 × 2160, avec le même
+regroupement par paire que le Canvas et un cadrage incluant toutes les fiches. La composante
+principale occupe environ **60 % de largeur supplémentaire** ; la distance médiane entre
+les centres des plus proches voisins augmente d’environ **37 %** dans cette composante.
+Ces résultats décrivent cette fixture déterministe, pas le réseau privé de production.
+
+Les comparaisons SVG/PNG restent hors du dépôt. Elles utilisent les coordonnées réellement
+calculées par D3 et une approximation des métriques de texte ; ce ne sont pas des captures
+du navigateur. L’accès au navigateur de contrôle était indisponible : plein écran, survol,
+zoom et fluidité doivent encore faire l’objet d’une recette interactive avant déploiement.
+Les tests de composants vérifient les interactions et notamment qu’un cadrage différé
+n’annule ni un déplacement manuel ni une nouvelle demande de focus sur une fiche.
+Les mesures locales hors navigateur donnent environ 0,5 ms par calcul d’étiquettes pour
+cette fixture, et environ 0,3 seconde pour ses 180 ticks D3 synchrones. Elles ne mesurent
+ni le rendu GPU ni les FPS. Le mode de mouvement réduit peut toujours bloquer brièvement
+le fil principal lors du calcul initial, particulièrement avec un millier de fiches.
+
+Les suites complètes passent : **921 tests réussis (516 API + 405 web)**, soit sept tests
+supplémentaires. Un premier passage avait échoué sur une notification asynchrone dans un
+test existant de l’éditeur de relations ; les 17 tests de cet éditeur passent isolément,
+puis les 405 tests web passent ensemble, sans modification de cet éditeur ni de son test.
+Lint, typecheck, build, Prisma validate/generate et `git diff --check` passent. Le build
+conserve l’avertissement existant sur le chunk principal supérieur à 500 kB. Aucune
+migration, dépendance, lecture de base réelle ou modification des données n’est nécessaire.
 
 Validation du masquage visuel, le 21 octobre 2026 : **765 tests réussis (443 API + 322 web)**.
 Lint, typecheck, build, Prisma validate/generate et `git diff --check` passent. Le build
