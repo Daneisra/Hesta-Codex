@@ -20,3 +20,6 @@ export interface LinkSuggestionScan {
   ambiguities: Array<{ from: SuggestionEntity; text: string; candidates: string[] }>
 }
 export interface LinkSuggestionApply { id: string; fingerprint: string; confirm: true }
+export const linkSuggestionBatchLimit = 30
+export interface LinkSuggestionBatchApply { ids: string[]; fingerprint: string; confirm: true }
+export interface LinkSuggestionBatchResult { connections: number; occurrences: number; entities: number }

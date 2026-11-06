@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express'
 import { z } from 'zod'
+import { linkSuggestionBatchLimit } from '@hesta-codex/shared'
 import { EditorialStatus, EntityKind, Visibility } from '../prisma-client/enums.ts'
 import { adminSession } from '../auth/routes.js'
 import type { EditorialService } from './editorial.js'
@@ -63,6 +64,13 @@ export function createAdminRouter(store: AdminStore, editorial: EditorialService
       const parsed = applySchema.safeParse(request.body)
       if (!parsed.success) { response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'Aperçu récent et confirmation requis.' } }); return }
       response.json(await suggestions.apply(parsed.data, { discordId: adminSession(response).discordId, label: editorLabel(response) }))
+    })
+    const batchSchema = z.strictObject({ ids: z.array(z.string().regex(/^[a-f0-9]{64}$/)).min(1).max(linkSuggestionBatchLimit)
+      .refine(ids => new Set(ids).size === ids.length), fingerprint: z.string().regex(/^[a-f0-9]{64}$/), confirm: z.literal(true) })
+    router.post('/link-suggestions/apply-batch', async (request, response) => {
+      const parsed = batchSchema.safeParse(request.body)
+      if (!parsed.success) { response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'Sélection, aperçu récent et confirmation requis (30 connexions maximum).' } }); return }
+      response.json(await suggestions.applyBatch(parsed.data, { discordId: adminSession(response).discordId, label: editorLabel(response) }))
     })
   }
   if (deletion) {

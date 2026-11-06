@@ -193,3 +193,9 @@
 .admin-link-review label { display: flex; align-items: flex-start; gap: .6rem; }
 .admin-link-review input[type="checkbox"] { width: auto; flex-shrink: 0; margin-top: .25rem; }
 .admin-link-review mark { background: #d5b98135; color: #f4dfae; padding-inline: .1rem; }
+.admin-link-selection { display: flex; flex-wrap: wrap; align-items: center; gap: .8rem 1.2rem; margin-block: 1rem; padding: 1rem; border: 1px solid #394660; border-radius: .65rem; }
+.admin-link-selection > p { flex-basis: 100%; margin: 0; }
+.admin-link-selection label, .admin-link-choice { display: flex; align-items: flex-start; gap: .6rem; overflow-wrap: anywhere; }
+.admin-link-choice { margin-bottom: .75rem; }
+.admin-link-selection input, .admin-link-choice input { flex-shrink: 0; margin-top: .25rem; }
+.admin-link-selection, .admin-link-review summary { overflow-wrap: anywhere; }

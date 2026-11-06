@@ -221,6 +221,16 @@ beforeEach(async () => {
 after(async () => { server?.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); await prisma?.$disconnect(); await socket.stop(); await db.close() })
 const approved = async () => { const item = (await service.scan(1)).items[0]!; return { id: item.id, fingerprint: item.fingerprint, confirm: true as const } }
 const author = { label: 'Auteur humain fictif', discordId: actor }
+async function batchFixture() {
+  await prisma.entity.update({ where: { id: id(1) }, data: { bodyMarkdown: 'Cible et [[Autre]] ; Autre.' } })
+  await prisma.entity.createMany({ data: [
+    { id: id(3), slug: 'autre', title: 'Autre', bodyMarkdown: '', kind: 'CONCEPT', status: 'PROPOSED', visibility: 'GM' },
+    { id: id(4), slug: 'seconde', title: 'Seconde', bodyMarkdown: 'Cible.', kind: 'CONCEPT', status: 'PROPOSED', visibility: 'GM' },
+  ] })
+  const plan = await service.scan(1)
+  assert.equal(plan.connections, 3)
+  return { ids: plan.items.map(item => item.id), fingerprint: plan.items[0]!.fingerprint, confirm: true as const }
+}
 const post = (path: string, body: unknown, token = 'a', origin = 'http://localhost:5173') => fetch(base + path, { method: 'POST', headers: {
   Cookie: cookie(token), Origin: origin, 'Content-Type': 'application/json',
 }, body: JSON.stringify(body) })
@@ -294,6 +304,102 @@ test('a failure creating the revision rolls back all Markdown changes', async ()
   assert.deepEqual(await snapshots(), before)
 })
 
+test('batch combines same-source offsets and repairs, creates one human revision per source and preserves provenance', async () => {
+  const input = await batchFixture(), before = await snapshots()
+  const response = await post('/api/admin/link-suggestions/apply-batch', input)
+  assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'no-store')
+  assert.deepEqual(await response.json(), { connections: 3, occurrences: 4, entities: 2 })
+  assert.equal((await prisma.entity.findUniqueOrThrow({ where: { id: id(1) } })).bodyMarkdown,
+    '[[/fiches/cible|Cible]] et [[/fiches/autre|Autre]] ; [[/fiches/autre|Autre]].')
+  assert.equal((await prisma.entity.findUniqueOrThrow({ where: { id: id(4) } })).bodyMarkdown, '[[/fiches/cible|Cible]].')
+  const revisions = await prisma.revision.findMany({ orderBy: [{ entityId: 'asc' }, { number: 'asc' }] })
+  assert.equal(revisions.length, 3)
+  assert.equal(revisions.find(row => row.entityId === id(1) && row.number === 2)!.editorLabel, 'Auteur fictif')
+  assert.equal(revisions.find(row => row.entityId === id(4))!.editorLabel, 'Auteur fictif')
+  assert.equal(revisions.filter(row => row.entityId === id(1)).length, 2)
+  assert.match(revisions.find(row => row.entityId === id(1) && row.number === 2)!.message!, /2 destinations/)
+  const after = await snapshots()
+  for (let index = 2; index < tables.length; index++) assert.deepEqual(after[index], before[index], tables[index])
+  for (const index of [1, 2]) {
+    const current = await prisma.entity.findUniqueOrThrow({ where: { id: id(index) } })
+    assert.equal(current.status, 'PROPOSED'); assert.equal(current.visibility, 'GM'); assert.equal(current.publishedAt, null)
+  }
+  assert.equal((await service.scan(1)).connections, 0)
+  await assert.rejects(service.applyBatch(input, author), { status: 409 })
+  assert.deepEqual(await snapshots(), after)
+})
+
+test('batch applies only the chosen connection and leaves all other mentions untouched', async () => {
+  const input = await batchFixture(), plan = await service.scan(1)
+  const chosen = plan.items.find(item => item.from.id === id(1) && item.to.id === id(2))!
+  assert.deepEqual(await service.applyBatch({ ...input, ids: [chosen.id] }, author), { connections: 1, occurrences: 1, entities: 1 })
+  assert.equal((await prisma.entity.findUniqueOrThrow({ where: { id: id(1) } })).bodyMarkdown, '[[/fiches/cible|Cible]] et [[Autre]] ; Autre.')
+  assert.equal((await prisma.entity.findUniqueOrThrow({ where: { id: id(4) } })).bodyMarkdown, 'Cible.')
+})
+
+test('batch rolls back earlier sources when a later revision fails', async () => {
+  const input = await batchFixture(), before = await snapshots()
+  await db.exec(`CREATE OR REPLACE FUNCTION fail_suggestion() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+    IF NEW."entityId" = '${id(4)}' THEN RAISE EXCEPTION 'Injected later revision failure'; END IF; RETURN NEW; END; $$;
+    CREATE TRIGGER suggestion_failure BEFORE INSERT ON "Revision" FOR EACH ROW EXECUTE FUNCTION fail_suggestion();`)
+  await assert.rejects(service.applyBatch(input, author), /Injected later revision failure/)
+  assert.deepEqual(await snapshots(), before)
+})
+
+test('batch refuses invalid selections, forged replacements and stale approval without any writes', async () => {
+  const input = await batchFixture(), before = await snapshots()
+  for (const payload of [{ ...input, ids: [] }, { ...input, ids: [input.ids[0], input.ids[0]] }, { ...input, ids: Array(31).fill(input.ids[0]) },
+    { ...input, ids: ['invalid'] }, { ...input, confirm: false }, { ...input, replacements: ['invented'] }, { ...input, authorLabel: 'spoof' }]) {
+    assert.equal((await post('/api/admin/link-suggestions/apply-batch', payload)).status, 400)
+  }
+  await assert.rejects(service.applyBatch({ ...input, ids: [...input.ids, 'f'.repeat(64)] }, author), { status: 409 })
+  assert.deepEqual(await snapshots(), before)
+  await prisma.entity.update({ where: { id: id(3) }, data: { aliases: ['Changement'] } })
+  const changed = await snapshots()
+  await assert.rejects(service.applyBatch(input, author), { status: 409 }); assert.deepEqual(await snapshots(), changed)
+})
+
+test('concurrent batch double application creates one revision per source only', async () => {
+  const input = await batchFixture(), results = await Promise.allSettled([service.applyBatch(input, author), service.applyBatch(input, author)])
+  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1)
+  assert.equal(await prisma.revision.count(), 3)
+})
+
+test('batch rejects oversized content on a later fiche without partially updating earlier fiches', async () => {
+  await batchFixture()
+  await prisma.entity.update({ where: { id: id(4) }, data: { bodyMarkdown: 'x'.repeat(99990) + ' Cible' } })
+  const plan = await service.scan(1), before = await snapshots()
+  await assert.rejects(service.applyBatch({ ids: plan.items.map(item => item.id), fingerprint: plan.items[0]!.fingerprint, confirm: true }, author), { status: 400 })
+  assert.deepEqual(await snapshots(), before)
+})
+
+test('batch supports the 30-connection limit with long destination slugs and a bounded revision message', async () => {
+  const destinations = Array.from({ length: 30 }, (_, index) => ({ id: id(100 + index), slug: `destination-${'x'.repeat(170)}-${index}`,
+    title: `Destination fictive ${index + 1}`, kind: 'CONCEPT' as const, status: 'PROPOSED' as const, visibility: 'GM' as const }))
+  await prisma.entity.createMany({ data: destinations })
+  await prisma.entity.update({ where: { id: id(1) }, data: { bodyMarkdown: destinations.map(note => note.title).join(' ; ') } })
+  const plan = await service.scan(1)
+  assert.equal(plan.items.length, 30)
+  assert.deepEqual(await service.applyBatch({ ids: plan.items.map(item => item.id), fingerprint: plan.items[0]!.fingerprint, confirm: true }, author),
+    { connections: 30, occurrences: 30, entities: 1 })
+  const revision = await prisma.revision.findFirstOrThrow({ where: { entityId: id(1), number: 2 } })
+  assert.ok(revision.message!.length <= 500)
+  assert.equal(wikiOccurrences((await prisma.entity.findUniqueOrThrow({ where: { id: id(1) } })).bodyMarkdown).length, 30)
+})
+
+test('batch preserves publication state and keeps private destinations hidden in public API responses', async () => {
+  await batchFixture()
+  await prisma.entity.update({ where: { id: id(1) }, data: { status: 'PUBLISHED', visibility: 'PUBLIC', publishedAt: stamp } })
+  const plan = await service.scan(1)
+  await service.applyBatch({ ids: plan.items.map(item => item.id), fingerprint: plan.items[0]!.fingerprint, confirm: true }, author)
+  const current = await prisma.entity.findUniqueOrThrow({ where: { id: id(1) } })
+  assert.equal(current.status, 'PUBLISHED'); assert.equal(current.visibility, 'PUBLIC'); assert.deepEqual(current.publishedAt, stamp)
+  const response = await fetch(base + '/api/v1/entities/depart'), data = await response.json()
+  assert.equal(response.status, 200)
+  assert.equal(JSON.stringify(data).includes('/fiches/cible'), false); assert.equal(JSON.stringify(data).includes('/fiches/autre'), false)
+  assert.equal((await fetch(base + '/api/v1/entities/cible')).status, 404)
+})
+
 test('source edits, target identity changes and deletion invalidate the reviewed scan without writing', async () => {
   for (const change of [
     () => prisma.entity.update({ where: { id: id(1) }, data: { bodyMarkdown: 'Cible change.' } }),
@@ -330,7 +436,7 @@ test('published/public edits retain status and publication date and private targ
 })
 
 test('admin endpoints enforce authentication, whitelist, Origin, strict payloads and no-store', async () => {
-  for (const path of ['/api/admin/link-suggestions/scan', '/api/admin/link-suggestions/apply', '/api/admin/editorial-suggestions/terms']) {
+  for (const path of ['/api/admin/link-suggestions/scan', '/api/admin/link-suggestions/apply', '/api/admin/link-suggestions/apply-batch', '/api/admin/editorial-suggestions/terms']) {
     assert.equal((await fetch(base + path, { method: 'POST' })).status, 401)
     assert.equal((await post(path, {}, 'b')).status, 403)
     assert.equal((await post(path, {}, 'a', 'https://example.test')).status, 403)

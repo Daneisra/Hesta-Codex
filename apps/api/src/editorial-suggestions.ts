@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto'
 import { frontmatterEnd, markdownTree, walkWikiProse, wikiKey, wikiOccurrences,
+  linkSuggestionBatchLimit,
   type EditorialSuggestionDraft, type EditorialTermSuggestions, type EditorialVocabulary, type LinkSuggestion,
-  type LinkSuggestionScan, type LinkSuggestionApply, type SuggestionEntity, type AdminEntityDetail } from '@hesta-codex/shared'
+  type LinkSuggestionScan, type LinkSuggestionApply, type LinkSuggestionBatchApply, type LinkSuggestionBatchResult,
+  type SuggestionEntity, type AdminEntityDetail } from '@hesta-codex/shared'
 import { Prisma, type PrismaClient } from './prisma-client/client.ts'
 import { buildReferenceCatalog, loadReferenceSnapshot, type ReferenceEntity, type ReferenceOrigin } from './obsidian-references.js'
 import { EditorialError, editorialSelect, patchEditorialInTransaction } from './admin/editorial.js'
@@ -190,6 +192,7 @@ export interface EditorialSuggestionService {
   terms(draft: EditorialSuggestionDraft): Promise<EditorialTermSuggestions>
   scan(page: number): Promise<LinkSuggestionScan>
   apply(input: LinkSuggestionApply, actor: { label: string; discordId: string }): Promise<AdminEntityDetail>
+  applyBatch(input: LinkSuggestionBatchApply, actor: { label: string; discordId: string }): Promise<LinkSuggestionBatchResult>
 }
 export function createPrismaEditorialSuggestionService(prisma: PrismaClient): EditorialSuggestionService {
   async function snapshot(tx: Prisma.TransactionClient): Promise<Snapshot> {
@@ -202,6 +205,48 @@ export function createPrismaEditorialSuggestionService(prisma: PrismaClient): Ed
     await tx.$executeRawUnsafe('SET TRANSACTION READ ONLY')
     return run(await snapshot(tx))
   }, { isolationLevel: 'RepeatableRead', timeout: 20000 })
+  async function applyGroups(input: LinkSuggestionBatchApply, actor: { label: string; discordId: string }) {
+    if (input.confirm !== true) throw new EditorialError(400, 'CONFIRMATION_REQUIRED', 'Confirmation humaine requise.')
+    if (!input.ids.length || input.ids.length > linkSuggestionBatchLimit || new Set(input.ids).size !== input.ids.length) {
+      throw new EditorialError(400, 'INVALID_SELECTION', 'Sélection invalide (30 connexions maximum, sans doublon).')
+    }
+    try {
+      return await prisma.$transaction(async tx => {
+        // Validate the entire selection against one snapshot, before any modification invalidates its fingerprint.
+        const plan = scanConnections(await snapshot(tx)), byId = new Map(plan.items.map(item => [item.id, item]))
+        const groups = input.ids.map(id => {
+          const group = byId.get(id)
+          if (!group || group.fingerprint !== input.fingerprint) throw new EditorialError(409, 'SUGGESTION_MODIFIED', 'Le catalogue a changé. Relancez le scan et vérifiez le nouvel aperçu.')
+          return group
+        })
+        const sources = new Map<string, LinkSuggestion[]>()
+        for (const group of groups) sources.set(group.from.id, [...(sources.get(group.from.id) ?? []), group])
+        const updated: AdminEntityDetail[] = []
+        for (const [sourceId, links] of [...sources].sort(([a], [b]) => compare(a, b))) {
+          const current = await tx.entity.findUniqueOrThrow({ where: { id: sourceId }, select: editorialSelect })
+          const occurrences = links.flatMap(link => link.occurrences).sort((a, b) => b.start - a.start)
+          let body = current.bodyMarkdown, boundary = body.length
+          for (const item of occurrences) {
+            if (item.end > boundary || body.slice(item.start, item.end) !== item.text) {
+              throw new EditorialError(409, 'SUGGESTION_MODIFIED', 'Mentions incompatibles. Relancez le scan.')
+            }
+            body = body.slice(0, item.start) + item.wikilink + body.slice(item.end)
+            boundary = item.start
+          }
+          const fields = { title: current.title, summary: current.summary, bodyMarkdown: body, kind: current.kind, placeKind: current.placeKind,
+            aliases: current.aliases, tags: current.tags, visibility: current.visibility, expectedUpdatedAt: current.updatedAt.toISOString(),
+            revisionMessage: `Ajout/correction de ${occurrences.length} lien(s) vers ${links.length === 1 ? `/${links[0]!.to.slug}` : `${links.length} destinations`} après revue du scan.` }
+          const checked = patchSchema.safeParse(fields)
+          if (!checked.success) throw new EditorialError(400, 'INVALID_LINK_UPDATE', 'Le contenu dépasserait les limites de la fiche ou ses champs doivent être corrigés.')
+          updated.push(await patchEditorialInTransaction(tx, current.slug, checked.data, actor.label, actor.discordId))
+        }
+        return { updated, connections: groups.length, occurrences: groups.reduce((sum, group) => sum + group.occurrences.length, 0), entities: updated.length }
+      }, { isolationLevel: 'Serializable', timeout: 20000 })
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') throw new EditorialError(409, 'SUGGESTION_MODIFIED', 'Modification concurrente. Relancez le scan.')
+      throw error
+    }
+  }
   return {
     vocabulary: () => prisma.$transaction(async tx => {
       await tx.$executeRawUnsafe('SET TRANSACTION READ ONLY')
@@ -213,30 +258,15 @@ export function createPrismaEditorialSuggestionService(prisma: PrismaClient): Ed
       if (draft.entityId && !data.entities.some(note => note.id === draft.entityId)) throw new EditorialError(404, 'NOT_FOUND', 'Fiche introuvable. Votre brouillon est conservé.')
       return suggestTerms(data.entities, draft, data.origins)
     }),
-    scan: page => read(data => { const plan = scanConnections(data), pageSize = 30
+    scan: page => read(data => { const plan = scanConnections(data), pageSize = linkSuggestionBatchLimit
       return { ...plan, connections: plan.items.length, scannedAt: new Date().toISOString(), page, pageSize,
         items: plan.items.slice((page - 1) * pageSize, page * pageSize) } }),
     async apply(input, actor) {
-      if (input.confirm !== true) throw new EditorialError(400, 'CONFIRMATION_REQUIRED', 'Confirmation humaine requise.')
-      try {
-        return await prisma.$transaction(async tx => {
-          const plan = scanConnections(await snapshot(tx)), group = plan.items.find(item => item.id === input.id)
-          if (!group || group.fingerprint !== input.fingerprint) throw new EditorialError(409, 'SUGGESTION_MODIFIED', 'Le catalogue a changé. Relancez le scan et vérifiez le nouvel aperçu.')
-          const current = await tx.entity.findUniqueOrThrow({ where: { id: group.from.id }, select: editorialSelect })
-          let body = current.bodyMarkdown
-          for (const item of [...group.occurrences].sort((a, b) => b.start - a.start)) body = body.slice(0, item.start) + item.wikilink + body.slice(item.end)
-          // Use only editorial fields; strict validation rejects oversized bodies rather than truncating.
-          const fields = { title: current.title, summary: current.summary, bodyMarkdown: body, kind: current.kind, placeKind: current.placeKind,
-            aliases: current.aliases, tags: current.tags, visibility: current.visibility, expectedUpdatedAt: current.updatedAt.toISOString(),
-            revisionMessage: `Ajout/correction de ${group.occurrences.length} lien(s) vers /${group.to.slug} après revue du scan.` }
-          const checked = patchSchema.safeParse(fields)
-          if (!checked.success) throw new EditorialError(400, 'INVALID_LINK_UPDATE', 'Le contenu dépasserait les limites de la fiche ou ses champs doivent être corrigés.')
-          return patchEditorialInTransaction(tx, current.slug, checked.data, actor.label, actor.discordId)
-        }, { isolationLevel: 'Serializable', timeout: 20000 })
-      } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') throw new EditorialError(409, 'SUGGESTION_MODIFIED', 'Modification concurrente. Relancez le scan.')
-        throw error
-      }
+      return (await applyGroups({ ...input, ids: [input.id] }, actor)).updated[0]!
+    },
+    async applyBatch(input, actor) {
+      const { connections, occurrences, entities } = await applyGroups(input, actor)
+      return { connections, occurrences, entities }
     },
   }
 }

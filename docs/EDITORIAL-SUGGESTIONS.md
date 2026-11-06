@@ -67,6 +67,24 @@ avec jusqu’à 30 exemples de mentions ambiguës. Les aperçus longs s’ouvren
 4. Les seules modifications sont l’insertion ou la correction des wikilinks dans la fiche source et
    une nouvelle Revision attribuée à l’administrateur connecté. Le scan est recalculé.
 
+Pour gagner du temps, cocher plusieurs connexions ou **Tout sélectionner sur cette page**,
+puis **Examiner la sélection**. Un aperçu commun indique les destinations, le nombre
+de mentions et de fiches, les réparations et les éventuelles fiches publiques. Afficher
+toutes les mentions, cocher la confirmation et cliquer sur **Valider les connexions
+sélectionnées**. Annuler ferme l’aperçu sans écriture. Modifier la sélection invalide
+la confirmation. Masquer une connexion la retire de la sélection.
+
+La sélection est limitée aux **30 connexions de la page courante** ; une pagination
+ou un nouveau scan l’efface. Une seule requête applique la sélection dans une
+transaction atomique, après vérification de toutes les destinations sur le même
+snapshot. Les remplacements sont regroupés par fiche et appliqués de la fin vers
+le début du texte pour préserver les positions. Chaque fiche modifiée reçoit
+**une seule révision humaine**, même si elle mentionne plusieurs destinations.
+Une erreur, une fiche trop longue ou une modification concurrente annule tout le lot.
+Le bilan indique les connexions, mentions et fiches effectivement modifiées. Après
+une erreur, relancer le scan avant toute nouvelle tentative ; aucun réessai automatique
+n’applique un ancien aperçu. La validation individuelle reste disponible.
+
 Le format ciblé `[[/fiches/slug|Texte d’origine]]` désigne précisément une fiche Codex
 existante, y compris une fiche manuelle sans identité Obsidian ou une fiche homonyme.
 Il réutilise le rendu, les références entrantes/sortantes et le graphe existants.
@@ -117,6 +135,8 @@ API :
 - `POST /api/admin/editorial-suggestions/terms` : brouillon, sans écriture.
 - `POST /api/admin/link-suggestions/scan` : `{page: 1}`, sans écriture.
 - `POST /api/admin/link-suggestions/apply` : `{id, fingerprint, confirm: true}`.
+- `POST /api/admin/link-suggestions/apply-batch` : `{ids, fingerprint, confirm: true}`,
+  de 1 à 30 identifiants uniques issus du même scan. Réponse : `{connections, occurrences, entities}`.
 
 Aucune migration ni configuration de stockage supplémentaire. Aucun accès au coffre
 Obsidian, VPS ou PostgreSQL de production n’est nécessaire au développement.
@@ -126,6 +146,28 @@ détecter les mentions de noms/alias puis laisser l’opérateur choisir les lie
 Son code et ses dépendances ne sont pas intégrés au Codex.
 
 ## Vérifications locales
+
+### Validation groupée du 6 novembre 2026
+
+**907 tests réussis : 512 API et 395 web**, dont huit nouveaux tests API et sept
+tests d’interface. Lint, typecheck, build, Prisma validate/generate et
+`git diff --check` réussis. La suite web utilise sous Windows la configuration
+temporaire de délais déjà décrite ci-dessous, sans exclusion de tests.
+
+Les régressions couvrent plusieurs destinations dans une même fiche, les positions
+du Markdown, les réparations existantes, une révision par fiche, la sélection
+partielle, la limite de 30 connexions avec des slugs longs, les charges invalides,
+le double envoi, le catalogue périmé et le rollback lorsqu’une fiche ultérieure
+échoue. Les contrôles d’authentification, Origin et confidentialité publique restent
+actifs. Les tests d’interface vérifient sélection, désélection, aperçu complet,
+confirmation, pagination, masquage et erreurs de session ou d’enregistrement.
+
+La recette visuelle n’a pas pu être exécutée : l’outil de contrôle du navigateur
+a arrêté l’accès, faute de pouvoir déterminer l’URL active sous Windows avec
+certitude. Le serveur de recette, utilisant uniquement quatre fiches fictives
+dans PGlite en mémoire, a été arrêté. Aucun résultat visuel n’est revendiqué.
+Le build conserve l’avertissement existant de chunk principal supérieur à 500 kB.
+Aucune migration, dépendance ou configuration de production n’est ajoutée.
 
 ### Correctif du 30 octobre 2026 : wikilinks déjà écrits sans association
 

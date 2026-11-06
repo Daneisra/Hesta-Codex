@@ -20,7 +20,7 @@ function scanner() {
   return { ...render(<AdminLinkSuggestions {...callbacks} />), ...callbacks }
 }
 const openReview = async () => { await screen.findByText('130 fiches analysées', { exact: false }); fireEvent.click(screen.getByRole('button', { name: 'Examiner et lier' })) }
-const confirm = () => fireEvent.click(screen.getByRole('checkbox'))
+const confirm = () => fireEvent.click(screen.getByRole('checkbox', { name: /J’ai vérifié/ }))
 
 describe('scan des connexions', () => {
   it('performs a read-only scan, explains counts and ambiguities, and requires preview plus human confirmation', async () => {
@@ -31,7 +31,7 @@ describe('scan des connexions', () => {
     expect(fetcher).toHaveBeenCalledTimes(1)
     expect(JSON.parse(fetcher.mock.calls[0]![1]!.body as string)).toEqual({ page: 1 })
     fireEvent.click(screen.getByRole('button', { name: 'Annuler' }))
-    expect(screen.queryByRole('checkbox')).toBeNull()
+    expect(screen.queryByRole('checkbox', { name: /J’ai vérifié/ })).toBeNull()
     expect(fetcher).toHaveBeenCalledTimes(1)
   })
   it('identifies existing wikilinks to repair and previews the replacement without applying it automatically', async () => {
@@ -59,7 +59,7 @@ describe('scan des connexions', () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => response(url.endsWith('/apply') ? { error: { message: 'Catalogue modifié. Relancez le scan.' } } : plan, url.endsWith('/apply') ? 409 : 200)))
     scanner(); await openReview(); confirm(); fireEvent.click(screen.getByRole('button', { name: 'Ajouter les liens validés' }))
     await screen.findByRole('alert'); expect((screen.getByRole('button', { name: 'Ajouter les liens validés' }) as HTMLButtonElement).disabled).toBe(true)
-    fireEvent.click(screen.getByRole('button', { name: 'Relancer le scan' })); await waitFor(() => expect(screen.queryByRole('checkbox')).toBeNull())
+    fireEvent.click(screen.getByRole('button', { name: 'Relancer le scan' })); await waitFor(() => expect(screen.queryByRole('checkbox', { name: /J’ai vérifié/ })).toBeNull())
   })
   for (const status of [401, 403]) it(`clears private results after authentication error ${status}`, async () => {
     vi.stubGlobal('fetch', vi.fn(async () => response({}, status))); const callbacks = scanner()
@@ -77,6 +77,77 @@ describe('scan des connexions', () => {
     const fetcher = vi.fn<(url: string, init?: RequestInit) => Promise<unknown>>(() => new Promise(() => {})); vi.stubGlobal('fetch', fetcher)
     const view = scanner(); await waitFor(() => expect(fetcher).toHaveBeenCalledOnce()); const signal = (fetcher.mock.calls[0]![1] as RequestInit).signal!
     view.unmount(); expect(signal.aborted).toBe(true)
+  })
+
+  const other = { ...item, id: 'c'.repeat(64), to: { ...item.to, id: 'second', title: 'Autre', slug: 'autre' },
+    occurrences: [{ ...item.occurrences[0]!, wikilink: '[[/fiches/autre|Autre]]' }] }
+  const batchPlan = { ...plan, connections: 2, occurrences: 2, items: [item, other] }
+  const selectAll = () => fireEvent.click(screen.getByRole('checkbox', { name: 'Tout sélectionner sur cette page' }))
+  const reviewBatch = () => fireEvent.click(screen.getByRole('button', { name: /Examiner la sélection/ }))
+
+  it('selects several connections, previews them together and submits one confirmed request despite double clicks', async () => {
+    let done: ((value: unknown) => void) | undefined, scans = 0
+    const fetcher = vi.fn<(url: string, init?: RequestInit) => Promise<unknown>>(url => url.endsWith('/apply-batch')
+      ? new Promise(resolve => { done = resolve }) : Promise.resolve(response(++scans === 1 ? batchPlan : { ...batchPlan, items: [], connections: 0 })))
+    vi.stubGlobal('fetch', fetcher); const callbacks = scanner(); await screen.findByText(/130 fiches analysées/)
+    expect((screen.getByRole('button', { name: /Examiner la sélection/ }) as HTMLButtonElement).disabled).toBe(true)
+    selectAll(); reviewBatch()
+    expect(screen.getByRole('region', { name: 'Validation groupée' })).toBeTruthy()
+    expect(screen.getByText('[[/fiches/autre|Autre]]', { exact: false })).toBeTruthy()
+    const button = screen.getByRole('button', { name: 'Valider les connexions sélectionnées' })
+    expect((button as HTMLButtonElement).disabled).toBe(true); expect(fetcher).toHaveBeenCalledTimes(1)
+    confirm(); fireEvent.click(button); fireEvent.click(button)
+    const calls = fetcher.mock.calls.filter(([url]) => url.endsWith('/apply-batch'))
+    expect(calls).toHaveLength(1)
+    expect(JSON.parse(calls[0]![1]!.body as string)).toEqual({ ids: [item.id, other.id], fingerprint: item.fingerprint, confirm: true })
+    done!(response({ connections: 2, occurrences: 2, entities: 1 }))
+    await screen.findByText(/2 connexion\(s\) validée\(s\)/)
+    await waitFor(() => expect(callbacks.onPendingChange).toHaveBeenLastCalledWith(false))
+    expect(callbacks.onChanged).toHaveBeenCalledOnce(); expect(screen.queryByRole('region', { name: 'Validation groupée' })).toBeNull()
+  })
+
+  it('keeps only checked items and invalidates confirmation whenever selection changes or an item is hidden', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response(batchPlan))); scanner(); await screen.findByText(/130 fiches analysées/)
+    selectAll(); reviewBatch(); confirm()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Sélectionner Départ → Autre' }))
+    expect(screen.queryByRole('region', { name: 'Validation groupée' })).toBeNull()
+    expect((screen.getByRole('checkbox', { name: 'Tout sélectionner sur cette page' }) as HTMLInputElement).indeterminate).toBe(true)
+    reviewBatch(); expect((screen.getByRole('checkbox', { name: /J’ai vérifié/ }) as HTMLInputElement).checked).toBe(false)
+    expect(screen.getByText(/1 connexion\(s\) · 1 mention\(s\) · 1 fiche/)).toBeTruthy()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Masquer pour ce scan' })[0]!)
+    expect((screen.getByRole('button', { name: /Examiner la sélection/ }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('requires all batch preview pages and warns about public edits and existing wikilinks to repair', async () => {
+    const many = { ...item, from: { ...item.from, status: 'PUBLISHED', visibility: 'PUBLIC' }, occurrences: Array.from({ length: 31 }, (_, start) => ({ ...item.occurrences[0]!, start, repair: true })) }
+    vi.stubGlobal('fetch', vi.fn(async () => response({ ...plan, items: [many] }))); scanner(); await screen.findByText(/130 fiches analysées/)
+    selectAll(); reviewBatch()
+    expect(screen.getByText(/modifiera immédiatement leur contenu visible/)).toBeTruthy()
+    expect(screen.getByText(/destination sera corrigée après votre confirmation/)).toBeTruthy()
+    expect((screen.getByRole('checkbox', { name: /J’ai vérifié/ }) as HTMLInputElement).disabled).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Afficher les mentions suivantes avant validation' }))
+    expect((screen.getByRole('checkbox', { name: /J’ai vérifié/ }) as HTMLInputElement).disabled).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Annuler' })); expect(screen.queryByRole('region', { name: 'Validation groupée' })).toBeNull()
+  })
+
+  it('clears selection on pagination and rescan, and never applies hidden pages', async () => {
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => response({ ...batchPlan, connections: 31, page: JSON.parse(init!.body as string).page }))
+    vi.stubGlobal('fetch', fetcher); scanner(); await screen.findByText(/130 fiches analysées/)
+    selectAll(); fireEvent.click(screen.getByRole('button', { name: 'Suivant' })); await screen.findByText('Page 2')
+    expect((screen.getByRole('button', { name: /Examiner la sélection/ }) as HTMLButtonElement).disabled).toBe(true)
+    selectAll(); fireEvent.click(screen.getByRole('button', { name: 'Relancer le scan' })); await screen.findByText('Page 1')
+    expect((screen.getByRole('checkbox', { name: 'Tout sélectionner sur cette page' }) as HTMLInputElement).checked).toBe(false)
+    expect(fetcher.mock.calls).toHaveLength(3)
+  })
+
+  for (const status of [409, 500, 401]) it(`requires a fresh scan after batch error ${status} and retains no confirmation`, async () => {
+    const fetcher = vi.fn(async (url: string) => response(url.endsWith('/apply-batch') ? { error: { message: 'Erreur de validation.' } } : batchPlan,
+      url.endsWith('/apply-batch') ? status : 200))
+    vi.stubGlobal('fetch', fetcher); const callbacks = scanner(); await screen.findByText(/130 fiches analysées/)
+    selectAll(); reviewBatch(); confirm(); fireEvent.click(screen.getByRole('button', { name: 'Valider les connexions sélectionnées' }))
+    await screen.findByRole('alert')
+    if (status === 401) { expect(callbacks.onAccessError).toHaveBeenCalledWith(401); expect(screen.queryByRole('region', { name: 'Validation groupée' })).toBeNull() }
+    else expect((screen.getByRole('button', { name: 'Valider les connexions sélectionnées' }) as HTMLButtonElement).disabled).toBe(true)
   })
 })
 
