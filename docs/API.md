@@ -56,6 +56,8 @@ portent `Cache-Control: no-store`.
 Les images utilisent `POST /api/admin/images` (binaire authentifié, 5 Mio maximum) et
 `GET /api/images/:id` (permissions de la fiche ou de l'import privé contrôlées à chaque
 lecture, sans cache). Le type `PLAYER_CHARACTER` distingue les PJ des `PERSON` (PNJ).
+Le type `RUNE` distingue les runes des `ARTIFACT` dans les formulaires et les filtres
+de fiches ; il suit les mêmes règles de visibilité et de publication.
 Contrats, conservation et préparation Nginx : [EDITORIAL-MEDIA.md](EDITORIAL-MEDIA.md).
 
 Les suggestions d’alias/tags et de connexions sont réservées à l’administration :

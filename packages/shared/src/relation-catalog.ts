@@ -21,6 +21,7 @@ const powers = [...actors, 'PLACE'] as const
 const events = ['EVENT', 'QUEST', 'SESSION'] as const
 const places = ['PLACE'] as const
 const institutions = ['ORGANIZATION', 'FAMILY', 'RELIGION'] as const
+const objects = ['ARTIFACT', 'RUNE'] as const
 const definition = (category: Category, code: string, label: string, inverseCode: string | null,
   inverseLabel: string | null, usualFrom: readonly EntityKind[], usualTo: readonly EntityKind[]): RelationDefinition =>
   ({ category, code, label, inverseCode, inverseLabel, symmetric: inverseCode === null, usualFrom, usualTo })
@@ -35,7 +36,7 @@ export const relationCatalog: readonly RelationDefinition[] = [
   definition('geography', 'lived_in', 'a vécu en', 'previously_inhabited_by', 'a été habité par', actors, places),
   definition('geography', 'born_in', 'est né à', 'birthplace_of', 'est le lieu de naissance de', individuals, places),
   definition('geography', 'died_in', 'est mort à', 'deathplace_of', 'est le lieu de décès de', individuals, places),
-  definition('geography', 'originates_from', 'est originaire de', 'origin_of', "est le lieu d’origine de", [...actors, 'ARTIFACT', 'CONCEPT'], places),
+  definition('geography', 'originates_from', 'est originaire de', 'origin_of', "est le lieu d’origine de", [...actors, ...objects, 'CONCEPT'], places),
   definition('family', 'parent_of', 'parent de', 'child_of', 'enfant de', individuals, individuals),
   definition('family', 'sibling_of', 'frère ou sœur de', null, null, individuals, individuals),
   definition('family', 'spouse_of', 'conjoint de', null, null, individuals, individuals),
@@ -51,7 +52,7 @@ export const relationCatalog: readonly RelationDefinition[] = [
   definition('politics', 'vassal_of', 'vassal de', 'overlord_of', 'suzerain de', powers, powers),
   definition('politics', 'enemy_of', 'ennemi de', null, null, powers, powers),
   definition('politics', 'rival_of', 'rival de', null, null, powers, powers),
-  definition('politics', 'protects', 'protège', 'protected_by', 'est protégé par', actors, [...powers, 'ARTIFACT']),
+  definition('politics', 'protects', 'protège', 'protected_by', 'est protégé par', actors, [...powers, ...objects]),
   definition('religion', 'worships', 'vénère', 'worshipped_by', 'est vénéré par', actors, ['DEITY']),
   definition('religion', 'patron_deity_of', 'est la divinité protectrice de', 'has_patron_deity', 'a pour divinité protectrice', ['DEITY'], powers),
   definition('history', 'participated_in', 'a participé à', 'had_participant', 'a eu pour participant', powers, events),
@@ -59,13 +60,13 @@ export const relationCatalog: readonly RelationDefinition[] = [
   definition('history', 'caused', 'a provoqué', 'caused_by', 'a été provoqué par', [], events),
   definition('history', 'can_become', 'peut devenir', 'possible_transformation_of', 'est une transformation possible de', actors, [...actors, 'CONCEPT']),
   definition('history', 'seeks', 'recherche', 'sought_by', 'est recherché par', actors, []),
-  definition('artifact', 'created', 'a créé', 'created_by', 'a été créé par', actors, ['ARTIFACT', 'PLACE', 'ORGANIZATION', 'CREATURE', 'SPECIES', 'CONCEPT']),
-  definition('artifact', 'covets', 'convoite', 'coveted_by', 'est convoité par', actors, ['ARTIFACT', 'PLACE', 'CONCEPT']),
-  definition('artifact', 'owns', 'possède', 'owned_by', 'appartient à', actors, ['ARTIFACT', 'PLACE']),
-  definition('artifact', 'holds', 'détient', 'held_by', 'est détenu par', actors, ['ARTIFACT']),
-  definition('artifact', 'uses', 'utilise', 'used_by', 'est utilisé par', actors, ['ARTIFACT']),
-  definition('artifact', 'previously_owned', 'a possédé', 'previously_owned_by', 'a appartenu à', actors, ['ARTIFACT', 'PLACE']),
-  definition('artifact', 'previously_used', 'a utilisé', 'previously_used_by', 'a été utilisé par', actors, ['ARTIFACT']),
+  definition('artifact', 'created', 'a créé', 'created_by', 'a été créé par', actors, [...objects, 'PLACE', 'ORGANIZATION', 'CREATURE', 'SPECIES', 'CONCEPT']),
+  definition('artifact', 'covets', 'convoite', 'coveted_by', 'est convoité par', actors, [...objects, 'PLACE', 'CONCEPT']),
+  definition('artifact', 'owns', 'possède', 'owned_by', 'appartient à', actors, [...objects, 'PLACE']),
+  definition('artifact', 'holds', 'détient', 'held_by', 'est détenu par', actors, objects),
+  definition('artifact', 'uses', 'utilise', 'used_by', 'est utilisé par', actors, objects),
+  definition('artifact', 'previously_owned', 'a possédé', 'previously_owned_by', 'a appartenu à', actors, [...objects, 'PLACE']),
+  definition('artifact', 'previously_used', 'a utilisé', 'previously_used_by', 'a été utilisé par', actors, objects),
 ]
 
 export const originalRelationCodes = ['located_in', 'member_of', 'parent_of', 'allied_with'] as const
@@ -85,7 +86,7 @@ export function groupRelationTypes(types: readonly RelationTypeItem[]) {
 
 const kindLabels: Record<EntityKind, string> = { PERSON: 'personnage', PLAYER_CHARACTER: 'personnage joueur', PLACE: 'lieu', ORGANIZATION: 'organisation',
   FAMILY: 'famille', RELIGION: 'religion', DEITY: 'divinité', SPECIES: 'peuple ou espèce', CREATURE: 'créature',
-  ARTIFACT: 'artefact', EVENT: 'événement', QUEST: 'quête', SESSION: 'session', CONCEPT: 'concept', OTHER: 'autre' }
+  ARTIFACT: 'artefact', RUNE: 'rune', EVENT: 'événement', QUEST: 'quête', SESSION: 'session', CONCEPT: 'concept', OTHER: 'autre' }
 
 /** Advisory only; inverse choices use inverse expectations. Unknown/OTHER kinds are left to the editor. */
 export function relationKindWarning(code: string, from: EntityKind, to: EntityKind): string | null {

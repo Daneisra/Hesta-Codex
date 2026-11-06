@@ -21,6 +21,26 @@ ajoute ce type et les images sans reclasser de fiche existante. Les images suive
 les permissions de lecture de leur fiche ; elles ne changent pas les règles de
 publication. Voir [Images éditoriales](EDITORIAL-MEDIA.md).
 
+`RUNE` distingue les runes des autres objets `ARTIFACT`. La migration additive
+`20261106000000_add_rune_entity_kind` ajoute uniquement cette valeur à l’enum
+PostgreSQL `EntityKind`, sans modifier les fiches ni leurs dépendances. Les formulaires
+de création/modification, la bibliothèque, l’administration, la qualification et le
+graphe proposent les deux types séparément. Le groupe visuel « Récits et objets »
+du graphe contient les deux types, filtrables indépendamment. Les suggestions de
+relations d’objets acceptent aussi les runes, y compris dans le sens inverse.
+
+Pour reclasser une fiche existante : **Modifier → Type : RUNE → Enregistrer**.
+Cette décision humaine conserve l’UUID, le slug, le Markdown, les images, les preuves
+et les relations, et ajoute une révision. Aucun reclassement ni publication automatique.
+Le workflow de déploiement applique la migration avant le redémarrage de l’API.
+
+Validation locale du 6 novembre 2026 pour ce type : **914 tests réussis (516 API +
+398 web)**, lint, typecheck, build, Prisma validate/generate et contrôle du diff.
+Les tests PostgreSQL embarqués vérifient que la migration conserve les artefacts,
+relations, preuves et révisions. Les tests de création/reclassement conservent aussi
+les images et contrôlent les filtres et la confidentialité. La suite web sous Windows
+utilise les délais temporaires habituels, sans exclusion. Aucun accès à une base réelle.
+
 - Chaque fiche et chaque relation possède un UUID stable. Le slug unique sert aux URL ;
   changer un titre ne change ni l'UUID ni les liens relationnels.
 - Le texte narratif est en Markdown. Les types, relations, sources et preuves sont des

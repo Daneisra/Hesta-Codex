@@ -20,6 +20,7 @@ import { readAuthConfig } from './auth/config.js'
 import { sessionCookieName, sessionHash } from './auth/session.js'
 import { manualCreateSchema } from './admin/manual-validation.js'
 import { patchSchema } from './admin/validation.js'
+import { createPrismaGraphStore } from './graph.js'
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
 const actor = '222222222222222222', other = '444444444444444444'
@@ -162,6 +163,48 @@ test('manual PJ creation binds images, retains Markdown and creates its ordinary
   assert.equal(stored.entityId, result.id); assert.equal(stored.ownerDiscordId, null)
   assert.equal(await images.read(image.id, null), null)
   assert.equal(relationKindWarning('works_for', 'PLAYER_CHARACTER', 'PERSON'), null)
+})
+
+test('runes and artefacts remain independently filterable and private until explicitly published', async () => {
+  const manual = createPrismaManualService(prisma), editorial = createPrismaEditorialService(prisma)
+  const input = createInput('Texte fictif conservé.')
+  const rune = await manual.create({ ...input, entity: { ...input.entity, slug: 'rune-fictive', title: 'Rune fictive', kind: 'RUNE' } }, 'Auteur fictif', actor)
+  const artefact = await manual.create({ ...input, entity: { ...input.entity, slug: 'artefact-fictif', title: 'Artefact fictif', kind: 'ARTIFACT' } }, 'Auteur fictif', actor)
+  assert.equal(rune.kind, 'RUNE'); assert.equal(rune.revisions.length, 1); assert.equal(rune.evidence.length, 1)
+  assert.equal(rune.status, 'PROPOSED'); assert.equal(rune.visibility, 'GM')
+  for (const kind of ['RUNE', 'ARTIFACT']) {
+    const admin = await fetch(`${base}/api/admin/entities?kind=${kind}`, { headers: { Cookie: cookie() } })
+    assert.equal(admin.status, 200)
+    const list = await admin.json() as { items: Array<{ kind: string }> }
+    assert.deepEqual(list.items.map(note => note.kind), [kind])
+    assert.deepEqual(await (await fetch(`${base}/api/v1/entities?kind=${kind}`)).json(), [])
+  }
+  const graph = createPrismaGraphStore(prisma)
+  assert.equal((await graph.publicGraph()).nodes.some(node => node.id === rune.id), false)
+  assert.equal((await graph.adminGraph()).nodes.find(node => node.id === rune.id)!.kind, 'RUNE')
+  const prepared = await editorial.patch(rune.slug, { ...input.entity, kind: 'RUNE', title: rune.title, visibility: 'PUBLIC', expectedUpdatedAt: rune.updatedAt }, 'Auteur fictif', actor)
+  await editorial.publish(rune.slug, { expectedUpdatedAt: prepared.updatedAt }, 'Auteur fictif')
+  const visible = await (await fetch(`${base}/api/v1/entities?kind=RUNE`)).json() as Array<{ slug: string; kind: string }>
+  assert.deepEqual(visible.map(note => [note.slug, note.kind]), [['rune-fictive', 'RUNE']])
+  assert.equal((await graph.publicGraph()).nodes.find(node => node.id === rune.id)!.kind, 'RUNE')
+  assert.equal((await graph.publicGraph()).nodes.some(node => node.id === artefact.id), false)
+})
+
+test('human reclassification between artefact and rune preserves Markdown, image, identity, relations and provenance', async () => {
+  const image = await upload(), input = createInput(markdown(image)), editorial = createPrismaEditorialService(prisma)
+  let current = await createPrismaManualService(prisma).create({ ...input, entity: { ...input.entity, kind: 'ARTIFACT' } }, 'Auteur fictif', actor)
+  const type = await prisma.relationType.findUniqueOrThrow({ where: { code: 'owns' } })
+  const relation = await prisma.relation.create({ data: { fromEntityId: id(1), toEntityId: current.id, relationTypeId: type.id } })
+  const proofs = await prisma.evidence.findMany(), imageBefore = await prisma.entityImage.findUniqueOrThrow({ where: { id: image.id } })
+  for (const kind of ['RUNE', 'ARTIFACT'] as const) {
+    current = await editorial.patch(current.slug, { ...input.entity, kind, expectedUpdatedAt: current.updatedAt }, 'Auteur fictif', actor)
+    assert.equal(current.kind, kind); assert.equal(current.bodyMarkdown, input.entity.bodyMarkdown)
+    assert.equal(current.id, imageBefore.entityId); assert.equal(current.slug, input.entity.slug)
+    assert.deepEqual(await prisma.evidence.findMany(), proofs)
+    assert.deepEqual(await prisma.relation.findUniqueOrThrow({ where: { id: relation.id } }), relation)
+    assert.deepEqual(await prisma.entityImage.findUniqueOrThrow({ where: { id: image.id } }), imageBefore)
+  }
+  assert.equal(current.revisions.length, 3)
 })
 
 test('an invalid image rolls back creation, provenance and revision without deleting the pending upload', async () => {

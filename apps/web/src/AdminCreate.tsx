@@ -12,7 +12,7 @@ import { MarkdownImage } from './MarkdownImage'
 import { AdminTermSuggestions } from './AdminTermSuggestions'
 
 const kinds: EntityKind[] = ['PERSON', 'PLAYER_CHARACTER', 'PLACE', 'ORGANIZATION', 'FAMILY', 'RELIGION', 'DEITY', 'SPECIES',
-  'CREATURE', 'ARTIFACT', 'EVENT', 'QUEST', 'SESSION', 'CONCEPT', 'OTHER']
+  'CREATURE', 'ARTIFACT', 'RUNE', 'EVENT', 'QUEST', 'SESSION', 'CONCEPT', 'OTHER']
 const places: PlaceKind[] = ['CITY', 'CONTINENT', 'REGION', 'SEA', 'OCEAN', 'OTHER']
 const sourceKinds: SourceKind[] = ['MANUAL', 'OBSIDIAN', 'DISCORD', 'HESTA_MAP', 'YOUTUBE', 'AI_DERIVED', 'OTHER']
 const visibilities: Visibility[] = ['PUBLIC', 'PLAYERS', 'GM', 'SECRET']

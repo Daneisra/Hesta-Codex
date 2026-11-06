@@ -22,6 +22,7 @@ const kindOptions: { kind: EntityKind; label: string }[] = [
   { kind: 'SPECIES', label: 'Espèces' },
   { kind: 'CREATURE', label: 'Créatures' },
   { kind: 'ARTIFACT', label: 'Artefacts' },
+  { kind: 'RUNE', label: 'Runes' },
   { kind: 'EVENT', label: 'Événements' },
   { kind: 'QUEST', label: 'Quêtes' },
   { kind: 'SESSION', label: 'Sessions JDR' },

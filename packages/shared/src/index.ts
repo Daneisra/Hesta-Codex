@@ -32,6 +32,7 @@ export type EntityKind =
   | 'SPECIES'
   | 'CREATURE'
   | 'ARTIFACT'
+  | 'RUNE'
   | 'EVENT'
   | 'QUEST'
   | 'SESSION'

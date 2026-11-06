@@ -33,6 +33,7 @@ enum EntityKind {
   SPECIES
   CREATURE
   ARTIFACT
+  RUNE
   EVENT
   QUEST
   SESSION

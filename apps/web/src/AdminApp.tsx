@@ -29,7 +29,7 @@ const statuses: EditorialStatus[] = ['DRAFT', 'PROPOSED', 'PUBLISHED', 'ARCHIVED
 const visibilities: Visibility[] = ['PUBLIC', 'PLAYERS', 'GM', 'SECRET']
 const kinds: EntityKind[] = [
   'PERSON', 'PLAYER_CHARACTER', 'PLACE', 'ORGANIZATION', 'FAMILY', 'RELIGION', 'DEITY', 'SPECIES',
-  'CREATURE', 'ARTIFACT', 'EVENT', 'QUEST', 'SESSION', 'CONCEPT', 'OTHER',
+  'CREATURE', 'ARTIFACT', 'RUNE', 'EVENT', 'QUEST', 'SESSION', 'CONCEPT', 'OTHER',
 ]
 const statusLabels: Record<EditorialStatus, string> = {
   DRAFT: 'Brouillon', PROPOSED: 'Proposée', PUBLISHED: 'Publiée', ARCHIVED: 'Archivée',

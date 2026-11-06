@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { EntityDetail, EntityListItem, EntityRelationItem } from '@hesta-codex/shared'
 import { App } from './App'
@@ -79,6 +79,16 @@ afterEach(() => {
 })
 
 describe('consultation publique', () => {
+  it('propose des filtres indépendants pour les runes et les artefacts', async () => {
+    const { requests } = mockApi()
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Runes' }))
+    await waitFor(() => expect(requests.some(url => url.includes('kind=RUNE'))).toBe(true))
+    expect(screen.getByRole('button', { name: 'Runes' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'Artefacts' }))
+    await waitFor(() => expect(requests.some(url => url.includes('kind=ARTIFACT'))).toBe(true))
+    expect(screen.getByRole('button', { name: 'Runes' }).getAttribute('aria-pressed')).toBe('false')
+  })
   it('navigue entre bibliothèque et graphe sans rechargement et ouvre directement /graphe', async () => {
     const user = userEvent.setup()
     const { requests } = mockApi()

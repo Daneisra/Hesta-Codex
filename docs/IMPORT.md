@@ -81,8 +81,8 @@ est une URL HTTP(S). `authorLabel` est un nom textuel (200 caractères maximum).
 | `visibility` | `PUBLIC`, `PLAYERS`, `GM` ou `SECRET` ; défaut `GM`. |
 | `evidence` | Tableau obligatoire d'au moins une preuve. |
 
-Les valeurs de `EntityKind` sont `PERSON`, `PLACE`, `ORGANIZATION`, `FAMILY`, `RELIGION`,
-`DEITY`, `SPECIES`, `CREATURE`, `ARTIFACT`, `EVENT`, `QUEST`, `SESSION`, `CONCEPT` et `OTHER`.
+Les valeurs de `EntityKind` sont `PERSON`, `PLAYER_CHARACTER`, `PLACE`, `ORGANIZATION`, `FAMILY`, `RELIGION`,
+`DEITY`, `SPECIES`, `CREATURE`, `ARTIFACT`, `RUNE`, `EVENT`, `QUEST`, `SESSION`, `CONCEPT` et `OTHER`.
 Les chaînes d'`aliases` et de `tags` sont élaguées de leurs espaces périphériques ; les
 valeurs vides ou dupliquées sans distinction de casse sont refusées, avec le chemin précis.
 

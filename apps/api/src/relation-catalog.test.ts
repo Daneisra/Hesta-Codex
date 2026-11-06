@@ -15,6 +15,7 @@ const lifePlacesMigration = await readFile(new URL('20261030000000_journeys_and_
 const newCodes = ['works_for', 'protects', 'can_become', 'previously_owned', 'previously_used']
 const intentionCodes = ['seeks', 'covets', 'holds']
 const lifePlaceCodes = ['visited', 'lived_in', 'born_in', 'died_in']
+const runeMigrationName = '20261106000000_add_rune_entity_kind'
 const additions = relationTypeDefinitions.filter(type => !originalRelationCodes.some(code => code === type.code))
 const original = relationTypeDefinitions.filter(type => originalRelationCodes.some(code => code === type.code))
 const id = (number: number) => `00000000-0000-4000-8000-${String(number).padStart(12, '0')}`
@@ -87,6 +88,42 @@ test('journeys, former residence, birth and death retain distinct meanings and n
   assert.equal(relationTypeDefinitions.find(type => type.code === 'inhabits')!.label, 'habite dans')
   assert.equal(relationTypeDefinitions.find(type => type.code === 'originates_from')!.label, 'est originaire de')
   assert.match(relationKindWarning('born_in', 'ARTIFACT', 'PLACE')!, /choix reste autorisé/)
+})
+
+test('runes accept ordinary object relations in both directions without redefining the catalogue', () => {
+  for (const [code, inverse] of [['created', 'created_by'], ['covets', 'coveted_by'], ['owns', 'owned_by'],
+    ['holds', 'held_by'], ['uses', 'used_by'], ['previously_owned', 'previously_owned_by'], ['previously_used', 'previously_used_by'],
+    ['protects', 'protected_by']] as const) {
+    assert.equal(relationKindWarning(code, 'PERSON', 'RUNE'), null)
+    assert.equal(relationKindWarning(inverse, 'RUNE', 'PERSON'), null)
+  }
+  assert.equal(relationKindWarning('originates_from', 'RUNE', 'PLACE'), null)
+  assert.equal(relationTypeDefinitions.length, 39)
+})
+
+test('rune enum migration preserves artefacts, relations, evidence and revisions and is repeatable', async () => {
+  const db = new PGlite()
+  try {
+    for (const name of (await readdir(migrations)).filter(name => /^\d/.test(name) && name !== runeMigrationName).sort()) {
+      await db.exec(await readFile(new URL(`${name}/migration.sql`, migrations), 'utf8'))
+    }
+    await db.exec(`INSERT INTO "Entity" (id,slug,kind,title,"updatedAt") VALUES
+      ('${id(7000)}','artefact-fictif','ARTIFACT','Artefact fictif',CURRENT_TIMESTAMP),
+      ('${id(7001)}','personne-fictive','PERSON','Personne fictive',CURRENT_TIMESTAMP);
+      INSERT INTO "Source" (id,kind,label,"updatedAt") VALUES ('${id(7002)}','MANUAL','Source fictive',CURRENT_TIMESTAMP);
+      INSERT INTO "Relation" (id,"fromEntityId","toEntityId","relationTypeId","updatedAt")
+        SELECT '${id(7003)}','${id(7001)}','${id(7000)}',id,CURRENT_TIMESTAMP FROM "RelationType" WHERE code='owns';
+      INSERT INTO "Evidence" (id,"sourceId","entityId","claimText","updatedAt") VALUES
+        ('${id(7004)}','${id(7002)}','${id(7000)}','Preuve fictive',CURRENT_TIMESTAMP);
+      INSERT INTO "Revision" (id,"entityId",number,snapshot) VALUES ('${id(7005)}','${id(7000)}',1,'{"fictif":true}');`)
+    const tables = ['Entity', 'Source', 'Relation', 'Evidence', 'Revision', 'RelationType'], before = await snapshot(db, tables)
+    const sql = await readFile(new URL(`${runeMigrationName}/migration.sql`, migrations), 'utf8')
+    await db.exec(sql); await db.exec(sql)
+    assert.deepEqual(await snapshot(db, tables), before)
+    await db.exec(`INSERT INTO "Entity" (id,slug,kind,title,"updatedAt") VALUES ('${id(7006)}','rune-fictive','RUNE','Rune fictive',CURRENT_TIMESTAMP);`)
+    assert.equal((await db.query<{ kind: string }>('SELECT kind FROM "Entity" WHERE id=$1', [id(7000)])).rows[0]!.kind, 'ARTIFACT')
+    assert.equal((await db.query<{ kind: string }>('SELECT kind FROM "Entity" WHERE id=$1', [id(7006)])).rows[0]!.kind, 'RUNE')
+  } finally { await db.close() }
 })
 
 test('grouping is stable, uses actual database UUIDs/labels, preserves custom types and never offers absent types', () => {

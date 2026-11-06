@@ -72,14 +72,14 @@ export const graphGroups = [
   { id: 'places', label: 'Lieux', kinds: ['PLACE'], color: '#8eafb9' },
   { id: 'people', label: 'Personnes et peuples', kinds: ['PERSON', 'PLAYER_CHARACTER', 'FAMILY', 'SPECIES', 'CREATURE'], color: '#b1a0c4' },
   { id: 'collectives', label: 'Collectifs et croyances', kinds: ['ORGANIZATION', 'RELIGION', 'DEITY'], color: '#c4b38c' },
-  { id: 'stories', label: 'Récits et objets', kinds: ['ARTIFACT', 'EVENT', 'QUEST', 'SESSION'], color: '#bd96a1' },
+  { id: 'stories', label: 'Récits et objets', kinds: ['ARTIFACT', 'RUNE', 'EVENT', 'QUEST', 'SESSION'], color: '#bd96a1' },
   { id: 'ideas', label: 'Idées et autres', kinds: ['CONCEPT', 'OTHER'], color: '#9bac9b' },
 ] as const
 
 export const kindLabels: Record<EntityKind, string> = {
   PERSON: 'Personnage non joueur (PNJ)', PLAYER_CHARACTER: 'Personnage joueur (PJ)', PLACE: 'Lieu', ORGANIZATION: 'Organisation', FAMILY: 'Famille',
   RELIGION: 'Religion', DEITY: 'Divinité', SPECIES: 'Espèce', CREATURE: 'Créature',
-  ARTIFACT: 'Artefact', EVENT: 'Événement', QUEST: 'Quête', SESSION: 'Session JDR',
+  ARTIFACT: 'Artefact', RUNE: 'Rune', EVENT: 'Événement', QUEST: 'Quête', SESSION: 'Session JDR',
   CONCEPT: 'Concept', OTHER: 'Autre',
 }
 

@@ -14,6 +14,15 @@ const graph: GraphResponse = { nodes: ['a', 'b', 'c', 'd', 'e', 'x', 'y', 'z'].m
   edges: [edge('ab', 'a', 'b'), edge('bc', 'b', 'c', true), edge('dc', 'd', 'c'), edge('de', 'd', 'e'), edge('xy', 'x', 'y')] }
 
 describe('graph neighborhoods', () => {
+  it('filters runes separately from artefacts while retaining their graph group and connections', () => {
+    const fixture: GraphResponse = { nodes: [{ ...node('rune'), kind: 'RUNE', placeKind: null },
+      { ...node('artefact'), kind: 'ARTIFACT', placeKind: null }], edges: [edge('link', 'rune', 'artefact')] }
+    const groups = new Set(graphGroups.map(group => group.id))
+    expect(filterGraph(fixture, { ...emptyFilters, kind: 'RUNE' }, groups).nodes.map(node => node.id)).toEqual(['rune'])
+    expect(filterGraph(fixture, { ...emptyFilters, kind: 'ARTIFACT' }, groups).nodes.map(node => node.id)).toEqual(['artefact'])
+    expect(filterGraph(fixture, emptyFilters, groups).edges).toHaveLength(1)
+    expect(graphGroups.find(group => group.kinds.some(kind => kind === 'RUNE'))?.id).toBe('stories')
+  })
   it('keeps PJ and PNJ independently filterable within the existing people group', () => {
     const fixture: GraphResponse = { nodes: [{ ...node('pj'), kind: 'PLAYER_CHARACTER', placeKind: null },
       { ...node('pnj'), kind: 'PERSON', placeKind: null }], edges: [edge('relation', 'pj', 'pnj')] }

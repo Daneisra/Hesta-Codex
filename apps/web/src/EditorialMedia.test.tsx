@@ -24,6 +24,15 @@ const selectFile = (value = file()) => fireEvent.change(screen.getByLabelText('I
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('images et aide des formulaires éditoriaux', () => {
+  it('reclasse explicitement un artefact en rune sans changer son Markdown', () => {
+    const onSave = vi.fn()
+    render(<AdminEditor entity={{ ...entity, kind: 'ARTIFACT' }} busy={false} saveDisabled={false} error={null}
+      onSave={onSave} onCancel={vi.fn()} onDirtyChange={vi.fn()} />)
+    expect(screen.getByRole('option', { name: 'ARTIFACT' })).toHaveProperty('value', 'ARTIFACT')
+    fireEvent.change(screen.getByRole('combobox', { name: 'Type' }), { target: { value: 'RUNE' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ kind: 'RUNE', placeKind: null, bodyMarkdown: entity.bodyMarkdown, expectedUpdatedAt: stamp }))
+  })
   it('propose une aide native repliée par défaut, précise les formats pris en charge et ne déclenche aucune requête', () => {
     const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher)
     const { container } = render(<MarkdownHelp />)
@@ -60,6 +69,8 @@ describe('images et aide des formulaires éditoriaux', () => {
     expect(screen.getByText('Aide Markdown')).toBeTruthy()
     expect(screen.getByRole('option', { name: 'PERSON (PNJ)' })).toHaveProperty('value', 'PERSON')
     expect(screen.getByRole('option', { name: 'PLAYER_CHARACTER (PJ)' })).toHaveProperty('value', 'PLAYER_CHARACTER')
+    expect(screen.getByRole('option', { name: 'ARTIFACT' })).toHaveProperty('value', 'ARTIFACT')
+    expect(screen.getByRole('option', { name: 'RUNE' })).toHaveProperty('value', 'RUNE')
     selectFile()
     await screen.findByRole('img', { name: 'Illustration' })
     expect(screen.getByRole('textbox', { name: 'Contenu Markdown' })).toHaveProperty('value', `![Illustration](${image.url})\n`)

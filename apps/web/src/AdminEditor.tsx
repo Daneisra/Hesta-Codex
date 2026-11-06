@@ -10,7 +10,7 @@ import { AdminTermSuggestions } from './AdminTermSuggestions'
 
 const kinds: EntityKind[] = [
   'PERSON', 'PLAYER_CHARACTER', 'PLACE', 'ORGANIZATION', 'FAMILY', 'RELIGION', 'DEITY', 'SPECIES',
-  'CREATURE', 'ARTIFACT', 'EVENT', 'QUEST', 'SESSION', 'CONCEPT', 'OTHER',
+  'CREATURE', 'ARTIFACT', 'RUNE', 'EVENT', 'QUEST', 'SESSION', 'CONCEPT', 'OTHER',
 ]
 const places: PlaceKind[] = ['CITY', 'CONTINENT', 'REGION', 'SEA', 'OCEAN', 'OTHER']
 const visibilities: Visibility[] = ['PUBLIC', 'PLAYERS', 'GM', 'SECRET']

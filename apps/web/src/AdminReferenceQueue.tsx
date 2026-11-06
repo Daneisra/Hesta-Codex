@@ -11,7 +11,7 @@ export const qualificationLabels: Record<QualificationState, string> = {
   PENDING: 'À qualifier', QUALIFIED: 'Qualifiée', IGNORED: 'Ignorée volontairement',
 }
 const kinds: EntityKind[] = ['PERSON', 'PLAYER_CHARACTER', 'PLACE', 'ORGANIZATION', 'FAMILY', 'RELIGION', 'DEITY', 'SPECIES', 'CREATURE',
-  'ARTIFACT', 'EVENT', 'QUEST', 'SESSION', 'CONCEPT', 'OTHER']
+  'ARTIFACT', 'RUNE', 'EVENT', 'QUEST', 'SESSION', 'CONCEPT', 'OTHER']
 const diagnosticLabels: Record<string, string> = { MISSING: 'Absentes', AMBIGUOUS: 'Ambiguës',
   UNASSOCIATED: 'Sans fiche associée', UNSUPPORTED: 'Non prises en charge', OUT_OF_SCOPE: 'Hors périmètre', RESOLVED: 'Ancres à revoir' }
 export function AdminReferenceQueue({ filters, onFilters, onNavigate, onDefine, onAccessError, onDirtyChange = noop, onPendingChange = noop }: {
