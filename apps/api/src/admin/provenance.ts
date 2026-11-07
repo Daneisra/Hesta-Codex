@@ -84,28 +84,7 @@ export function createPrismaProvenanceService(prisma: PrismaClient): ProvenanceS
       }
     },
     publishRelation(id, input) {
-      return prisma.$transaction(async (tx) => {
-        const row = await tx.relation.findUnique({ where: { id }, select: {
-          id: true, status: true, updatedAt: true, fromEntityId: true, toEntityId: true,
-        } })
-        if (!row) throw new EditorialError(404, 'NOT_FOUND', 'Relation introuvable')
-        expectFresh(row.updatedAt, input.expectedUpdatedAt, 'relation')
-        if (row.status !== 'PROPOSED') throw new EditorialError(409, 'INVALID_STATUS', 'Seule une relation proposée peut être publiée.')
-        if (row.fromEntityId === row.toEntityId) throw new EditorialError(422, 'INVALID_RELATION', 'Une relation réflexive ne peut pas être publiée.')
-        const [evidenceCount, entitiesCount] = await Promise.all([
-          tx.evidence.count({ where: { relationId: id } }),
-          tx.entity.count({ where: { id: { in: [row.fromEntityId, row.toEntityId] } } }),
-        ])
-        if (!evidenceCount) throw new EditorialError(422, 'EVIDENCE_REQUIRED', 'Une preuve liée à la relation est requise.')
-        if (entitiesCount !== 2) throw new EditorialError(422, 'INVALID_RELATION', 'Les deux fiches de la relation doivent exister.')
-        const updatedAt = nextUpdatedAt(row.updatedAt)
-        const changed = await tx.relation.updateMany({
-          where: { id, updatedAt: row.updatedAt, status: 'PROPOSED' },
-          data: { status: 'PUBLISHED', updatedAt },
-        })
-        if (changed.count !== 1) throw modified.relation()
-        return result(id, updatedAt, 'PUBLISHED')
-      })
+      return prisma.$transaction(tx => publishRelationInTransaction(tx, id, input))
     },
     unpublishRelation(id, input) {
       return prisma.$transaction(async (tx) => {
@@ -188,4 +167,44 @@ export function createPrismaProvenanceService(prisma: PrismaClient): ProvenanceS
       })
     },
   }
+}
+
+/** Shared publication workflow; callers own the surrounding transaction. */
+export async function publishRelationInTransaction(tx: Prisma.TransactionClient, id: string, input: AdminWorkflowRequest) {
+  const row = await tx.relation.findUnique({ where: { id }, select: {
+    id: true, status: true, updatedAt: true, fromEntityId: true, toEntityId: true,
+  } })
+  if (!row) throw new EditorialError(404, 'NOT_FOUND', 'Relation introuvable')
+  expectFresh(row.updatedAt, input.expectedUpdatedAt, 'relation')
+  if (row.status !== 'PROPOSED') throw new EditorialError(409, 'INVALID_STATUS', 'Seule une relation proposée peut être publiée.')
+  if (row.fromEntityId === row.toEntityId) throw new EditorialError(422, 'INVALID_RELATION', 'Une relation réflexive ne peut pas être publiée.')
+  const [evidenceCount, entitiesCount] = await Promise.all([
+    tx.evidence.count({ where: { relationId: id } }),
+    tx.entity.count({ where: { id: { in: [row.fromEntityId, row.toEntityId] } } }),
+  ])
+  if (!evidenceCount) throw new EditorialError(422, 'EVIDENCE_REQUIRED', 'Une preuve liée à la relation est requise.')
+  if (entitiesCount !== 2) throw new EditorialError(422, 'INVALID_RELATION', 'Les deux fiches de la relation doivent exister.')
+  const updatedAt = nextUpdatedAt(row.updatedAt)
+  const changed = await tx.relation.updateMany({
+    where: { id, updatedAt: row.updatedAt, status: 'PROPOSED' },
+    data: { status: 'PUBLISHED', updatedAt },
+  })
+  if (changed.count !== 1) throw modified.relation()
+  return result(id, updatedAt, 'PUBLISHED')
+}
+
+/** Visibility-only edit: no semantic change, publication or change to independent evidence. */
+export async function changeRelationVisibilityInTransaction(tx: Prisma.TransactionClient, id: string, expectedUpdatedAt: string,
+  visibility: AdminRelationPatch['visibility']) {
+  const row = await tx.relation.findUnique({ where: { id }, select: { status: true, visibility: true, updatedAt: true,
+    fromEntity: { select: { status: true } }, toEntity: { select: { status: true } } } })
+  if (!row) throw new EditorialError(404, 'NOT_FOUND', 'Relation introuvable')
+  expectFresh(row.updatedAt, expectedUpdatedAt, 'relation')
+  if (row.status === 'ARCHIVED' || row.fromEntity.status === 'ARCHIVED' || row.toEntity.status === 'ARCHIVED') {
+    throw new EditorialError(409, 'INVALID_STATUS', 'Relation ou fiche archivée en lecture seule.')
+  }
+  if (row.visibility === visibility) return
+  const updatedAt = nextUpdatedAt(row.updatedAt)
+  const changed = await tx.relation.updateMany({ where: { id, updatedAt: row.updatedAt, status: row.status }, data: { visibility, updatedAt } })
+  if (changed.count !== 1) throw modified.relation()
 }

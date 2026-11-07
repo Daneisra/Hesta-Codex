@@ -19,8 +19,9 @@ const GraphPage = lazy(() => import('./GraphPage').then((module) => ({ default: 
 const AdminIngestion = lazy(() => import('./AdminIngestion').then(module => ({ default: module.AdminIngestion })))
 const AdminReferenceQueue = lazy(() => import('./AdminReferenceQueue').then(module => ({ default: module.AdminReferenceQueue })))
 const AdminLinkSuggestions = lazy(() => import('./AdminLinkSuggestions').then(module => ({ default: module.AdminLinkSuggestions })))
+const AdminPublicationBatch = lazy(() => import('./AdminPublicationBatch').then(module => ({ default: module.AdminPublicationBatch })))
 
-type AdminRoute = { view: 'dashboard' } | { view: 'graph' } | { view: 'ingestion' } | { view: 'qualification' } | { view: 'suggestions' } | { view: 'create' } | { view: 'relation-create'; slug: string } |
+type AdminRoute = { view: 'dashboard' } | { view: 'graph' } | { view: 'ingestion' } | { view: 'qualification' } | { view: 'suggestions' } | { view: 'publication' } | { view: 'create' } | { view: 'relation-create'; slug: string } |
   { view: 'entity'; slug: string } | { view: 'not-found' }
 type Load<T> = { phase: 'loading' } | { phase: 'ready'; data: T } | { phase: 'error'; status: number | null }
 const detailPath = /^\/admin\/fiches\/([a-z0-9]+(?:-[a-z0-9]+)*)\/?$/
@@ -39,6 +40,7 @@ const visibilityLabels: Record<Visibility, string> = {
 }
 
 function readRoute(): AdminRoute {
+  if (window.location.pathname === '/admin/validation-groupee') return { view: 'publication' }
   if (window.location.pathname === '/admin/connexions-suggerees') return { view: 'suggestions' }
   if (/^\/admin\/relations-a-qualifier\/?$/.test(window.location.pathname)) return { view: 'qualification' }
   if (window.location.pathname === '/admin' || window.location.pathname === '/admin/') return { view: 'dashboard' }
@@ -595,6 +597,10 @@ export function AdminApp() {
         <AdminLinkSuggestions onNavigate={onNavigate} onAccessError={ingestionAccessError} onPendingChange={deletionPending}
           onDirtyChange={setEditDirty} onChanged={() => setDataRefresh(value => value + 1)} />
       </Suspense>}
+      {isAdmin && route.view === 'publication' && <Suspense fallback={<StateMessage>Chargement de la validation groupée…</StateMessage>}>
+        <AdminPublicationBatch onNavigate={onNavigate} onAccessError={ingestionAccessError} onPendingChange={deletionPending}
+          onDirtyChange={setEditDirty} onChanged={() => setDataRefresh(value => value + 1)} />
+      </Suspense>}
       {isAdmin && route.view === 'dashboard' && <>
         {deletedNotice && <p className="admin-message" role="status">Fiche « {deletedNotice} » supprimée définitivement.</p>}
         <div className="admin-page-heading"><p className="admin-eyebrow">Pilotage éditorial</p>
@@ -608,7 +614,9 @@ export function AdminApp() {
           <a className="admin-primary-link" href="/admin/connexions-suggerees"
             onClick={event => onNavigate(event, '/admin/connexions-suggerees')}>Scanner les fiches</a>{' '}
           <a className="admin-primary-link" href="/admin/nouvelle-fiche"
-            onClick={(event) => onNavigate(event, '/admin/nouvelle-fiche')}>Nouvelle fiche</a></div>
+            onClick={(event) => onNavigate(event, '/admin/nouvelle-fiche')}>Nouvelle fiche</a>{' '}
+          <a className="admin-primary-link" href="/admin/validation-groupee"
+            onClick={event => onNavigate(event, '/admin/validation-groupee')}>Validation groupée</a></div>
         {stats.phase === 'loading' && <StateMessage>Chargement des statistiques…</StateMessage>}
         {stats.phase === 'error' && <p className="admin-message" role="alert">Statistiques indisponibles.</p>}
         {stats.phase === 'ready' && <div className="admin-stats" aria-label="Statistiques éditoriales">

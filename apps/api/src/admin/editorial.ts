@@ -95,28 +95,7 @@ export function createPrismaEditorialService(prisma: PrismaClient): EditorialSer
     },
     async publish(slug, input, editorLabel) {
       return prisma.$transaction(async (tx) => {
-        const current = await tx.entity.findUnique({ where: { slug }, select: editorialSelect })
-        if (!current) throw new EditorialError(404, 'NOT_FOUND', 'Fiche introuvable')
-        checkExpected(current, input.expectedUpdatedAt)
-        if (current.status !== 'PROPOSED') throw new EditorialError(409, 'INVALID_STATUS', 'Seule une fiche proposée peut être publiée.')
-        const validated = editorialFieldsSchema.safeParse({
-          title: current.title, summary: current.summary, bodyMarkdown: current.bodyMarkdown,
-          kind: current.kind, placeKind: current.placeKind, aliases: current.aliases,
-          tags: current.tags, visibility: current.visibility,
-        })
-        if (!validated.success) throw new EditorialError(422, 'INVALID_ENTITY', 'La fiche doit être corrigée avant publication.')
-        if (await tx.evidence.count({ where: { entityId: current.id } }) < 1) {
-          throw new EditorialError(422, 'EVIDENCE_REQUIRED', 'Une preuve liée à la fiche est requise pour publier.')
-        }
-
-        const updatedAt = nextUpdatedAt(current.updatedAt)
-        const changed = await tx.entity.updateMany({
-          where: { id: current.id, updatedAt: current.updatedAt, status: 'PROPOSED' },
-          data: { status: 'PUBLISHED', publishedAt: updatedAt, updatedAt },
-        })
-        if (changed.count !== 1) throw new EditorialError(409, 'ENTITY_MODIFIED', 'Cette fiche a été modifiée depuis son ouverture.')
-        await addRevision(tx, { ...current, status: 'PUBLISHED', publishedAt: updatedAt, updatedAt },
-          editorLabel, input.revisionMessage ?? 'Publication de la fiche')
+        await publishEditorialInTransaction(tx, slug, input, editorLabel)
         return fullDetail(tx, slug)
       })
     },
@@ -139,4 +118,48 @@ export function createPrismaEditorialService(prisma: PrismaClient): EditorialSer
       })
     },
   }
+}
+
+/** Shared publication workflow; callers own the surrounding transaction. */
+export async function publishEditorialInTransaction(tx: Prisma.TransactionClient, slug: string, input: AdminWorkflowRequest, editorLabel: string) {
+  const current = await tx.entity.findUnique({ where: { slug }, select: editorialSelect })
+  if (!current) throw new EditorialError(404, 'NOT_FOUND', 'Fiche introuvable')
+  checkExpected(current, input.expectedUpdatedAt)
+  if (current.status !== 'PROPOSED') throw new EditorialError(409, 'INVALID_STATUS', 'Seule une fiche proposée peut être publiée.')
+  const validated = editorialFieldsSchema.safeParse({
+    title: current.title, summary: current.summary, bodyMarkdown: current.bodyMarkdown,
+    kind: current.kind, placeKind: current.placeKind, aliases: current.aliases,
+    tags: current.tags, visibility: current.visibility,
+  })
+  if (!validated.success) throw new EditorialError(422, 'INVALID_ENTITY', 'La fiche doit être corrigée avant publication.')
+  if (await tx.evidence.count({ where: { entityId: current.id } }) < 1) {
+    throw new EditorialError(422, 'EVIDENCE_REQUIRED', 'Une preuve liée à la fiche est requise pour publier.')
+  }
+
+  const updatedAt = nextUpdatedAt(current.updatedAt)
+  const changed = await tx.entity.updateMany({
+    where: { id: current.id, updatedAt: current.updatedAt, status: 'PROPOSED' },
+    data: { status: 'PUBLISHED', publishedAt: updatedAt, updatedAt },
+  })
+  if (changed.count !== 1) throw new EditorialError(409, 'ENTITY_MODIFIED', 'Cette fiche a été modifiée depuis son ouverture.')
+  await addRevision(tx, { ...current, status: 'PUBLISHED', publishedAt: updatedAt, updatedAt },
+    editorLabel, input.revisionMessage ?? 'Publication de la fiche')
+}
+
+/** Visibility-only edit: preserve Markdown, status and publication date, with the usual human revision. */
+export async function changeEditorialVisibilityInTransaction(tx: Prisma.TransactionClient, id: string, expectedUpdatedAt: string,
+  visibility: AdminEntityPatch['visibility'], editorLabel: string) {
+  const current = await tx.entity.findUnique({ where: { id }, select: editorialSelect })
+  if (!current) throw new EditorialError(404, 'NOT_FOUND', 'Fiche introuvable')
+  checkExpected(current, expectedUpdatedAt)
+  if (current.status === 'ARCHIVED') throw new EditorialError(409, 'INVALID_STATUS', 'Une fiche archivée est en lecture seule.')
+  if (!editorialFieldsSchema.safeParse({ title: current.title, summary: current.summary, bodyMarkdown: current.bodyMarkdown,
+    kind: current.kind, placeKind: current.placeKind, aliases: current.aliases, tags: current.tags, visibility }).success) {
+    throw new EditorialError(422, 'INVALID_ENTITY', 'La fiche doit être corrigée avant modification.')
+  }
+  if (current.visibility === visibility) return
+  const updatedAt = nextUpdatedAt(current.updatedAt)
+  const changed = await tx.entity.updateMany({ where: { id, updatedAt: current.updatedAt, status: current.status }, data: { visibility, updatedAt } })
+  if (changed.count !== 1) throw new EditorialError(409, 'ENTITY_MODIFIED', 'Cette fiche a été modifiée depuis son ouverture.')
+  await addRevision(tx, { ...current, visibility, updatedAt }, editorLabel, `Changement groupé de visibilité : ${current.visibility} → ${visibility}.`)
 }

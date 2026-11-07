@@ -19,6 +19,7 @@ import { createPrismaQualificationService } from './reference-qualification.js'
 import { createPrismaEntityDeletionService } from './admin/entity-deletion.js'
 import { createPrismaImageService } from './images.js'
 import { createPrismaEditorialSuggestionService } from './editorial-suggestions.js'
+import { createPrismaPublicationBatchService } from './admin/publication-batch.js'
 
 config({ path: resolve(import.meta.dirname, '../../../.env'), quiet: true })
 
@@ -50,6 +51,7 @@ const app = createApp(createPrismaStore(prisma), {
   deletion: createPrismaEntityDeletionService(prisma),
   images: createPrismaImageService(prisma),
   suggestions: createPrismaEditorialSuggestionService(prisma),
+  publication: createPrismaPublicationBatchService(prisma),
   ingestion: createPrismaIngestionAdminStore(prisma),
 }, graph, references)
 const server = app.listen(port, () => {

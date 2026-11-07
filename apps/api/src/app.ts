@@ -17,6 +17,7 @@ import type { QualificationService } from './reference-qualification.js'
 import type { EntityDeletionService } from './admin/entity-deletion.js'
 import { imageReadRouter, imageUploadRouter, type ImageService } from './images.js'
 import type { EditorialSuggestionService } from './editorial-suggestions.js'
+import type { PublicationBatchService } from './admin/publication-batch.js'
 import { publicWikiView } from './public-wiki.js'
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
@@ -47,7 +48,7 @@ function parseEntityFilters(query: Record<string, unknown>): EntityFilters {
 export function createApp(store: CodexStore, privateServices?: {
   auth: AuthDependencies; admin: AdminStore; editorial: EditorialService;
   provenance?: ProvenanceService; manual?: ManualService; manualRelations?: ManualRelationService;
-  evidenceAdd?: EvidenceAddService; graph?: GraphStore; ingestion?: IngestionAdminStore; references?: ReferenceService; qualification?: QualificationService; deletion?: EntityDeletionService; images?: ImageService; suggestions?: EditorialSuggestionService
+  evidenceAdd?: EvidenceAddService; graph?: GraphStore; ingestion?: IngestionAdminStore; references?: ReferenceService; qualification?: QualificationService; deletion?: EntityDeletionService; images?: ImageService; suggestions?: EditorialSuggestionService; publication?: PublicationBatchService
 }, graph?: GraphStore, references?: ReferenceService) {
   const app = express()
   app.disable('x-powered-by')
@@ -61,7 +62,7 @@ export function createApp(store: CodexStore, privateServices?: {
     app.use('/api/admin', requireAdmin(privateServices.auth), requireSameOrigin(privateServices.auth.config.origin),
       express.json({ limit: '1mb' }), createAdminRouter(privateServices.admin, privateServices.editorial,
         privateServices.provenance, privateServices.manual, privateServices.manualRelations,
-        privateServices.evidenceAdd, privateServices.graph, privateServices.ingestion, privateServices.references, privateServices.qualification, privateServices.deletion, privateServices.suggestions))
+        privateServices.evidenceAdd, privateServices.graph, privateServices.ingestion, privateServices.references, privateServices.qualification, privateServices.deletion, privateServices.suggestions, privateServices.publication))
     app.use('/api/auth', (_request, response) => {
       response.status(404).json({ error: { code: 'NOT_FOUND', message: 'Endpoint not found' } })
     })

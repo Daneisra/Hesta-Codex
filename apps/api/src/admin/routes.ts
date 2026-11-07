@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express'
 import { z } from 'zod'
-import { linkSuggestionBatchLimit } from '@hesta-codex/shared'
+import { linkSuggestionBatchLimit, publicationBatchLimit } from '@hesta-codex/shared'
 import { EditorialStatus, EntityKind, Visibility } from '../prisma-client/enums.ts'
 import { adminSession } from '../auth/routes.js'
 import type { EditorialService } from './editorial.js'
@@ -20,6 +20,7 @@ import type { EntityDeletionService } from './entity-deletion.js'
 import { patchSchema, validationMessage, workflowSchema } from './validation.js'
 import { createIngestionAdminRouter, type IngestionAdminStore } from '../ingestion/admin.js'
 import type { EditorialSuggestionService } from '../editorial-suggestions.js'
+import type { PublicationBatchService } from './publication-batch.js'
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const filtersSchema = z.strictObject({
@@ -42,8 +43,24 @@ function editorLabel(response: { locals: Record<string, unknown> }): string {
 export function createAdminRouter(store: AdminStore, editorial: EditorialService,
   provenance?: ProvenanceService, manual?: ManualService, manualRelations?: ManualRelationService,
   evidenceAdd?: EvidenceAddService, graph?: GraphStore, ingestion?: IngestionAdminStore, references?: ReferenceService,
-  qualification?: QualificationService, deletion?: EntityDeletionService, suggestions?: EditorialSuggestionService) {
+  qualification?: QualificationService, deletion?: EntityDeletionService, suggestions?: EditorialSuggestionService, publication?: PublicationBatchService) {
   const router = Router()
+  if (publication) {
+    const selection = z.strictObject({ entityIds: z.array(z.uuid().transform(value => value.toLowerCase())).min(1).max(publicationBatchLimit)
+      .refine(ids => new Set(ids).size === ids.length), includeRelations: z.boolean(), targetVisibility: z.enum(Visibility).optional() })
+    const approval = selection.extend({ fingerprint: z.string().regex(/^[a-f0-9]{64}$/), confirm: z.literal(true), confirmPublic: z.boolean() })
+    router.get('/publication-batches/candidates', async (_request, response) => { response.json(await publication.candidates()) })
+    router.post('/publication-batches/preview', async (request, response) => {
+      const parsed = selection.safeParse(request.body)
+      if (!parsed.success) { response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'Sélection de fiches invalide.' } }); return }
+      response.json(await publication.preview(parsed.data))
+    })
+    router.post('/publication-batches/apply', async (request, response) => {
+      const parsed = approval.safeParse(request.body)
+      if (!parsed.success) { response.status(400).json({ error: { code: 'INVALID_REQUEST', message: 'Bilan récent et confirmation requis.' } }); return }
+      response.json(await publication.apply(parsed.data, editorLabel(response)))
+    })
+  }
   if (suggestions) {
     router.get('/editorial-suggestions/vocabulary', async (_request, response) => { response.json(await suggestions.vocabulary()) })
     const draftSchema = z.strictObject({ entityId: z.uuid().nullable(), title: z.string().max(200), bodyMarkdown: z.string().max(100000),

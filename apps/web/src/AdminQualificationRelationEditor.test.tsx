@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { relationTypeDefinitions, type AdminEntityDetail, type AdminRelation, type QualificationFilters,
@@ -144,9 +144,25 @@ describe('correction depuis la file de qualification', () => {
     setEntity({ ...entity, outgoingRelations: [{ ...relation, updatedAt: '2026-01-04T00:00:00.000Z' }] })
     fireEvent.click(screen.getByRole('button', { name: 'Recharger la relation' }))
     await screen.findByRole('combobox', { name: 'Type et sens' })
-    expect(onDirtyChange).toHaveBeenLastCalledWith(false)
+    await screen.findByRole('button', { name: 'Enregistrer' })
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
     fireEvent.click(screen.getByRole('button', { name: 'Annuler' }))
     expect(screen.getByRole('button', { name: 'Actualiser la file' })).toHaveProperty('disabled', false)
+  })
+
+  it('réinitialise la correction après un rechargement confirmé même quand la réponse immédiate garde la même version', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const { onDirtyChange, fetcher } = setup({ patchStatus: 409 })
+    await invert(); fireEvent.click(screen.getByRole('button', { name: 'Confirmer la modification' }))
+    await screen.findByText(/Correction refusée/)
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Recharger la relation' })); await Promise.resolve() })
+    await screen.findByRole('combobox', { name: 'Type et sens' })
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+    await waitFor(() => expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'PATCH')).toHaveLength(2))
+    const patch = fetcher.mock.calls.filter(([, init]) => init?.method === 'PATCH').at(-1)!
+    expect(JSON.parse(String(patch[1]?.body)).expectedUpdatedAt).toBe(stamp)
+    expect(JSON.parse(String(patch[1]?.body)).reverse).toBeUndefined()
   })
 
   it.each([401, 403])('signale une session refusée (%s) au chargement et ne permet aucune écriture', async status => {

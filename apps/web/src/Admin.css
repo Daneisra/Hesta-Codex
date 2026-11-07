@@ -199,3 +199,10 @@
 .admin-link-choice { margin-bottom: .75rem; }
 .admin-link-selection input, .admin-link-choice input { flex-shrink: 0; margin-top: .25rem; }
 .admin-link-selection, .admin-link-review summary { overflow-wrap: anywhere; }
+.admin-publication-batch { overflow-wrap: anywhere; }
+.admin-publication-batch fieldset { min-width: 0; }
+.admin-publication-batch .admin-filters { grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); }
+.admin-bulk-candidates { list-style: none; padding: 0; max-height: 28rem; overflow: auto; }
+.admin-bulk-candidates li { border-bottom: 1px solid #394660; padding-block: .5rem; }
+.admin-bulk-candidates .admin-link-choice { margin: 0; }
+.admin-publication-batch .admin-link-review li { margin-block: .6rem; }
