@@ -126,9 +126,11 @@ export function scanConnections(snapshot: Snapshot) {
     const key = wikiKey(raw), ids = names.get(key) ?? new Set<string>(); ids.add(note.id); names.set(key, ids)
   }
   const pattern = matcher([...names.keys()]), catalog = buildReferenceCatalog(entities, origins)
-  const pair = (a: string, b: string) => JSON.stringify([a, b].sort())
+  // A reverse mention does not make the current source's plain text navigable.
+  // Rendering may group both directions, but suggestions must retain their source.
+  const pair = (a: string, b: string) => JSON.stringify([a, b])
   const connected = new Set([...catalog.graph().edges.map(edge => pair(edge.source, edge.target)), ...relations.map(row => pair(row.fromEntityId, row.toEntityId))])
-  const fingerprint = hash({ algorithm: 2, entities: [...entities].sort((a, b) => compare(a.id, b.id)),
+  const fingerprint = hash({ algorithm: 3, entities: [...entities].sort((a, b) => compare(a.id, b.id)),
     origins: [...origins].sort((a, b) => compare(JSON.stringify(a), JSON.stringify(b))),
     relations: [...relations].sort((a, b) => compare(JSON.stringify(a), JSON.stringify(b))) })
   const groups = new Map<string, LinkSuggestion>(), ambiguities: LinkSuggestionScan['ambiguities'] = []

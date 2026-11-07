@@ -26,6 +26,7 @@ describe('scan des connexions', () => {
   it('performs a read-only scan, explains counts and ambiguities, and requires preview plus human confirmation', async () => {
     const fetcher = vi.fn<(url: string, init?: RequestInit) => Promise<unknown>>(async () => response(plan)); vi.stubGlobal('fetch', fetcher); scanner()
     await openReview()
+    expect(screen.getByText(/Une connexion inverse ne masque pas les mentions/)).toBeTruthy()
     expect((screen.getByRole('button', { name: 'Ajouter les liens validés' }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByText('[[/fiches/cible|Cible]]', { exact: false })).toBeTruthy()
     expect(fetcher).toHaveBeenCalledTimes(1)

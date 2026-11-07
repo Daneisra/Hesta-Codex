@@ -37,10 +37,16 @@ Code, HTML, liens Markdown, images, wikilinks déjà résolus ou échappés, fro
 entités de caractères et fragments mathématiques en ligne sont conservés.
 
 Les propositions excluent les auto-liens et les fiches archivées. Une connexion
-éditoriale ou une référence résolue déjà présente dans **l’un ou l’autre sens** exclut
-la paire pour les nouvelles mentions ordinaires : ce scan ne lie pas tous les mots
+éditoriale ou une référence résolue déjà présente dans **le même sens** exclut
+les nouvelles mentions ordinaires de cette source vers cette destination : ce scan ne lie pas tous les mots
 encore sans crochets. Plusieurs occurrences vers une même fiche sont regroupées. Un titre/alias
 partagé par plusieurs fiches donne un diagnostic ; aucune destination n’est choisie.
+
+Une référence inverse n’exclut plus les mentions ordinaires : un lien de B vers A
+ne rend pas le texte de A navigable vers B. Un alias exact et unique dans A reste
+donc proposé après le scan. La validation crée les wikilinks et une révision de A,
+sans modifier B ni créer de relation éditoriale. Le graphe conserve son regroupement
+visuel en un seul trait par paire, même si les deux sens sont maintenant documentés.
 
 Les wikilinks simples déjà écrits mais **absents ou sans association Obsidian** sont
 aussi proposés à la réparation lorsqu’un titre/alias actuel désigne une seule fiche
@@ -54,7 +60,7 @@ permet alors de corriger précisément les liens, après revue, sans inventer ce
 Les compteurs distinguent fiches analysées, connexions proposées, occurrences à lier,
 wikilinks à réparer, mentions ambiguës et mentions déjà connectées. Une paire déjà
 connectée peut donc figurer parmi les propositions si un de ses wikilinks reste à
-réparer. Les propositions sont paginées par 30,
+réparer ou si des mentions restent à lier dans le sens inverse. Les propositions sont paginées par 30,
 avec jusqu’à 30 exemples de mentions ambiguës. Les aperçus longs s’ouvrent progressivement.
 « Masquer pour ce scan » est temporaire : ce choix n’écrit aucune décision persistante.
 
@@ -102,7 +108,14 @@ jour réutilise la validation, la gestion des images, le verrou de version et le
 révisions de l’édition habituelle. Une erreur annule toute la transaction. Une double
 application ne crée pas deux révisions. Aucun texte n’est tronqué pour respecter une limite.
 La version de l’algorithme fait partie de l’empreinte : un aperçu issu de l’ancien
-scan, qui ne proposait pas les réparations, doit être recalculé avant application.
+scan doit être recalculé avant application, notamment après la correction du filtrage par sens.
+
+Il n’existe pas de plafond de **200 relations éditoriales** : leur création reste
+transactionnelle, le tableau de bord utilise un comptage complet et le graphe charge
+toutes les relations autorisées. La pagination de 30 propositions concerne l’affichage
+et la taille d’une validation groupée, pas le nombre total de connexions. Les garde-fous
+techniques du scan restent explicites : un catalogue trop volumineux renvoie une erreur,
+sans résultats partiels ni écriture ; ils ne limitent pas la création des relations.
 
 Les Sources, preuves, associations, réceptions, items et contenus de staging ne sont
 jamais modifiés. Aucune ligne `Relation`, nouvelle fiche ou publication automatique
@@ -228,3 +241,24 @@ sont pas réunis artificiellement.
 Scripts, journaux, profils et captures restent dans le répertoire temporaire hors Git.
 Aucun secret, contenu réel du lore, accès VPS, coffre privé, commit, push, déploiement
 ou modification de données de production pendant ce développement.
+
+## Correctif du scan par sens — 7 novembre 2026
+
+Le regroupement sans direction des connexions existantes masquait les mentions
+ordinaires de A vers B dès qu’un lien de B vers A existait. Le scan distingue
+maintenant ces deux sources ; le rendu du graphe reste regroupé par paire.
+La nouvelle empreinte invalide les aperçus antérieurs : relancer le scan après
+déploiement, examiner les propositions puis confirmer leur application.
+
+Une régression fictive couvre un alias pluriel, deux mentions à lier, un lien
+inverse existant et un homonyme qui doit rester ambigu. Une autre utilise PGlite
+en mémoire pour créer une 201ᵉ relation via le service éditorial existant, vérifier
+le compteur API et le graphe complets, puis appliquer les liens proposés après
+revue. Elle contrôle la lecture seule du scan, la révision unique, l’idempotence,
+la conservation du contenu inverse et de la provenance, ainsi que l’absence
+de fuite des relations privées dans le graphe public. Aucune migration requise.
+
+Validation locale : **923 tests réussis (518 API + 405 web)**. Lint, typecheck,
+build, Prisma validate/generate et `git diff --check` passent. Les tests web sont
+exécutés avec deux workers et des délais adaptés à Windows ; aucune exclusion de test.
+Le build conserve son avertissement existant sur le chunk principal supérieur à 500 kB.

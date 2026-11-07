@@ -64,8 +64,8 @@ export function AdminLinkSuggestions({ onNavigate, onAccessError, onPendingChang
   return <section className="admin-link-suggestions">
     <a className="admin-back" href="/admin" onClick={event => onNavigate(event, '/admin')}>← Tableau de bord</a>
     <h1>Connexions suggérées</h1>
-    <p>Mentions sans connexion existante et wikilinks non résolus à réparer. Le scan est en lecture seule : chaque ajout ou correction exige votre validation.</p>
-    <p className="admin-muted">Code, liens déjà résolus et images sont exclus. Un wikilink non résolu peut être réparé même si la connexion inverse existe. Aucune relation éditoriale n’est créée.</p>
+    <p>Mentions sans connexion existante dans ce sens et wikilinks non résolus à réparer. Le scan est en lecture seule : chaque ajout ou correction exige votre validation.</p>
+    <p className="admin-muted">Code, liens déjà résolus et images sont exclus. Une connexion inverse ne masque pas les mentions à lier dans cette fiche. Aucune relation éditoriale n’est créée.</p>
     <button type="button" disabled={busy || loading} onClick={() => void scan()}>{loading ? 'Analyse des fiches…' : 'Relancer le scan'}</button>
     {notice && <p className="admin-message" role="status">{notice}</p>}
     {error && <p role="alert" className="admin-form-error">{error}</p>}

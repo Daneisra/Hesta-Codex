@@ -19,6 +19,9 @@ import { publicWikiView } from './public-wiki.js'
 import { markdownTree, wikiOccurrences } from '@hesta-codex/shared'
 import { sha256, itemIdentity } from './ingestion/format.js'
 import { createPrismaQualificationService } from './reference-qualification.js'
+import { createPrismaManualRelationService } from './admin/manual-relations.js'
+import { manualRelationSchema } from './admin/manual-relations-validation.js'
+import { createPrismaGraphStore } from './graph.js'
 
 const stamp = new Date('2026-10-01T00:00:00Z'), id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
 const note = (n: number, title: string, bodyMarkdown = '', extra: Partial<SuggestionNote> = {}): SuggestionNote => ({ id: id(n), slug: `fiche-${n}`, title,
@@ -42,11 +45,27 @@ test('scan separates unresolved wikilinks from prose while excluding escaped lin
   assert.equal(plan.occurrences, 2); assert.equal(plan.repairs, 1)
 })
 
-test('existing editorial or textual connections in either direction suppress duplicate proposals and preserve self exclusions', () => {
+test('only existing connections in the same direction suppress ordinary proposals, preserving self exclusions', () => {
   const entities = [note(1, 'Départ', 'Départ Cible Cible'), note(2, 'Cible', 'Départ')]
   assert.equal(scan(entities).items.length, 2)
-  assert.equal(scan(entities, [{ fromEntityId: id(2), toEntityId: id(1) }]).items.length, 0)
-  assert.equal(scan([{ ...entities[0]!, bodyMarkdown: '[[/fiches/fiche-2|Cible]] Cible' }, entities[1]!]).items.length, 0)
+  const editorial = scan(entities, [{ fromEntityId: id(2), toEntityId: id(1) }])
+  assert.equal(editorial.items.length, 1); assert.equal(editorial.items[0]!.from.id, id(1))
+  assert.equal(editorial.occurrences, 2); assert.equal(editorial.existing, 1)
+  const textual = scan([{ ...entities[0]!, bodyMarkdown: '[[/fiches/fiche-2|Cible]] Cible' }, entities[1]!])
+  assert.equal(textual.items.length, 1); assert.equal(textual.items[0]!.from.id, id(2))
+  assert.equal(textual.occurrences, 1); assert.equal(textual.existing, 1)
+})
+
+test('a plural alias is proposed from prose despite a reverse wikilink without guessing homonyms', () => {
+  const entities = [note(1, 'Village fictif', 'Le village accueille les Lucioles. Des Lucioles y vivent.'),
+    note(2, 'Luciole', '[[/fiches/fiche-1|Village fictif]]', { aliases: ['Lucioles'] })]
+  const original = JSON.stringify(entities), plan = scan(entities)
+  assert.equal(plan.items.length, 1); assert.equal(plan.repairs, 0)
+  assert.equal(plan.items[0]!.from.id, id(1)); assert.equal(plan.items[0]!.to.id, id(2))
+  assert.deepEqual(plan.items[0]!.occurrences.map(item => item.wikilink), Array(2).fill('[[/fiches/fiche-2|Lucioles]]'))
+  assert.equal(JSON.stringify(entities), original)
+  const ambiguous = scan([...entities, note(3, 'Autre peuple fictif', '', { aliases: ['Lucioles'] })])
+  assert.equal(ambiguous.items.length, 0); assert.equal(ambiguous.ambiguous, 2)
 })
 
 test('scan proposes repairing unassociated wikilinks to a new manual fiche despite an existing reverse connection', () => {
@@ -254,6 +273,42 @@ test('validated application preserves text and provenance, records a human revis
   for (let i = 2; i < tables.length; i++) assert.deepEqual(after[i], before[i], tables[i])
   assert.equal((await service.scan(1)).connections, 0)
   await assert.rejects(service.apply(input, author), { status: 409 })
+  assert.equal(await prisma.revision.count(), 2)
+})
+
+test('creation, counts, graph and reviewed reverse-alias linking work beyond 200 editorial relations', async () => {
+  const destinations = Array.from({ length: 201 }, (_, n) => ({ id: id(n + 1000), slug: `destination-fictive-${n}`,
+    title: `Destination fictive ${n}`, kind: 'CONCEPT' as const, status: 'PROPOSED' as const, visibility: 'GM' as const }))
+  await prisma.entity.createMany({ data: destinations })
+  const type = await prisma.relationType.upsert({ where: { code: 'located_in' }, update: {},
+    create: { code: 'located_in', label: 'se trouve dans', inverseCode: 'contains', inverseLabel: 'contient', symmetric: false } })
+  await prisma.relation.createMany({ data: destinations.slice(0, 200).map(entity => ({ fromEntityId: id(1), toEntityId: entity.id,
+    relationTypeId: type.id, status: 'PROPOSED', visibility: 'GM' })) })
+  assert.equal(await prisma.relation.count(), 200)
+  await createPrismaManualRelationService(prisma).create(manualRelationSchema.parse({ fromEntityId: id(1), toEntityId: destinations[200]!.id,
+    relationCode: 'located_in', source: { mode: 'existing', sourceId: id(50) }, evidence: { claimText: 'Fait entièrement fictif.' } }))
+  const stats = await fetch(base + '/api/admin/stats', { headers: { Cookie: cookie() } })
+  assert.equal(stats.status, 200); assert.equal((await stats.json()).relations, 201)
+  await prisma.entity.update({ where: { id: id(1) }, data: { bodyMarkdown: 'Destination et Destination.' } })
+  const reverse = '[[/fiches/depart|Départ]]'
+  await prisma.entity.update({ where: { id: id(2) }, data: { bodyMarkdown: reverse } })
+  const before = await snapshots(), plan = await service.scan(1)
+  assert.equal(plan.connections, 1); assert.equal(plan.occurrences, 2); assert.equal(plan.repairs, 0)
+  assert.deepEqual(await snapshots(), before)
+  const group = plan.items[0]!
+  const updated = await service.apply({ id: group.id, fingerprint: group.fingerprint, confirm: true }, author)
+  assert.equal(updated.bodyMarkdown, '[[/fiches/cible|Destination]] et [[/fiches/cible|Destination]].')
+  assert.equal((await prisma.entity.findUniqueOrThrow({ where: { id: id(2) } })).bodyMarkdown, reverse)
+  assert.equal(await prisma.relation.count(), 201); assert.equal(await prisma.revision.count(), 2)
+  const after = await snapshots()
+  for (let i = 2; i < tables.length; i++) assert.deepEqual(after[i], before[i], tables[i])
+  const graphStore = createPrismaGraphStore(prisma, createPrismaReferenceService(prisma))
+  const graph = await graphStore.adminGraph()
+  assert.equal(graph.edges.filter(edge => edge.origin !== 'OBSIDIAN').length, 201)
+  assert.equal(graph.edges.filter(edge => edge.origin === 'OBSIDIAN').length, 2)
+  assert.equal((await graphStore.publicGraph()).edges.length, 0)
+  assert.equal((await service.scan(1)).connections, 0)
+  await assert.rejects(service.apply({ id: group.id, fingerprint: group.fingerprint, confirm: true }, author), { status: 409 })
   assert.equal(await prisma.revision.count(), 2)
 })
 
