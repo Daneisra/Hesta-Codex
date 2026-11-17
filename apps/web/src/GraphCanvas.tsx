@@ -62,6 +62,7 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
   const pointerInside = useRef(false)
   const [moreOpen, setMoreOpen] = useState(Boolean(selectedId))
   const [showArrows, setShowArrows] = useState(false)
+  const [showLabels, setShowLabels] = useState(false)
   const [showEditorialLinks, setShowEditorialLinks] = useState(false)
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false)
   useEffect(() => {
@@ -118,12 +119,13 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
   const labelCandidates = useMemo(() => graphData.nodes.map(node => {
     const id = String(node.id)
     return { node, text: labelText.get(id) ?? '', radius: nodeRadius(distinctNeighbors(totalIndex, id)),
+      showLabel: showLabels || id === selectedId || id === hoveredNodeId || searchMatches.has(id),
       priority: id === selectedId ? 0 : id === hoveredNodeId ? 1 : distances.get(id) === 1 ||
         highlightedDistances.get(id) === 1 ? 2 : searchMatches.has(id) ? 3 : 4 } satisfies LabelCandidate
   }).sort((a, b) => a.priority - b.priority ||
     distinctNeighbors(totalIndex, String(b.node.id)) - distinctNeighbors(totalIndex, String(a.node.id)) ||
     String(a.node.id).localeCompare(String(b.node.id))),
-  [graphData.nodes, labelText, totalIndex, selectedId, hoveredNodeId, distances, highlightedDistances, searchMatches])
+  [graphData.nodes, labelText, totalIndex, selectedId, hoveredNodeId, distances, highlightedDistances, searchMatches, showLabels])
 
   useEffect(() => { textWidths.current.clear() }, [labelText])
   useEffect(() => {
@@ -231,6 +233,8 @@ export const GraphCanvas = memo(function GraphCanvas({ data, selectedId, selecte
         onChange={event => { setShowEditorialLinks(event.target.checked); setHoveredEdgeId('') }} /> Afficher les relations éditoriales</label>
       <label className="graph-display-option"><input type="checkbox" checked={showArrows}
         onChange={event => setShowArrows(event.target.checked)} /> Afficher les flèches</label>
+      <label className="graph-display-option"><input type="checkbox" checked={showLabels}
+        onChange={event => setShowLabels(event.target.checked)} /> Afficher les noms en permanence</label>
       <button type="button" onClick={() => { manualCamera(); graphRef.current?.centerAt(0, 0, motionDuration(400)) }}>Recentrer</button>
       <label className="graph-depth">Profondeur du voisinage<select value={depth} disabled={!selectedId}
         onChange={(event) => { const value = Number(event.target.value)

@@ -79,19 +79,23 @@ export const wikiKey = (value: string) => value.normalize('NFC').trim().replace(
 export const decodeMarkdownText = (value: string) => decodeString(value).replace(/\r\n?/g, '\n')
 /** Map a source offset to rendered text, accounting for list/blockquote continuation prefixes. */
 export function markdownTextOffset(raw: string, value: string, offset: number): number | null {
-  const sourceLines = raw.split(/(\r\n|\n|\r)/), textLines = value.split('\n')
-  if (Math.ceil(sourceLines.length / 2) !== textLines.length || offset < 0 || offset > raw.length) return null
+  if (offset < 0 || offset > raw.length) return null
+  // mdast retains physical CRLF/CR in text values. Character entities may also
+  // decode to newlines, which must not be mistaken for source continuation lines.
+  if (decodeString(raw) === value) return decodeString(raw.slice(0, offset)).length
+  const sourceLines = raw.split(/(\r\n|\n|\r)/), textLines = value.split(/(\r\n|\n|\r)/)
+  if (sourceLines.length !== textLines.length) return null
   let sourceAt = 0, textAt = 0
-  for (let i = 0; i < textLines.length; i++) {
-    const source = sourceLines[i * 2]!, text = textLines[i]!, decoded = decodeMarkdownText(source)
+  for (let i = 0; i < Math.ceil(sourceLines.length / 2); i++) {
+    const source = sourceLines[i * 2]!, text = textLines[i * 2]!, decoded = decodeString(source)
     if (!decoded.endsWith(text)) return null
     const omitted = decoded.length - text.length
     if (offset <= sourceAt + source.length) {
-      const prefix = decodeMarkdownText(source.slice(0, offset - sourceAt)).length
+      const prefix = decodeString(source.slice(0, offset - sourceAt)).length
       return prefix >= omitted ? textAt + prefix - omitted : null
     }
     sourceAt += source.length + (sourceLines[i * 2 + 1]?.length ?? 0)
-    textAt += text.length + 1
+    textAt += text.length + (textLines[i * 2 + 1]?.length ?? 0)
   }
   return null
 }

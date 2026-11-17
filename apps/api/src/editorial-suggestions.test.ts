@@ -45,15 +45,18 @@ test('scan separates unresolved wikilinks from prose while excluding escaped lin
   assert.equal(plan.occurrences, 2); assert.equal(plan.repairs, 1)
 })
 
-test('only existing connections in the same direction suppress ordinary proposals, preserving self exclusions', () => {
+test('existing editorial or textual connections never hide remaining prose mentions, preserving self exclusions', () => {
   const entities = [note(1, 'Départ', 'Départ Cible Cible'), note(2, 'Cible', 'Départ')]
   assert.equal(scan(entities).items.length, 2)
-  const editorial = scan(entities, [{ fromEntityId: id(2), toEntityId: id(1) }])
-  assert.equal(editorial.items.length, 1); assert.equal(editorial.items[0]!.from.id, id(1))
-  assert.equal(editorial.occurrences, 2); assert.equal(editorial.existing, 1)
+  for (const relation of [{ fromEntityId: id(2), toEntityId: id(1) }, { fromEntityId: id(1), toEntityId: id(2) }]) {
+    const editorial = scan(entities, [relation])
+    assert.equal(editorial.items.length, 2)
+    assert.equal(editorial.occurrences, 3); assert.equal(editorial.existing, 0)
+  }
   const textual = scan([{ ...entities[0]!, bodyMarkdown: '[[/fiches/fiche-2|Cible]] Cible' }, entities[1]!])
-  assert.equal(textual.items.length, 1); assert.equal(textual.items[0]!.from.id, id(2))
-  assert.equal(textual.occurrences, 1); assert.equal(textual.existing, 1)
+  assert.equal(textual.items.length, 2)
+  assert.equal(textual.occurrences, 2); assert.equal(textual.existing, 1)
+  assert.equal(textual.items.find(item => item.from.id === id(1))!.occurrences[0]!.text, 'Cible')
 })
 
 test('a plural alias is proposed from prose despite a reverse wikilink without guessing homonyms', () => {
@@ -273,6 +276,29 @@ test('validated application preserves text and provenance, records a human revis
   for (let i = 2; i < tables.length; i++) assert.deepEqual(after[i], before[i], tables[i])
   assert.equal((await service.scan(1)).connections, 0)
   await assert.rejects(service.apply(input, author), { status: 409 })
+  assert.equal(await prisma.revision.count(), 2)
+})
+
+test('a same-direction editorial relation cannot hide unlinked prose; reviewed linking preserves it and its evidence', async () => {
+  const original = 'Destination se trouve ici. Déjà : [[/fiches/cible|Cible]].'
+  await prisma.entity.update({ where: { id: id(1) }, data: { bodyMarkdown: original } })
+  const type = await prisma.relationType.upsert({ where: { code: 'located_in' }, update: {},
+    create: { code: 'located_in', label: 'se trouve dans', inverseCode: 'contains', inverseLabel: 'contient', symmetric: false } })
+  const relation = await prisma.relation.create({ data: { fromEntityId: id(1), toEntityId: id(2),
+    relationTypeId: type.id, status: 'PROPOSED', visibility: 'GM' } })
+  await prisma.evidence.create({ data: { sourceId: id(50), relationId: relation.id, claimText: 'Lien éditorial fictif.' } })
+  const before = await snapshots(), plan = await service.scan(1)
+  assert.equal(plan.connections, 1); assert.equal(plan.occurrences, 1); assert.equal(plan.existing, 1)
+  assert.deepEqual(await snapshots(), before)
+  const group = plan.items[0]!
+  const updated = await service.apply({ id: group.id, fingerprint: group.fingerprint, confirm: true }, author)
+  assert.equal(updated.bodyMarkdown, '[[/fiches/cible|Destination]] se trouve ici. Déjà : [[/fiches/cible|Cible]].')
+  const after = await snapshots()
+  for (let i = 2; i < tables.length; i++) assert.deepEqual(after[i], before[i], tables[i])
+  const references = createPrismaReferenceService(prisma)
+  assert.equal((await references.detail(id(1), updated.updatedAt))!.outgoing[0]!.id, id(2))
+  assert.equal((await references.graph()).edges[0]!.occurrences, 2)
+  assert.equal((await service.scan(1)).connections, 0)
   assert.equal(await prisma.revision.count(), 2)
 })
 

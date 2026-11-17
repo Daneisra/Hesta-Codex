@@ -64,12 +64,12 @@ export function AdminLinkSuggestions({ onNavigate, onAccessError, onPendingChang
   return <section className="admin-link-suggestions">
     <a className="admin-back" href="/admin" onClick={event => onNavigate(event, '/admin')}>← Tableau de bord</a>
     <h1>Connexions suggérées</h1>
-    <p>Mentions sans connexion existante dans ce sens et wikilinks non résolus à réparer. Le scan est en lecture seule : chaque ajout ou correction exige votre validation.</p>
-    <p className="admin-muted">Code, liens déjà résolus et images sont exclus. Une connexion inverse ne masque pas les mentions à lier dans cette fiche. Aucune relation éditoriale n’est créée.</p>
+    <p>Mentions sans crochets et wikilinks non résolus à réparer. Le scan est en lecture seule : chaque ajout ou correction exige votre validation.</p>
+    <p className="admin-muted">Code, liens déjà résolus et images sont exclus. Un lien ou une relation éditoriale existante ne masque pas les autres mentions à lier dans le texte. Aucune relation éditoriale n’est créée.</p>
     <button type="button" disabled={busy || loading} onClick={() => void scan()}>{loading ? 'Analyse des fiches…' : 'Relancer le scan'}</button>
     {notice && <p className="admin-message" role="status">{notice}</p>}
     {error && <p role="alert" className="admin-form-error">{error}</p>}
-    {data && <p role="status">{data.entities} fiches analysées · {data.connections} connexions proposées · {data.occurrences} mentions à lier · {data.repairs ?? 0} wikilinks à réparer · {data.ambiguous} mentions ambiguës · {data.existing} mentions déjà connectées</p>}
+    {data && <p role="status">{data.entities} fiches analysées · {data.connections} connexions proposées · {data.occurrences} mentions à lier · {data.repairs ?? 0} wikilinks à réparer · {data.ambiguous} mentions ambiguës · {data.existing} wikilinks déjà résolus</p>}
     {data && !data.connections && !loading && <p>Aucune nouvelle connexion à proposer.</p>}
     {items.length > 0 && <div className="admin-link-selection">
       <label><input type="checkbox" checked={selectedItems.length === items.length}

@@ -71,6 +71,36 @@ beforeEach(() => {
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 describe('graph canvas interactions', () => {
+  it.each(['public', 'admin'] as const)('keeps names contextual by default in %s at every zoom and allows permanent display', async scope => {
+    const input = props()
+    const { rerender } = render(<GraphCanvas {...input} scope={scope} selectedId="" focusRequest={null} distances={new Map()} />)
+    const data = latest().graphData
+    data.nodes.forEach((node, i) => { node.x = i * 500; node.y = 0 })
+    const context = { save: vi.fn(), restore: vi.fn(), fillText: vi.fn(), fillRect: vi.fn(),
+      measureText: vi.fn((text: string) => ({ width: text.length * 7 })) }
+    const paint = (scale = 1) => {
+      context.fillText.mockClear()
+      latest().onRenderFramePost(context as unknown as CanvasRenderingContext2D, scale)
+      return context.fillText.mock.calls.map(call => call[0])
+    }
+    for (const scale of [.15, 1, 8]) expect(paint(scale)).toEqual([])
+    fireEvent.pointerOver(screen.getByRole('group', { name: /Graphe interactif/ }))
+    act(() => latest().onNodeHover(data.nodes[1]!))
+    expect(paint()).toEqual(['b'])
+    act(() => latest().onNodeHover(null))
+    expect(paint()).toEqual([])
+    rerender(<GraphCanvas {...input} scope={scope} searchMatches={new Set(['d'])} />)
+    expect(paint()).toEqual(['a', 'd'])
+    expect(screen.getByRole('checkbox', { name: 'Afficher les noms en permanence' })).toHaveProperty('checked', false)
+    await userEvent.setup().click(screen.getByRole('checkbox', { name: 'Afficher les noms en permanence' }))
+    expect(new Set(paint())).toEqual(new Set(['a', 'b', 'c', 'd']))
+    expect(latest().graphData).toBe(data)
+    expect(graphMock.methods.d3ReheatSimulation).not.toHaveBeenCalled()
+    expect(localStorage.length).toBe(0)
+    await userEvent.setup().click(screen.getByRole('checkbox', { name: 'Afficher les noms en permanence' }))
+    expect(paint()).toEqual(['a', 'd'])
+  })
+
   it('keeps a manual zoom made before the initial simulation settles', () => {
     render(<GraphCanvas {...props()} selectedId="" focusRequest={null} />)
     fireEvent.wheel(screen.getByRole('group', { name: /Graphe interactif/ }), { deltaY: -100 })

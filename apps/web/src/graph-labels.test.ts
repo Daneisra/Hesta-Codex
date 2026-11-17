@@ -6,6 +6,14 @@ const candidate = (id: string, x: number, y: number, priority = 4): LabelCandida
   ({ node: { id, x, y }, text: 'Titre du Codex', priority, radius: 6 })
 
 describe('graph label readability', () => {
+  it('retains hidden names as node obstacles for contextual labels', () => {
+    const selected = candidate('selected', 0, 0, 0)
+    const hidden = { ...candidate('hidden', 0, 25), showLabel: false }
+    const labels = layoutGraphLabels([selected, hidden], 1, measure)
+    expect([...labels.keys()]).toEqual(['selected'])
+    expect(labels.get('selected')!.y).toBeLessThan(0)
+  })
+
   it('places the selected and hovered names first and prevents collisions with other labels', () => {
     const labels = layoutGraphLabels([candidate('selected', 0, 0, 0), candidate('hovered', 0, 0, 1),
       ...Array.from({ length: 20 }, (_, i) => candidate(String(i), 0, 0))], 1, measure)

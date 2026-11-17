@@ -1,5 +1,5 @@
 export type LabelNode = { id: string; x?: number; y?: number }
-export type LabelCandidate = { node: LabelNode; text: string; priority: number; radius: number }
+export type LabelCandidate = { node: LabelNode; text: string; priority: number; radius: number; showLabel?: boolean }
 export type LabelBox = { x: number; y: number; width: number; height: number }
 export type GraphLabel = LabelBox & { text: string; fontSize: number; important: boolean }
 export type GraphBounds = { left: number; right: number; top: number; bottom: number }
@@ -44,6 +44,7 @@ export function layoutGraphLabels(candidates: readonly LabelCandidate[], scale: 
   }
   for (const candidate of candidates) {
     if (placed.size >= maxLabels) break
+    if (candidate.showLabel === false) continue
     const { node, priority, radius, text } = candidate
     if (!Number.isFinite(node.x) || !Number.isFinite(node.y) || !text) continue
     const x = node.x!, y = node.y!

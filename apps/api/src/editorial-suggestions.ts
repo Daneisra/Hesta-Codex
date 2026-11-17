@@ -126,15 +126,16 @@ export function scanConnections(snapshot: Snapshot) {
     const key = wikiKey(raw), ids = names.get(key) ?? new Set<string>(); ids.add(note.id); names.set(key, ids)
   }
   const pattern = matcher([...names.keys()]), catalog = buildReferenceCatalog(entities, origins)
-  // A reverse mention does not make the current source's plain text navigable.
-  // Rendering may group both directions, but suggestions must retain their source.
-  const pair = (a: string, b: string) => JSON.stringify([a, b])
-  const connected = new Set([...catalog.graph().edges.map(edge => pair(edge.source, edge.target)), ...relations.map(row => pair(row.fromEntityId, row.toEntityId))])
-  const fingerprint = hash({ algorithm: 3, entities: [...entities].sort((a, b) => compare(a.id, b.id)),
+  // Existing links exclude their own ranges, never other plain-text occurrences.
+  // Count actual resolved wikilinks separately from the prose still proposed below.
+  const existing = catalog.graph().edges.reduce((count, edge) => edge.source !== edge.target &&
+    byId.get(edge.source)?.status !== 'ARCHIVED' && byId.get(edge.target)?.status !== 'ARCHIVED'
+    ? count + (edge.occurrences ?? 0) : count, 0)
+  const fingerprint = hash({ algorithm: 4, entities: [...entities].sort((a, b) => compare(a.id, b.id)),
     origins: [...origins].sort((a, b) => compare(JSON.stringify(a), JSON.stringify(b))),
     relations: [...relations].sort((a, b) => compare(JSON.stringify(a), JSON.stringify(b))) })
   const groups = new Map<string, LinkSuggestion>(), ambiguities: LinkSuggestionScan['ambiguities'] = []
-  let ambiguous = 0, existing = 0, occurrences = 0, matches = 0, repairs = 0
+  let ambiguous = 0, occurrences = 0, matches = 0, repairs = 0
   function add(note: SuggestionNote, name: string, start: number, end: number, replacement: (slug: string) => string, repair = false) {
     if (++matches > 100000) throw tooLarge()
     const ids = [...(names.get(wikiKey(name)) ?? [])]
@@ -146,8 +147,6 @@ export function scanConnections(snapshot: Snapshot) {
     }
     const target = byId.get(ids[0]!)!
     if (target.id === note.id) return
-    // Existing connectivity must not hide an already authored wikilink that still needs repair.
-    if (!repair && connected.has(pair(note.id, target.id))) { existing++; return }
     const id = hash([note.id, target.id]), group = groups.get(id) ?? { id, fingerprint, from: view(note), to: view(target), occurrences: [] }
     let escapes = 0
     for (let at = start - 1; at >= 0 && note.bodyMarkdown[at] === '\\'; at--) escapes++

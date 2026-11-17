@@ -264,6 +264,13 @@ dernière sauvegarde mutuelle ; les utilisateurs d'un même profil navigateur pa
 
 ## Labels et contrôle de charge
 
+Par défaut, les noms sont affichés seulement au survol, pour la fiche sélectionnée et
+pour les résultats de recherche, quel que soit le zoom. L'option « Afficher les noms en
+permanence », dans « Exploration », réactive les autres étiquettes selon le budget et
+les règles de collision ci-dessous. Ce réglage reste propre à la vue ouverte : il ne
+modifie ni les données, ni les forces, ni le cadrage. Les nœuds sans nom affiché restent
+pris en compte pour éviter qu'une étiquette les recouvre.
+
 Les labels sont classés hors des frames de dessin : sélection, survol, voisins directs,
 résultats de recherche, puis autres fiches, avec les fiches les plus connectées en premier à
 priorité égale. Ils gardent une taille à l'écran de 13 à 15 px, indépendante du zoom ; les

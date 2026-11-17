@@ -36,11 +36,18 @@ sont examinés d’abord. Il n’y a ni recherche floue, ni inférence de relati
 Code, HTML, liens Markdown, images, wikilinks déjà résolus ou échappés, frontmatter,
 entités de caractères et fragments mathématiques en ligne sont conservés.
 
-Les propositions excluent les auto-liens et les fiches archivées. Une connexion
-éditoriale ou une référence résolue déjà présente dans **le même sens** exclut
-les nouvelles mentions ordinaires de cette source vers cette destination : ce scan ne lie pas tous les mots
-encore sans crochets. Plusieurs occurrences vers une même fiche sont regroupées. Un titre/alias
-partagé par plusieurs fiches donne un diagnostic ; aucune destination n’est choisie.
+Les propositions excluent les auto-liens et les fiches archivées. Chaque mention
+ordinaire encore sans crochets reste admissible, même si un wikilink existe déjà
+vers cette destination dans le même texte. Seule la plage de ce wikilink est exclue,
+sans masquer les autres occurrences. Plusieurs occurrences vers une même fiche
+sont regroupées. Un titre/alias partagé par plusieurs fiches donne un diagnostic ;
+aucune destination n’est choisie.
+
+Une relation éditoriale, dans l'un ou l'autre sens, ne suffit pas à rendre le texte
+cliquable : elle n'exclut donc pas les propositions de wikilinks. Après validation,
+la relation et ses preuves restent intactes ; seule la fiche source reçoit les liens
+choisis et une révision. Relancer le scan après livraison : l'empreinte de calcul
+a changé, les anciens aperçus ne sont plus applicables.
 
 Une référence inverse n’exclut plus les mentions ordinaires : un lien de B vers A
 ne rend pas le texte de A navigable vers B. Un alias exact et unique dans A reste
@@ -58,11 +65,18 @@ la fiche existe, mais aucune association d’identité Obsidian n’a été déc
 permet alors de corriger précisément les liens, après revue, sans inventer cette association.
 
 Les compteurs distinguent fiches analysées, connexions proposées, occurrences à lier,
-wikilinks à réparer, mentions ambiguës et mentions déjà connectées. Une paire déjà
-connectée peut donc figurer parmi les propositions si un de ses wikilinks reste à
-réparer ou si des mentions restent à lier dans le sens inverse. Les propositions sont paginées par 30,
+wikilinks à réparer, mentions ambiguës et wikilinks déjà résolus. Une paire déjà
+connectée peut donc figurer parmi les propositions dès qu'une de ses mentions reste
+sans crochets ou qu'un wikilink reste à réparer. Le compteur de wikilinks résolus
+compte les occurrences déjà écrites et résolues, hors auto-liens et fiches archivées.
+Les propositions sont paginées par 30,
 avec jusqu’à 30 exemples de mentions ambiguës. Les aperçus longs s’ouvrent progressivement.
 « Masquer pour ce scan » est temporaire : ce choix n’écrit aucune décision persistante.
+
+Le rendu des wikilinks conserve les positions source avec les retours à la ligne LF,
+CRLF (Windows) et CR, y compris dans les paragraphes, listes et citations. Il ne
+normalise ni ne réenregistre le Markdown original. Des entités de caractères décodées
+en sauts de ligne ne décalent pas les liens d'un paragraphe ordinaire.
 
 ## Validation et historique
 
@@ -262,3 +276,26 @@ Validation locale : **923 tests réussis (518 API + 405 web)**. Lint, typecheck,
 build, Prisma validate/generate et `git diff --check` passent. Les tests web sont
 exécutés avec deux workers et des délais adaptés à Windows ; aucune exclusion de test.
 Le build conserve son avertissement existant sur le chunk principal supérieur à 500 kB.
+
+## Mentions restantes et rendu Windows — 17 novembre 2026
+
+Un wikilink déjà résolu dans une fiche masquait les autres mentions ordinaires de
+sa destination. Le scan examine désormais chaque plage non liée, même si une
+référence ou une relation éditoriale existe déjà. Les nouvelles propositions sont
+groupées pour la revue ; elles ne créent pas de nouvelles relations éditoriales.
+Le compteur « Wikilinks déjà résolus » distingue les occurrences effectivement liées
+des occurrences encore proposées. Une régression avec une relation et sa preuve
+vérifie le scan en lecture seule, la conservation du lien existant, la révision et
+l'absence de nouvelle proposition après application.
+
+Le calcul des positions de rendu prenait certains retours à la ligne CRLF/CR pour
+des décalages invalides et conservait alors les crochets à l'écran. Les tests de
+rendu couvrent LF, CRLF, CR, listes, citations et entités de caractères, sans
+réenregistrer les contenus. Le graphe affiche désormais les noms au survol, à la
+sélection ou pendant une recherche ; l'affichage permanent reste optionnel.
+
+Validation locale : **976 tests réussis (546 API + 430 web)** avec `npm test`,
+lint, typecheck, build, Prisma validate/generate et `git diff --check` réussis.
+Le contrôle visuel navigateur n'a pas pu être réalisé : accès navigateur indisponible,
+puis contrôle Windows bloqué faute de pouvoir vérifier l'URL de l'onglet. Aucune
+migration, intervention en production, publication, commit ou push pendant ce correctif.

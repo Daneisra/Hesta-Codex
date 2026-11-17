@@ -10,6 +10,15 @@ function navigation(body: string, href: string | null = '/admin/fiches/cible'): 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); window.history.replaceState(null, '', '/') })
 
 describe('rendu des wikilinks', () => {
+  it.each(['\n', '\r\n', '\r'])('renders multiline prose, list and quote links with %j line endings', newline => {
+    const body = ['Début &amp; puis', '[[Cible|Paragraphe]].', '', '> Citation', '> [[Cible|Citation]].', '',
+      '- Liste', '  [[Cible|Liste]].', '', 'Entité &#13; puis [[Cible|Caractère]].'].join(newline)
+    render(<WikiMarkdown body={body} updatedAt={stamp} navigation={navigation(body)} admin onNavigate={vi.fn()} />)
+    expect(screen.getAllByRole('link').map(link => link.textContent)).toEqual(['Paragraphe', 'Citation', 'Liste', 'Caractère'])
+    expect(screen.getAllByRole('link').every(link => link.getAttribute('href') === '/admin/fiches/cible')).toBe(true)
+    expect(body).toContain('[[Cible|Paragraphe]]')
+  })
+
   it('renders resolved names, paths, aliases and accents as internal links without rewriting the source', () => {
     const body = '[[Été]] [[Dossier/Été|Un alias]] [[Été#Histoire]]', onNavigate = vi.fn(event => event.preventDefault())
     render(<WikiMarkdown body={body} updatedAt={stamp} navigation={navigation(body)} admin onNavigate={onNavigate} />)
