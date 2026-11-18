@@ -299,3 +299,24 @@ lint, typecheck, build, Prisma validate/generate et `git diff --check` réussis.
 Le contrôle visuel navigateur n'a pas pu être réalisé : accès navigateur indisponible,
 puis contrôle Windows bloqué faute de pouvoir vérifier l'URL de l'onglet. Aucune
 migration, intervention en production, publication, commit ou push pendant ce correctif.
+
+## Espaces avant les retours à la ligne — 18 novembre 2026
+
+Le cas des fins de ligne Windows ne couvrait pas les espaces et tabulations que
+Markdown retire avant un retour à la ligne simple. La correspondance des positions
+refusait alors tout le nœud de texte et laissait ses wikilinks affichés littéralement,
+même lorsque le serveur les résolvait. Le rendu tient désormais compte de ces
+caractères omis, sans retirer les espaces encodés ou insécables et sans réenregistrer
+le contenu source. Les liens déjà écrits ne nécessitent ni nouveau scan ni réimport.
+
+Les tests reproduisent l'échec initial avec des données fictives en LF, CRLF et CR,
+dans des paragraphes, listes et citations. Ils couvrent également les sauts explicites
+avec une barre oblique inverse ou deux espaces et les destinations non accessibles
+dans le rendu public. La correction ne modifie ni la résolution des identités,
+ni le scan, ni les relations, ni les permissions.
+
+Validation locale : **979 tests réussis (546 API + 433 web)** avec `npm test`.
+Lint, typecheck, build, Prisma validate/generate et `git diff --check` réussissent.
+La reproduction a d'abord échoué sur les trois formats de fin de ligne, puis a
+réussi après correction. Aucun contenu réel du lore n'est ajouté aux tests, aucune
+fiche ni base de production n'est modifiée et aucune migration n'est nécessaire.

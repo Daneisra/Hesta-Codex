@@ -10,6 +10,34 @@ function navigation(body: string, href: string | null = '/admin/fiches/cible'): 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); window.history.replaceState(null, '', '/') })
 
 describe('rendu des wikilinks', () => {
+  it.each(['\n', '\r\n', '\r'])('renders every link in paragraphs with trailing whitespace and %j line endings', newline => {
+    const blocks = [
+      ['Début [[/fiches/cible|Premier]], suite. ', 'Continuation &amp; texte. ', 'Fin [[/fiches/cible|Dernier]].'],
+      ['Début [[/fiches/cible|Tabulation]], suite.\t', 'Fin [[/fiches/cible|Après tabulation]].'],
+      ['Début [[/fiches/cible|Saut explicite]], suite. \\', 'Fin [[/fiches/cible|Après saut explicite]].'],
+      ['Début [[/fiches/cible|Deux espaces]], suite.  ', 'Fin [[/fiches/cible|Après deux espaces]].'],
+      ['> Citation [[/fiches/cible|Citation]]. ', '> Suite [[/fiches/cible|Suite citation]].'],
+      ['- Liste [[/fiches/cible|Liste]]. ', '  Suite [[/fiches/cible|Suite liste]].'],
+    ]
+    const body = blocks.map(lines => lines.join(newline)).join(newline + newline)
+    const { container, rerender } = render(<WikiMarkdown body={body} updatedAt={stamp} navigation={navigation(body)} admin onNavigate={vi.fn()} />)
+    expect(screen.getAllByRole('link').map(link => link.textContent)).toEqual([
+      'Premier', 'Dernier', 'Tabulation', 'Après tabulation', 'Saut explicite', 'Après saut explicite',
+      'Deux espaces', 'Après deux espaces', 'Citation', 'Suite citation', 'Liste', 'Suite liste',
+    ])
+    expect(screen.getAllByRole('link').every(link => link.getAttribute('href') === '/admin/fiches/cible')).toBe(true)
+    expect(container.textContent).not.toContain('[[')
+    expect(container.querySelectorAll('br')).toHaveLength(2)
+    expect(container.textContent).toContain('Continuation & texte.')
+    rerender(<WikiMarkdown body={body} updatedAt={stamp} navigation={navigation(body, '/fiches/cible')} onNavigate={vi.fn()} />)
+    expect(screen.getAllByRole('link')).toHaveLength(12)
+    expect(screen.getAllByRole('link').every(link => link.getAttribute('href') === '/fiches/cible')).toBe(true)
+    rerender(<WikiMarkdown body={body} updatedAt={stamp} navigation={navigation(body, null)} onNavigate={vi.fn()} />)
+    expect(screen.queryByRole('link')).toBeNull()
+    expect(container.textContent).not.toContain('/fiches/')
+    expect(container.textContent).not.toContain('[[')
+  })
+
   it.each(['\n', '\r\n', '\r'])('renders multiline prose, list and quote links with %j line endings', newline => {
     const body = ['Début &amp; puis', '[[Cible|Paragraphe]].', '', '> Citation', '> [[Cible|Citation]].', '',
       '- Liste', '  [[Cible|Liste]].', '', 'Entité &#13; puis [[Cible|Caractère]].'].join(newline)

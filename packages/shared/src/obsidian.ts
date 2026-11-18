@@ -87,12 +87,16 @@ export function markdownTextOffset(raw: string, value: string, offset: number): 
   if (sourceLines.length !== textLines.length) return null
   let sourceAt = 0, textAt = 0
   for (let i = 0; i < Math.ceil(sourceLines.length / 2); i++) {
-    const source = sourceLines[i * 2]!, text = textLines[i * 2]!, decoded = decodeString(source)
+    const source = sourceLines[i * 2]!, text = textLines[i * 2]!
+    const original = decodeString(source)
+    // Markdown removes literal spaces/tabs before soft line breaks. Keep encoded
+    // spaces and non-breaking spaces intact, and still account for quote/list prefixes.
+    const decoded = original.endsWith(text) ? original : decodeString(source.replace(/[ \t]+$/, ''))
     if (!decoded.endsWith(text)) return null
     const omitted = decoded.length - text.length
     if (offset <= sourceAt + source.length) {
       const prefix = decodeString(source.slice(0, offset - sourceAt)).length
-      return prefix >= omitted ? textAt + prefix - omitted : null
+      return prefix >= omitted && prefix - omitted <= text.length ? textAt + prefix - omitted : null
     }
     sourceAt += source.length + (sourceLines[i * 2 + 1]?.length ?? 0)
     textAt += text.length + (textLines[i * 2 + 1]?.length ?? 0)
